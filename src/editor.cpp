@@ -1,6 +1,11 @@
 #include "editor.hpp"
+#include "session.hpp"
 #include <algorithm>
 #include <stdexcept>
+#include <chrono>
+#include <ctime>
+#include <iomanip>
+#include <sstream>
 
 namespace notepad {
 std::string path_utf8(const std::filesystem::path& path) { auto s=path.u8string(); return {reinterpret_cast<const char*>(s.data()),s.size()}; }
@@ -17,9 +22,10 @@ void Editor::initialize_control_tree() {
     menu_->set_items({
         {"file","&File",{item("new","&New","Ctrl+N"),item("open","&Open...","Ctrl+O"),item("save","&Save","Ctrl+S"),item("save-as","Save &As...","Ctrl+Shift+S"),item("exit","E&xit","Alt+F4")}},
         {"edit","&Edit",{item("undo","&Undo","Ctrl+Z"),item("redo","&Redo","Ctrl+Y"),item("cut","Cu&t","Ctrl+X"),item("copy","&Copy","Ctrl+C"),item("paste","&Paste","Ctrl+V"),item("delete","&Delete","Del"),item("find","&Find...","Ctrl+F"),item("find-next","Find &Next","F3"),item("replace","&Replace...","Ctrl+H"),item("select-all","Select &All","Ctrl+A")}},
+        {"document","&Document",{item("restore-opened","Restore As &Opened..."),item("date-time","Insert &Date and Time","F5"),item("newline-lf","Convert Line Endings to &LF"),item("newline-crlf","Convert Line Endings to &CRLF")}},
         {"format","F&ormat",{item("wrap","&Word Wrap"),item("font","&Font...")}},
         {"view","&View",{item("status","&Status Bar")}},
-        {"help","&Help",{item("help","View &Help","F1"),item("about","&About Notepad")}}
+        {"help","&Help",{item("help","View &Help","F1"),item("about","&About SwiftEdit")}}
     });
     add_child(menu_);
     name_=gf::make_control<gf::Label>(gf::StableId("notepad.document-name")); add_child(name_);
@@ -54,7 +60,9 @@ void Editor::refresh() {
         else if(content[i]=='\n') { ++line; column=1; }
         else if((static_cast<unsigned char>(content[i])&0xc0)!=0x80) ++column;
     }
-    status_->set_text("Ln "+std::to_string(line)+", Col "+std::to_string(column)+"   |   "+encoding_name(document_.encoding)+"   |   "+newline_name(content));
+    if(content!=counted_text_) { counted_text_=content; character_count_=gf::TextStore(content).grapheme_count().value(); }
+    const auto selected=gf::TextStore(text_->selected_text()).grapheme_count().value();
+    status_->set_text("Ln "+std::to_string(line)+", Col "+std::to_string(column)+" | "+std::to_string(character_count_)+" characters | "+std::to_string(selected)+" selected | "+encoding_name(document_.encoding)+" | "+newline_name(content));
     commands_.at("undo")->set_enabled(text_->can_undo());
     commands_.at("redo")->set_enabled(text_->can_redo());
     for(auto id:{"cut","copy","delete"}) commands_.at(id)->set_enabled(!text_->selection().empty());
@@ -78,7 +86,7 @@ gf::HostDialogChoice Editor::message(std::string title,std::string text,gf::Host
 }
 void Editor::error(const std::string& text) {
     status_->set_text(text); status_->set_visible(true);
-    try { message("Notepad",text); } catch(...) { /* Keep the error visible if native services fail. */ }
+    try { message("SwiftEdit",text); } catch(...) { /* Keep the error visible if native services fail. */ }
 }
 void Editor::after_unsaved(std::function<void()> next) {
     if(!document_.dirty(text_->text())) { next(); return; }
@@ -98,7 +106,7 @@ void Editor::open_file(const std::filesystem::path& source) {
     refresh(); focus_text();
 }
 bool Editor::save_to(const std::filesystem::path& path,const FileSnapshot& expected) {
-    try { document_.save(path,text_->text(),expected); refresh(); return true; }
+    try { document_.save(path,text_->text(),expected); text_->clear_undo_history(); refresh(); return true; }
     catch(const std::exception& e) { error(e.what()); return false; }
 }
 void Editor::save(bool save_as,std::function<void()> continuation) {
@@ -117,7 +125,27 @@ void Editor::execute(const std::string& id) {
         else if(id=="redo") text_->redo();
         else if(id=="cut") text_->cut();
         else if(id=="copy") text_->copy();
-        else if(id=="paste") text_->paste();
+        else if(id=="paste") {
+            if(!window()||!window()->host_services())throw std::runtime_error("Clipboard service is unavailable.");
+            auto clip=window()->host_services()->read_clipboard_text();
+            if(!clip.status.accepted())throw std::runtime_error("Cannot read plain-text clipboard.");
+            if(clip.text_utf8.size()>500000 && message("Large paste","Paste "+std::to_string(clip.text_utf8.size())+" bytes of plain text?",gf::HostMessageButtons::yes_no)!=gf::HostDialogChoice::yes)return;
+            auto candidate=std::string(text_->text());candidate.replace(text_->selection().start().value(),text_->selection().length(),clip.text_utf8);
+            if(gf::TextBox::validate_multiline_text(candidate)!=gf::TextBox::MultilineValidation::valid)throw std::runtime_error("Paste exceeds this GUI's document/line limits or contains invalid UTF-8. No text was changed.");
+            text_->replace_selection(clip.text_utf8);
+        }
+        else if(id=="restore-opened") {
+            if(message("Restore as opened?","Replace the working text with the original opened text? The file on disk will not change until you save.",gf::HostMessageButtons::yes_no)==gf::HostDialogChoice::yes){text_->select_all();text_->replace_selection(document_.opened_text);}
+        }
+        else if(id=="date-time") {
+            auto now=std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());std::tm local{};localtime_s(&local,&now);
+            std::ostringstream out;out<<std::put_time(&local,"%Y-%m-%d %H:%M:%S");text_->replace_selection(out.str());
+        }
+        else if(id=="newline-lf"||id=="newline-crlf") {
+            const std::string ending=id=="newline-lf"?"\n":"\r\n";auto converted=swiftedit::normalize_newlines(text_->text(),ending);
+            if(gf::TextBox::validate_multiline_text(converted)!=gf::TextBox::MultilineValidation::valid)throw std::runtime_error("Converted text exceeds GUI limits.");
+            text_->select_all();text_->replace_selection(converted);text_->set_newline_sequence(ending);
+        }
         else if(id=="delete") text_->delete_selection();
         else if(id=="select-all") text_->select_all();
         else if(id=="find" || id=="replace") show_find();
@@ -125,8 +153,8 @@ void Editor::execute(const std::string& id) {
         else if(id=="wrap") {text_->set_word_wrap(!text_->word_wrap());refresh();}
         else if(id=="status") {show_status_=!show_status_;status_->set_visible(show_status_);invalidate(gf::Dirty::layout);refresh();}
         else if(id=="font") static_cast<void>(font_.handle.show());
-        else if(id=="help") message("Notepad help","Use File > Open to edit a plain-text document. Ctrl+S saves. A star beside the filename means unsaved changes.\n\nFind/Replace is literal; Match case off folds English A-Z only. Search wraps once. Replace All is one undo action.\n\nThis build preserves UTF-8 and BOM-marked UTF-16, including existing line endings. Malformed or unsupported encodings are refused. Files changed externally are never silently overwritten: use Save As or reopen.\n\nWrap and font affect display only. Editable text is limited to 1 MiB of UTF-8 and 4096 UTF-8 bytes per logical line. Settings are session-only. Printing and legacy encodings await the product interview.");
-        else if(id=="about") message("About Notepad","Notepad 0.1\nA standalone plain-text editor using GUI.Forms and the shared File Manager Document Picker.\n\nWindows development build; provisional file semantics are recorded in docs/DECISIONS.md.");
+        else if(id=="help") message("SwiftEdit help","Use File > Open to edit a plain-text document. Ctrl+S saves. A star beside the filename means unsaved changes.\n\nFind/Replace is literal; Match case off folds English A-Z only. Search wraps once. Replace All is one undo action.\n\nThis build preserves UTF-8 and BOM-marked UTF-16, including existing line endings. Malformed or unsupported encodings are refused. Files changed externally are never silently overwritten: use Save As or reopen.\n\nWrap and font affect display only. Editable text is limited to 1 MiB of UTF-8 and 4096 UTF-8 bytes per logical line. Settings are session-only. Save resets ordinary Undo. Document > Restore As Opened recovers the original session text. Document also offers explicit newline conversion and date/time insertion (F5). The separate command-session executable supports bounded large-file pages and CSV calculations.");
+        else if(id=="about") message("About SwiftEdit","SwiftEdit 0.2\nA standalone plain-text editor using GUI.Forms and the shared File Manager Document Picker.\n\nWindows development build; expanded objectives and implementation status are recorded in docs/SWIFTEDIT_OBJECTIVES.md.");
         refresh();
     } catch(const std::exception& e) { error(e.what()); }
 }
@@ -138,6 +166,7 @@ void Editor::ready(gf::Window& w,gf::ApplicationWindowHandle handle,const std::f
     using K=gf::PhysicalKey; using M=gf::Modifier;
     for(auto [key,id] : std::vector<std::pair<std::uint32_t,std::string>>{{K::n,"new"},{K::o,"open"},{K::s,"save"},{K::f,"find"},{K::h,"replace"}}) shortcut(w,key,M::control,id);
     shortcut(w,K::s,M::control|M::shift,"save-as"); shortcut(w,K::f3,M::none,"find-next"); shortcut(w,K::f1,M::none,"help");
+    shortcut(w,K::v,M::control,"paste");shortcut(w,K::f5,M::none,"date-time");
     if(!initial.empty()) {try {open_file(initial);}catch(const std::exception& e){error(e.what());}}
     focus_text();
 }

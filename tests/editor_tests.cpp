@@ -76,7 +76,13 @@ int main() {
         editor->execute("save");
         check(notepad::read_file(path).bytes=="changed\n","Menu save exact bytes");
         check(!editor->document().dirty(text->text()),"Save updates clean boundary");
-        editor->execute("undo");check(editor->document().dirty(text->text()),"Undo after save is dirty");
+        editor->execute("undo");check(!editor->document().dirty(text->text())&&!text->can_undo(),"Save establishes undo boundary");
+        services.choices.push_back(gf::HostDialogChoice::yes);
+        editor->execute("restore-opened");check(text->text()=="one\ntwo\r\nthree\r","Original opened snapshot survives save");
+        editor->execute("newline-lf");check(text->text()=="one\ntwo\nthree\n","Explicit newline conversion");
+        editor->execute("undo");check(text->text()=="one\ntwo\r\nthree\r","Newline conversion is one undo action");
+        services.clipboard=std::string(500001,'x');services.choices.push_back(gf::HostDialogChoice::no);
+        editor->execute("paste");check(text->text()=="one\ntwo\r\nthree\r","Large paste cancellation preserves text");
         {std::ofstream out(path,std::ios::binary);out<<std::string(5000,'x');}
         bool refused=false;try{editor->open_file(path);}catch(const std::exception&){refused=true;}
         check(refused && text->text()=="one\ntwo\r\nthree\r","Oversize line open preserves current document");

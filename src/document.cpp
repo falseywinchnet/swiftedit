@@ -6,7 +6,7 @@
 namespace notepad {
 namespace {
 void check_text(std::string_view text) {
-    if (text.size() > maximum_bytes) throw std::runtime_error("This build supports text up to 4 MiB.");
+    if (text.size() > maximum_bytes) throw std::runtime_error("This build supports text up to 16 MiB.");
     const auto valid = gui_forms::validate_utf8(text);
     if (!valid.valid()) throw std::runtime_error("Malformed UTF-8 at byte " + std::to_string(valid.error_offset.value()) + ". No text was replaced. Legacy encodings require explicit conversion in another tool.");
     for (unsigned char ch : text) {
@@ -23,7 +23,7 @@ void append_utf8(std::string& out, std::uint32_t cp) {
 unsigned char fold(unsigned char c) { return c >= 'A' && c <= 'Z' ? c + 32 : c; }
 }
 Decoded decode(std::string_view bytes) {
-    if (bytes.size() > maximum_bytes) throw std::runtime_error("This build opens files up to 4 MiB.");
+    if (bytes.size() > maximum_bytes) throw std::runtime_error("This build opens files up to 16 MiB.");
     Decoded d;
     if (bytes.starts_with(std::string_view("\xff\xfe\0\0", 4)) || bytes.starts_with(std::string_view("\0\0\xfe\xff", 4)))
         throw std::runtime_error("UTF-32 is not supported by this build. No file was changed.");
@@ -54,7 +54,7 @@ std::string encode(std::string_view text, Encoding encoding) {
     check_text(text);
     if (encoding == Encoding::utf8) return std::string(text);
     if (encoding == Encoding::utf8_bom) {
-        if(text.size()+3>maximum_bytes) throw std::runtime_error("Encoded output exceeds the 4 MiB file limit.");
+        if(text.size()+3>maximum_bytes) throw std::runtime_error("Encoded output exceeds the 16 MiB file limit.");
         return "\xef\xbb\xbf" + std::string(text);
     }
     std::string out = encoding == Encoding::utf16_le ? "\xff\xfe" : "\xfe\xff";
@@ -72,7 +72,7 @@ std::string encode(std::string_view text, Encoding encoding) {
         if (cp < 0x10000) emit(cp);
         else { cp -= 0x10000; emit(0xd800 + (cp >> 10)); emit(0xdc00 + (cp & 1023)); }
     }
-    if (out.size() > maximum_bytes) throw std::runtime_error("Encoded output exceeds the 4 MiB file limit.");
+    if (out.size() > maximum_bytes) throw std::runtime_error("Encoded output exceeds the 16 MiB file limit.");
     return out;
 }
 std::string encoding_name(Encoding e) {
@@ -102,7 +102,7 @@ std::optional<std::size_t> find_literal(std::string_view s, std::string_view q, 
 Replacement replace_all(std::string_view s, std::string_view q, std::string_view r, bool match_case) {
     Replacement result; std::size_t cursor=0;
     while(auto found=find_literal(s,q,cursor,match_case)) {
-        if(result.text.size()+*found-cursor+r.size()>maximum_bytes) throw std::runtime_error("Replacement exceeds the 4 MiB text limit.");
+        if(result.text.size()+*found-cursor+r.size()>maximum_bytes) throw std::runtime_error("Replacement exceeds the 16 MiB text limit.");
         result.text.append(s.substr(cursor,*found-cursor)); result.text+=r; ++result.count; cursor=*found+q.size();
     }
     result.text.append(s.substr(cursor)); check_text(result.text); return result;
@@ -111,7 +111,7 @@ void Document::open(const std::filesystem::path& source) {
     auto observed=read_file(source);
     if(!observed.exists) throw std::runtime_error("The selected file no longer exists.");
     auto decoded=decode(observed.bytes);
-    path=source; saved_text=std::move(decoded.text); encoding=decoded.encoding; snapshot=std::move(observed);
+    path=source; saved_text=std::move(decoded.text); opened_text=saved_text; encoding=decoded.encoding; snapshot=std::move(observed);
 }
 void Document::save(const std::filesystem::path& target,std::string_view text,const FileSnapshot& expected) {
     auto bytes=encode(text,encoding);

@@ -14,5 +14,5 @@ int main() {
         auto result=gui_forms::Application::run(editor->application_windows(initial));
         if(result.callback_exception) std::rethrow_exception(result.callback_exception);
         return result.accepted()?0:1;
-    } catch(const std::exception& e){std::cerr<<"Notepad: "<<e.what()<<'\n';return 1;}
+    } catch(const std::exception& e){std::cerr<<"SwiftEdit: "<<e.what()<<'\n';return 1;}
 }

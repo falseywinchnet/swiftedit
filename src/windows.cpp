@@ -1,4 +1,5 @@
 #include "editor.hpp"
+#include "session.hpp"
 #include <windows.h>
 
 namespace notepad {
@@ -8,7 +9,7 @@ std::vector<gf::ApplicationWindow> Editor::application_windows(const std::filesy
     gf::ApplicationWindow main;
     main.stable_id="notepad.main";
     main.model=std::make_unique<gf::Window>(self,gf::Size{940,660});
-    main.options.title="Notepad";main.options.initial_size={940,660};main.options.minimum_size={540,320};
+    main.options.title="SwiftEdit";main.options.initial_size={940,660};main.options.minimum_size={540,320};
     main.options.ready=[self,initial](auto& w,auto h){self->ready(w,h,initial);};
     main.options.closing=[self](auto& request){self->closing(request);};
     result.push_back(std::move(main));
@@ -18,7 +19,7 @@ std::vector<gf::ApplicationWindow> Editor::application_windows(const std::filesy
         file_manager::DocumentPickerRequest request;
         request.profile=save_as?file_manager::DocumentPickerProfile::save_as:file_manager::DocumentPickerProfile::open_file;
         request.protected_root=start.root_path();request.initial_location=start;
-        request.owner_application_id="org.malkuth.notepad";
+        request.owner_application_id="org.malkuth.swiftedit";
         request.show_hidden=true;
         request.authority=file_manager::DocumentPickerAuthority::trusted_local_host;
         request.home_location=start;
@@ -36,7 +37,7 @@ std::vector<gf::ApplicationWindow> Editor::application_windows(const std::filesy
         child.stable_id=save_as?"notepad.save-picker":"notepad.open-picker";
         child.owner_id="notepad.main";child.tool_window=true;
         child.model=std::make_unique<gf::Window>(picker.view->root_control(),gf::Size{800,600});
-        child.options.title=save_as?"Save As - Notepad":"Open - Notepad";
+        child.options.title=save_as?"Save As - SwiftEdit":"Open - SwiftEdit";
         child.options.initial_size={800,600};child.options.minimum_size={680,520};
         child.options.initially_visible=false;child.options.hide_on_close=true;
         child.options.ready=[this,save_as](auto& w,auto h){auto& p=save_as?save_picker_:open_picker_;p.window=&w;p.handle=h;p.view->attach_dialog(w);};
@@ -51,8 +52,8 @@ std::vector<gf::ApplicationWindow> Editor::application_windows(const std::filesy
         child.options.closing=[this](auto&){focus_text();};
         result.push_back(std::move(child));
     };
-    dialog(find_,"notepad.find-window","Find and Replace - Notepad",{510,260},find_next_button_,find_close_);
-    dialog(font_,"notepad.font-window","Font - Notepad",{410,220},font_apply_,font_close_);
+    dialog(find_,"notepad.find-window","Find and Replace - SwiftEdit",{510,260},find_next_button_,find_close_);
+    dialog(font_,"notepad.font-window","Font - SwiftEdit",{410,220},font_apply_,font_close_);
     return result;
 }
 void Editor::show_picker(bool save_as) {
@@ -60,7 +61,7 @@ void Editor::show_picker(bool save_as) {
     if(!picker.window || !picker.handle.active()) throw std::runtime_error("The shared file picker is not ready.");
     auto start=document_.path.empty()?std::filesystem::current_path():document_.path.parent_path();
     picker.view->set_authority_valid(true);
-    if(save_as) static_cast<void>(picker.view->controller().set_filename(document_.path.empty()?"Untitled.txt":path_utf8(document_.path.filename())));
+    if(save_as) static_cast<void>(picker.view->controller().set_filename(document_.path.empty()?swiftedit::suggested_name(text_->text()):path_utf8(document_.path.filename())));
     picker.view->present(start);picker.view->attach_dialog(*picker.window);
     // Suppress every editor command during the owned selection session.
     static_cast<void>(find_.handle.hide());static_cast<void>(font_.handle.hide());

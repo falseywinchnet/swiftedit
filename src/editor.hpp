@@ -79,6 +79,8 @@ private:
     bool show_status_{true},picker_active_{},active_save_picker_{},close_authorized_{};
     std::uint64_t dialog_sequence_{1};
     std::function<void()> after_save_;
+    std::string counted_text_;
+    std::size_t character_count_{};
 };
 std::string path_utf8(const std::filesystem::path&);
 }

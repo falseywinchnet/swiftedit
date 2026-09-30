@@ -23,7 +23,7 @@ FileSnapshot snapshot(HANDLE handle) {
     if(info.dwFileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT|FILE_ATTRIBUTE_DIRECTORY))
         throw std::runtime_error("Links, reparse points and directories are not supported. Choose an ordinary file.");
     if(info.nNumberOfLinks != 1) throw std::runtime_error("Files with multiple hard links are not supported by this save policy.");
-    if(pair(info.nFileSizeHigh,info.nFileSizeLow)>maximum_bytes) throw std::runtime_error("This build supports files up to 4 MiB.");
+    if(pair(info.nFileSizeHigh,info.nFileSizeLow)>maximum_bytes) throw std::runtime_error("This build supports files up to 16 MiB.");
     FileSnapshot result{true,info.dwVolumeSerialNumber,pair(info.nFileIndexHigh,info.nFileIndexLow),pair(info.ftLastWriteTime.dwHighDateTime,info.ftLastWriteTime.dwLowDateTime),{}};
     LARGE_INTEGER zero{};
     if(!SetFilePointerEx(handle,zero,nullptr,FILE_BEGIN)) fail("Cannot seek file");
@@ -59,7 +59,7 @@ FileSnapshot read_file(const std::filesystem::path& path) {
     return snapshot(file.value);
 }
 FileSnapshot write_file(const std::filesystem::path& path,std::string_view bytes,const FileSnapshot& expected) {
-    if(bytes.size()>maximum_bytes) throw std::runtime_error("Output exceeds 4 MiB.");
+    if(bytes.size()>maximum_bytes) throw std::runtime_error("Output exceeds 16 MiB.");
     validate_path(path);
     // Keep a no-write-sharing read handle alive through publication. Existing
     // incompatible writers cause refusal rather than a last-writer-wins save.
@@ -68,7 +68,7 @@ FileSnapshot write_file(const std::filesystem::path& path,std::string_view bytes
     if(current.value==INVALID_HANDLE_VALUE) {
         if(GetLastError()!=ERROR_FILE_NOT_FOUND) fail("Cannot validate save destination");
     } else actual=snapshot(current.value);
-    if(actual!=expected) throw std::runtime_error("The destination changed outside Notepad. Open it again or use Save As to another name. Nothing was overwritten.");
+    if(actual!=expected) throw std::runtime_error("The destination changed outside SwiftEdit. Open it again or use Save As to another name. Nothing was overwritten.");
     if(actual.exists && (GetFileAttributesW(path.c_str())&FILE_ATTRIBUTE_READONLY)) throw std::runtime_error("The destination is read-only. Use Save As to another name.");
     static std::atomic<unsigned long> sequence{};
     std::filesystem::path temporary;

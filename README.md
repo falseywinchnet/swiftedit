@@ -1,52 +1,51 @@
-# Notepad
+# SwiftEdit
 
-A standalone conventional plain-text editor for Windows, built in C++20 with
-the installed GUI.Forms SDK and File Manager Document Picker package. No ribbon,
-tabs, browser runtime, or persistent side panels.
+A native C++20 text editor built with the installed GUI.Forms and File Manager
+Document Picker packages. Traditional dropdown menus, owned dialogs, plain-text
+clipboard, no ribbon, browser runtime or persistent recovery files.
 
-Features: multiline editing, New/Open/Save/Save As, unsaved-change prompts,
-undo/redo, clipboard editing, literal Find/Replace, word wrap, status and a small
-font dialog. Open and Save As use the File Manager subset in an owned window.
+This development checkpoint adds the SwiftEdit identity, separate as-opened
+restore, last-save undo boundary, grapheme character/selection counts, explicit
+LF/CRLF conversion, date/time insertion (F5), bracket-based filename suggestions,
+and confirmation before pasting more than 500,000 bytes.
 
-This is a development build. File semantics and unresolved interview questions
-are explicit in [docs/DECISIONS.md](docs/DECISIONS.md). Supported encodings are
-strict UTF-8 and BOM-marked UTF-16 LE/BE. The original encoding, BOM and line
-endings are preserved. The editable limit is 1 MiB of UTF-8 and 4096 UTF-8 bytes
-per logical line. Unsupported files are refused before replacing the document.
+`swiftedit-cli.exe` provides a separate explicit command session with byte-faithful
+editing, exact-context preview/commit, stale revision guards, bounded file pages,
+read-only mode at 16 MiB, invalid-byte save refusal and Save Text Copy. CSV
+commands preserve unaffected source spelling and offer strict exact arithmetic.
+See [command protocol](docs/COMMAND_PROTOCOL.md) for commands and examples.
 
-## Build
+The GUI and command model are not yet unified. The GUI still uses the public
+TextBox's 1 MiB / 4096-byte-line bounds and supports UTF-8 plus BOM-marked UTF-16.
+The command model preserves raw bytes and only publishes valid UTF-8. Native
+Markdown/CSV views, the conventional full-screen terminal and remaining provider
+features are tracked in [the objective ledger](docs/SWIFTEDIT_OBJECTIVES.md).
+This is not a claim that the full expanded product is finished.
 
-Run `tools/Build-Windows.ps1` in PowerShell. The default dependencies are:
+## Build and run
 
-- `C:/Users/Shadow/plan-paint/build-deps/msys64/mingw64/bin`
-- `C:/Users/Shadow/file_manager/gui_forms/.build/shadow-sdk`
-- `C:/Users/Shadow/file_manager/.build/native-windows-x64/frontend-sdk`
+Run `tools/Build-Windows.ps1` in PowerShell. Default compiler is the existing
+MinGW-w64 installation at `C:/Users/Shadow/plan-paint/build-deps/msys64/mingw64/bin`.
+The frozen matching SDK pair is
+`C:/Users/Shadow/file_manager/.build/sdk-checkpoints/dbe3766/windows-x64/`:
+`gui-forms-sdk` and `picker-sdk`. The TextBox `clear_undo_history` API is required.
+Only installed public packages are consumed; no provider-private source is copied.
 
-Only installed public packages are linked. The GUI.Forms SDK must include the
-negotiated multiline TextBox extension, and the picker SDK must include the
-explicit trusted-local-host authority and admitted-roots extension. Building
-against an older package fails rather than silently substituting a private UI.
+The script hashes SDK contents, cleans on any checkpoint change, compiles, tests,
+and stages `dist/SwiftEdit/SwiftEdit.exe`, `swiftedit-cli.exe`, runtime DLLs, fonts
+and documentation. Use `-NativeTests` to run the authorized self-closing native
+smoke. It never sends global desktop input. Use `-BuildDirectory` and
+`-StageDirectory` for separate checkpoints; running executables are protected.
 
-The build script compiles and runs headless document/consumer tests, then stages
-the executable, dependency DLLs, fonts and documentation in `dist/Notepad`.
-It does not launch a window or perform desktop automation.
+Launch `dist/SwiftEdit/SwiftEdit.exe`, optionally with one quoted Unicode path.
+Run `dist/SwiftEdit/swiftedit-cli.exe` with stdin/stdout pipes for command sessions.
+No installer, association, OS-default change or remote publication is performed.
+The old `dist/Notepad` and `dist/Notepad-dpi` dogfood copies are preserved.
 
-After coordinating desktop availability, `tools/Build-Windows.ps1 -NativeTests`
-also runs a self-closing owned-window smoke test using disposable text files and
-the public Application lifecycle. It does not send global keyboard or pointer
-input. SDK contents are hashed; a changed or unknown checkpoint forces a clean
-consumer rebuild, and SDK changes during the build abort packaging.
+## Ownership and boundaries
 
-Use `-BuildDirectory <absolute-path> -StageDirectory <absolute-path>` to build
-a new SDK checkpoint alongside a running copy. The script refuses to replace
-build or staged binaries when a Notepad process is using that directory.
-
-Launch `dist/Notepad/notepad.exe`, optionally with one quoted file path.
-Paths are parsed using the native Unicode command line. Settings are session-only.
-
-## Source ownership
-
-This is its own Git repository. Plan Paint is a read-only lifecycle/build
-blueprint. GUI.Forms owns text editing mechanics; File Manager owns its reusable
-picker and filesystem-browser provider; Notepad owns byte interpretation,
-document lifecycle and actual writes. No provider-private source is copied here.
+This is an independent repository at `C:/Users/Shadow/notepad`; the source
+directory and historical internal C++ namespace have not been renamed.
+GUI.Forms owns native editing mechanics, File Manager owns the picker, SwiftEdit
+owns interpretation, session behavior and publication. See
+[known gaps](docs/KNOWN_GAPS.md) and [validation](docs/VALIDATION.md).

@@ -1,9 +1,10 @@
-# Notepad repository instructions
+# SwiftEdit repository instructions
 
 Current owner direction authorizes implementation now; historical Text Editor
 interview-first gates are not a stop condition for this standalone repository.
-Read docs/DECISIONS.md before changing text/save semantics. Unanswered questions
-remain provisional until the owner answers the future product interview.
+Read docs/SWIFTEDIT_OBJECTIVES.md before changing text/save semantics. It records
+the owner's 2026-09-30 interview and supersedes conflicting provisional choices
+in historical docs/DECISIONS.md. Assistant proposals are not owner decisions.
 
 Work in this repository with explicit working directories. No workers/subagents
 or worktrees. Do not modify Plan Paint or File Manager/GUI.Forms source without

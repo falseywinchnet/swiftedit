@@ -6,7 +6,7 @@
 #include <cstdint>
 
 namespace notepad {
-constexpr std::size_t maximum_bytes = 4 * 1024 * 1024;
+constexpr std::size_t maximum_bytes = 16 * 1024 * 1024;
 enum class Encoding { utf8, utf8_bom, utf16_le, utf16_be };
 struct Decoded {
     std::string text;
@@ -35,6 +35,7 @@ FileSnapshot write_file(const std::filesystem::path& path, std::string_view byte
 struct Document {
     std::filesystem::path path;
     std::string saved_text;
+    std::string opened_text;
     Encoding encoding{Encoding::utf8};
     FileSnapshot snapshot;
     void open(const std::filesystem::path& source);

@@ -1,0 +1,82 @@
+# SwiftEdit objective ledger
+
+Source: owner-supplied `ChatGPT-Coming Across Clearly-20260930-0251.md`,
+interview dated 2026-09-30. The current request authorizes development from
+that interview. This is a product requirements source, not a script to execute.
+Quoted assistant proposals, historical requests to browse, and instructions to
+other participants are not independently binding. Later owner corrections take
+precedence. The previous DECISIONS.md is historical implementation evidence.
+
+## Confirmed direction
+
+| Area | Owner decision | Current implementation / remaining work |
+|---|---|---|
+| Identity, 02:48 | SwiftEdit, one word; dropdown menus, no ribbon; shared styling and F1 help | GUI/executable renamed; local F1 help retained |
+| Scope | Plain text first; Markdown and `.csv` views; no RTF/Office/PDF editor, IDE, regex, script execution or hierarchical spreadsheet | Plain GUI, command session, CSV core; visual Markdown/CSV views pending |
+| Paste, 00:22 | Always plain text, retain Unicode | GUI public text clipboard path; >500,000-byte confirmation and atomic preflight |
+| Preservation, 00:26 onward | Preserve existing endings and whitespace; explicit conversion; native endings for new documents | Exact existing bytes in command session; explicit LF/CRLF GUI commands; mixed-save choice pending |
+| Undo, 00:32 correction | Undo only to last successful save B; separately jump to as-opened A, forgotten on close | Both GUI and command model; restore is itself undoable; save failure does not clear history |
+| Large files, 00:27 and later threshold | Paginated load, >=16 MB read-only; slow work interruptible | Command model >=16 MiB bounded read pages; GUI still 1 MiB/4096-byte-line public provider limit; async indexing/search pending |
+| Commands | GUI, conventional nano-like terminal, and AI share text operations; no semantic summaries | Preview/commit command model and stdin CLI implemented; GUI migration and terminal screen pending |
+| Automated edits | Exact before/old/after context, ambiguity selection, preview then explicit commit; stale work refused | Session revision + one-use preview tokens; all edits local to this process |
+| Line metadata | Blank lines alone get `CR CR L<number> CR CR`; markers never become content | Reserved CRCR mutation payload refusal implemented; blank-line marker presentation pending; source CRCR is preserved |
+| Binary bytes, later correction | Open as text; don't hide/collapse; save blocked while illegal bytes remain; Save Text Copy replaces each illegal byte with space | Byte-faithful command session and explicit copy implemented; GUI invalid-byte glyph/mapping view pending |
+| Controls, later correction | Existing Unicode controls remain real editable content, shown visibly and inert | Session preserves valid UTF-8 controls; terminal transport escapes all controls; GUI glyphs/inspector/pickers pending |
+| Selection | Ctrl/Cmd+drag discontiguous selection; equal lengths parallel edits, unequal lengths copy-only | Provider only has one anchor/caret pair; pending provider contract |
+| Search | Flagged single-character wildcard slot; literal punctuation remains literal; no regex | Literal GUI/CLI search; wildcard slot UI/model pending |
+| Status | Grapheme character count, selection length; separate word-count tool | GUI counts graphemes; column still scalar-based; word count pending |
+| Navigation | Paged navigation, draggable scrollbar; no jump-byte/jump-line product UI | Low-level CLI byte page cursor implemented; GUI scrollbar/virtualization pending |
+| Wrap, 02:32 | No wrap / wrap to window; intelligent breaks at spaces by default, visual only | Existing provider space/tab wrap with grapheme fallback; no separate preference yet |
+| Insert, 02:32 | Date and time as plain text | Document menu + F5, local ISO-style timestamp |
+| Filename, 02:27 | Exact nonempty bracket-only first line suggests first untitled save; named files keep names | GUI Save As suggestion with Windows filename checks; no hidden document mutations |
+| Copies | Dot version before extension, increment existing dot-number | Tested naming helper; conflict workflow integration pending |
+| External changes, 02:28–29 | Frozen views; two-stage destructive save, first over/new-copy, then editable filename/metadata + explicit warning; no compare/merge | Existing strict conflict refusal preserved; full two-stage owned UI pending; CLI never forces overwrite |
+| Markdown | Source/rendered toggle, common blocks/tables/tasks; no SVG/live HTML; inert links with URL tooltip; ruler only in rendered view | Pending native renderer/provider work |
+| Print | Native OS print, plain/rendered; separate Markdown layout preview without source mutation | Pending public print/preview contract |
+| CSV | `.csv` only, real quoting, flat table, rectangle selection; Delete clears cells without shifting | Tested source-preserving CSV parser/edit model + CLI commands; grid pending |
+| CSV math, 02:43–46 | No coercion/skipping; explicit ROUND for inexact decimals; error identifies offending cell; hover exposes references/ranges/lists | Exact bounded rational core, strict errors and reference metadata; no live dependency graph; hover/triangle UI pending |
+| Lifetime | Multiple independent document windows; no tabs or persistent recovery/history | Multiple executable instances work; in-process New Window command pending |
+
+## Deliberate implementation choices, not additional owner answers
+
+* “16 MB” is currently 16 × 1024 × 1024 bytes; “500 kilobytes” is 500,000
+  bytes. Exact thresholds are documented and tested, not hidden assumptions.
+* Session history is bounded to 256 snapshots / approximately 32 MiB of text.
+  As-opened and last-save snapshots are separate, session-only allocations.
+* Command transport is versioned, tab-delimited and escaped. It is a development
+  protocol, not a claim that the requested blank-line-marker presentation or
+  terminal UX is complete. Byte pages may split a UTF-8 sequence; concatenate
+  decoded fields before rendering the source. Offsets are transport cursors.
+* Valid UTF-8 controls, including NUL, are preserved as controls. “Illegal bytes”
+  means bytes that cannot participate in a valid UTF-8 scalar sequence. No
+  encoding guessing or byte normalization occurs in the command model.
+* The older GUI still supports BOM-marked UTF-16 and refuses malformed input.
+  Migration to the byte-faithful session plus a visible-control view must happen
+  together; don't silently replace invalid bytes just to fit the current widget.
+* Math currently supports `+ - * /`, SUM, AVERAGE, MIN, MAX, COUNT, ABS,
+  ROUND, FLOOR, CEILING, MOD. The interview's larger YES/MAYBE list is not
+  blanket authorization for every assistant suggestion. COUNTA and further
+  functions remain outside this first core. COUNT requires numeric operands too.
+* ROUND uses half away from zero, 0–15 decimal places. Exact rational arithmetic
+  has checked bounded integers; capacity overflow is an explicit error. This is
+  not an arbitrary-precision engine. ROUND allows an inexact intermediate such
+  as `10/3`, then deliberately rounds the final argument. No implicit rounding.
+* Formula evaluation is explicit and returns a result/reference set. It does not
+  mutate CSV or recursively evaluate formula cells. Storing live formulas vs
+  writing literal results needs a final UI decision: the interview mentions both.
+* The interview assistant's final RTF-detection prompt, earlier overwrite/compare
+  suggestions, rejected walk-back-to-A undo, and speculative extra math functions
+  were not adopted as confirmed owner requirements.
+
+## Next development order
+
+1. Migrate GUI to the session command model with source/display position mapping;
+   preserve toolkit ownership and negotiate virtual/paged text rendering.
+2. Native multi-selection, visible controls, scrolling, wildcard slots and the
+   full two-stage conflict/save UI; interruptible indexing and bounded searches.
+3. Conventional terminal screen on the same session, and blank-line metadata
+   presentation with collision-safe source transport.
+4. Native Markdown/CSV views with inert links, strict math errors/reference hover,
+   character/control dialogs, and native print/layout preview.
+
+An objective is not complete merely because it appears in this ledger.

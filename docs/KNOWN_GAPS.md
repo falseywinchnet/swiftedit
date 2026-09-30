@@ -1,5 +1,10 @@
 # Development limitations
 
+The expanded owner objectives and feature-by-feature implementation status are
+in SWIFTEDIT_OBJECTIVES.md. The new CLI is a command protocol, not the promised
+full-screen terminal, and the GUI has not yet migrated to its byte-faithful model.
+CSV parsing/math are implemented in the core/CLI, not in a graphical table view.
+
 - Windows is the first implementation. Other platform file adapters are not
   implemented or claimed.
 - The current GUI.Forms multiline provider has a 1 MiB UTF-8 document limit and
@@ -14,7 +19,7 @@
   it is not an arbitrary installed-font-family chooser.
 - Case-insensitive search folds only ASCII A-Z. Literal non-ASCII text searches
   exactly. There are no regex, wildcard, whole-word or selection-only modes.
-- No printing/page setup, Go To, time/date insertion, Characters dialog, syntax
+- No printing/page setup, Characters dialog, syntax
   colors, settings persistence, recovery files, installer, file association or
   OS-default changes.
 - External changes are checked during saving. There is no filesystem watcher,
@@ -29,9 +34,9 @@
   recovery and the final name-replacement race are not eliminated.
 - File Manager picker enumeration remains synchronous. Very large or slow
   directories may block that owned dialog; this is provider-owned work.
-- The stable native title is `Notepad`; a document-name strip carries the full
+- The stable native title is `SwiftEdit`; a document-name strip carries the full
   path and unsaved marker. Dynamic native title support is not exposed by this
   SDK snapshot.
 
-These gaps are inputs to the future interview described in DECISIONS.md, not
-claims of a finished Malkuth release.
+The owner interview now provides direction. These gaps remain implementation
+work, not claims of a finished Malkuth release.

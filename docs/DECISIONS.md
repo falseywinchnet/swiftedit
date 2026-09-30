@@ -1,5 +1,8 @@
 # Notepad development decision ledger
 
+Historical baseline: the 2026-09-30 owner interview and
+SWIFTEDIT_OBJECTIVES.md supersede conflicting provisional choices below.
+
 Date: 2026-09-29. Status: provisional Windows implementation, not interview closure.
 
 ## Authority and scope
