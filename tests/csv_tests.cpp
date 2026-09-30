@@ -5,15 +5,10 @@ void check(bool b, const char *s) {
     if (!b)
         throw std::runtime_error(s);
 }
-template <class F> void refuses(F f, std::string_view fragment = "") {
-    try {
-        f();
-    } catch (const std::exception &e) {
-        check(std::string_view(e.what()).find(fragment) != std::string_view::npos,
-              "Wrong refusal reason");
-        return;
-    }
-    throw std::runtime_error("Expected refusal");
+
+std::string calculate_result(const swiftedit::Csv &table, std::string_view expression) {
+    const swiftedit::Calculation result = swiftedit::calculate(table, expression);
+    return result.result;
 }
 int main() {
     try {
@@ -22,43 +17,171 @@ int main() {
         check(csv.rows().size() == 3 && csv.cell({0, 2}).value == "line\r\nbreak",
               "embedded newlines");
         check(csv.cell({0, 1}).value == "quoted \"word\"", "escaped quotes");
-        auto changed = csv.set({1, 1}, "x,y");
+        const std::string changed = csv.set({1, 1}, "x,y");
         check(changed == "\"a,b\",\"quoted \"\"word\"\"\",\"line\r\nbreak\"\r\n1,\"x,y\",3\n4,,6",
               "localized serialization preserves unaffected source");
-        auto cleared = Csv("1,2,3\r\n4,5,6\n").clear({0, 1}, {1, 2});
+        const std::string cleared = Csv("1,2,3\r\n4,5,6\n").clear({0, 1}, {1, 2});
         check(cleared == "1,,\r\n4,,\n", "clear preserves delimiters rows and line endings");
-        check(Csv("a,b,").rows()[0].size() == 3, "trailing empty field");
-        check(Csv("").rows()[0].size() == 1, "empty document cell");
-        refuses([] { Csv("\"bad"); });
-        refuses([] { Csv("\"bad\"tail"); });
-        refuses([] { Csv("b\"ad"); });
-        check(cell_address("AA12") == CellAddress{11, 26} && cell_name({11, 26}) == "AA12",
-              "addresses");
-        refuses([] { cell_address("A0"); });
+        const Csv trailing_empty("a,b,");
+        check(trailing_empty.rows()[0].size() == 3, "trailing empty field");
+        const Csv empty_document("");
+        check(empty_document.rows()[0].size() == 1, "empty document cell");
+        {
+            bool refused = false;
+            try {
+                Csv("\"bad");
+            } catch (const std::exception &failure) {
+                refused = true;
+            }
+            check(refused, "Expected refusal");
+        }
+        {
+            bool refused = false;
+            try {
+                Csv("\"bad\"tail");
+            } catch (const std::exception &failure) {
+                refused = true;
+            }
+            check(refused, "Expected refusal");
+        }
+        {
+            bool refused = false;
+            try {
+                Csv("b\"ad");
+            } catch (const std::exception &failure) {
+                refused = true;
+            }
+            check(refused, "Expected refusal");
+        }
+        const CellAddress address = cell_address("AA12");
+        check(address == CellAddress{11, 26}, "addresses");
+        const std::string address_name = cell_name({11, 26});
+        check(address_name == "AA12", "addresses");
+        {
+            bool refused = false;
+            try {
+                static_cast<void>(cell_address("A0"));
+            } catch (const std::exception &failure) {
+                refused = true;
+            }
+            check(refused, "Expected refusal");
+        }
         Csv nums("0.1,0.2,3\r\n4,5,6\r\ntext,,=SUM(A1:B1)");
-        auto calc = [&](std::string_view s) { return calculate(nums, s).result; };
-        check(calc("=A1+B1") == "0.3", "decimal exactness");
-        check(calc("10/4") == "2.5", "finite division");
-        refuses([&] { calc("10/3"); }, "Rounding required");
-        check(calc("ROUND(10/3,2)") == "3.33", "explicit rounding");
-        check(calc("ROUND(-1.235,2)") == "-1.24", "half away from zero");
-        check(calc("SUM(A1:B2,C1)") == "12.3", "rectangle and comma list");
-        check(calc("SUM(A1 : B1)") == "0.3", "spaced range");
-        check(calc("AVERAGE(A2:C2)") == "5", "average");
-        check(calc("MIN(A2:C2)") == "4" && calc("MAX(A2:C2)") == "6", "min max");
-        check(calc("COUNT(A1:C2)") == "6", "strict numeric count");
-        check(calc("ABS(-3.5)") == "3.5", "absolute");
-        check(calc("FLOOR(-1.2)") == "-2" && calc("CEILING(-1.2)") == "-1",
-              "negative rounding directions");
-        check(calc("MOD(-5,3)") == "1", "floor-based remainder");
-        refuses([&] { calc("SUM(A1:A3)"); }, "A3");
-        refuses([&] { calc("SUM(B1:B3)"); }, "B3");
-        refuses([&] { calc("C3"); }, "C3");
-        refuses([&] { calc("1/0"); }, "zero");
-        refuses([&] { calc("999999999999999999*99"); }, "capacity");
-        refuses([&] { calc("RAND()"); });
-        refuses([&] { calc("SUM(C2:A1)"); }, "Reversed");
-        auto refs = calculate(nums, "SUM(A1:B1,C2)").references;
+        const std::string calculated_1 = calculate_result(nums, "=A1+B1");
+        check(calculated_1 == "0.3", "decimal exactness");
+        const std::string calculated_2 = calculate_result(nums, "10/4");
+        check(calculated_2 == "2.5", "finite division");
+        {
+            bool refused = false;
+            try {
+                calculate_result(nums, "10/3");
+            } catch (const std::exception &failure) {
+                refused = true;
+                const std::string_view message = failure.what();
+                check(message.find("Rounding required") != message.npos, "Wrong refusal reason");
+            }
+            check(refused, "Expected refusal");
+        }
+        const std::string calculated_3 = calculate_result(nums, "ROUND(10/3,2)");
+        check(calculated_3 == "3.33", "explicit rounding");
+        const std::string calculated_4 = calculate_result(nums, "ROUND(-1.235,2)");
+        check(calculated_4 == "-1.24", "half away from zero");
+        const std::string calculated_5 = calculate_result(nums, "SUM(A1:B2,C1)");
+        check(calculated_5 == "12.3", "rectangle and comma list");
+        const std::string calculated_6 = calculate_result(nums, "SUM(A1 : B1)");
+        check(calculated_6 == "0.3", "spaced range");
+        const std::string calculated_7 = calculate_result(nums, "AVERAGE(A2:C2)");
+        check(calculated_7 == "5", "average");
+        const std::string calculated_8 = calculate_result(nums, "MIN(A2:C2)");
+        check(calculated_8 == "4", "min max");
+        const std::string calculated_9 = calculate_result(nums, "MAX(A2:C2)");
+        check(calculated_9 == "6", "min max");
+        const std::string calculated_10 = calculate_result(nums, "COUNT(A1:C2)");
+        check(calculated_10 == "6", "strict numeric count");
+        const std::string calculated_11 = calculate_result(nums, "ABS(-3.5)");
+        check(calculated_11 == "3.5", "absolute");
+        const std::string calculated_12 = calculate_result(nums, "FLOOR(-1.2)");
+        check(calculated_12 == "-2", "negative rounding directions");
+        const std::string calculated_13 = calculate_result(nums, "CEILING(-1.2)");
+        check(calculated_13 == "-1", "negative rounding directions");
+        const std::string calculated_14 = calculate_result(nums, "MOD(-5,3)");
+        check(calculated_14 == "1", "floor-based remainder");
+        {
+            bool refused = false;
+            try {
+                calculate_result(nums, "SUM(A1:A3)");
+            } catch (const std::exception &failure) {
+                refused = true;
+                const std::string_view message = failure.what();
+                check(message.find("A3") != message.npos, "Wrong refusal reason");
+            }
+            check(refused, "Expected refusal");
+        }
+        {
+            bool refused = false;
+            try {
+                calculate_result(nums, "SUM(B1:B3)");
+            } catch (const std::exception &failure) {
+                refused = true;
+                const std::string_view message = failure.what();
+                check(message.find("B3") != message.npos, "Wrong refusal reason");
+            }
+            check(refused, "Expected refusal");
+        }
+        {
+            bool refused = false;
+            try {
+                calculate_result(nums, "C3");
+            } catch (const std::exception &failure) {
+                refused = true;
+                const std::string_view message = failure.what();
+                check(message.find("C3") != message.npos, "Wrong refusal reason");
+            }
+            check(refused, "Expected refusal");
+        }
+        {
+            bool refused = false;
+            try {
+                calculate_result(nums, "1/0");
+            } catch (const std::exception &failure) {
+                refused = true;
+                const std::string_view message = failure.what();
+                check(message.find("zero") != message.npos, "Wrong refusal reason");
+            }
+            check(refused, "Expected refusal");
+        }
+        {
+            bool refused = false;
+            try {
+                calculate_result(nums, "999999999999999999*99");
+            } catch (const std::exception &failure) {
+                refused = true;
+                const std::string_view message = failure.what();
+                check(message.find("capacity") != message.npos, "Wrong refusal reason");
+            }
+            check(refused, "Expected refusal");
+        }
+        {
+            bool refused = false;
+            try {
+                calculate_result(nums, "RAND()");
+            } catch (const std::exception &failure) {
+                refused = true;
+            }
+            check(refused, "Expected refusal");
+        }
+        {
+            bool refused = false;
+            try {
+                calculate_result(nums, "SUM(C2:A1)");
+            } catch (const std::exception &failure) {
+                refused = true;
+                const std::string_view message = failure.what();
+                check(message.find("Reversed") != message.npos, "Wrong refusal reason");
+            }
+            check(refused, "Expected refusal");
+        }
+        const std::vector<CellAddress> refs = calculate(nums, "SUM(A1:B1,C2)").references;
         check(refs == std::vector<CellAddress>{{0, 0}, {0, 1}, {1, 2}},
               "references available for hover highlighting");
         std::cout << "CSV tests passed: lossless local edits, quoting, clear rectangle, exact "

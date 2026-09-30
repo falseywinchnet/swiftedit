@@ -21,24 +21,27 @@ CellAddress cell_address(std::string_view name) {
     }
     if (i != name.size() || !row)
         throw std::runtime_error("Invalid cell address.");
-    return {row - 1, col - 1};
+    const CellAddress result{row - 1, col - 1};
+    return result;
 }
 std::string cell_name(CellAddress p) {
-    std::string s;
-    auto n = p.column + 1;
+    std::string s{};
+    std::size_t n = p.column + 1;
     while (n) {
-        s.insert(s.begin(), char('A' + (n - 1) % 26));
+        s.insert(s.begin(), static_cast<char>('A' + (n - 1) % 26));
         n = (n - 1) / 26;
     }
-    return s + std::to_string(p.row + 1);
+    s += std::to_string(p.row + 1);
+    return s;
 }
 Csv::Csv(std::string_view source) : source_(source) {
     std::size_t i = 0, count = 0;
-    std::vector<Cell> row;
+    std::vector<Cell> row{};
     for (;;) {
-        if (++count > 100000)
+        ++count;
+        if (count > 100000)
             throw std::runtime_error("CSV table view is limited to 100000 cells.");
-        Cell c;
+        Cell c{};
         c.begin = i;
         if (i < source.size() && source[i] == '"') {
             ++i;
@@ -53,8 +56,10 @@ Csv::Csv(std::string_view source) : source_(source) {
                         closed = true;
                         break;
                     }
-                } else
-                    c.value += source[i++];
+                } else {
+                    c.value += source[i];
+                    ++i;
+                }
             }
             if (!closed)
                 throw std::runtime_error("Unclosed quoted CSV field.");
@@ -65,7 +70,8 @@ Csv::Csv(std::string_view source) : source_(source) {
                    source[i] != '\n') {
                 if (source[i] == '"')
                     throw std::runtime_error("Quote inside an unquoted CSV field.");
-                c.value += source[i++];
+                c.value += source[i];
+                ++i;
             }
         }
         c.end = i;
@@ -78,7 +84,9 @@ Csv::Csv(std::string_view source) : source_(source) {
             ++i;
             continue;
         }
-        if (source[i++] == '\r' && i < source.size() && source[i] == '\n')
+        const char ending = source[i];
+        ++i;
+        if (ending == '\r' && i < source.size() && source[i] == '\n')
             ++i;
         rows_.push_back(std::move(row));
         row.clear();
@@ -92,8 +100,11 @@ const Cell &Csv::cell(CellAddress p) const {
     return rows_[p.row][p.column];
 }
 std::string Csv::set(CellAddress p, std::string_view value) const {
-    auto &c = cell(p);
-    std::string encoded;
+    const Cell &c = cell(p);
+    std::string encoded{};
+    if (value.size() > (encoded.max_size() - 2) / 2)
+        throw std::length_error("Encoded CSV field is too large.");
+    encoded.reserve(value.size() * 2 + 2);
     if (value.find_first_of(",\"\r\n") != value.npos) {
         encoded += '"';
         for (char ch : value) {
@@ -104,7 +115,7 @@ std::string Csv::set(CellAddress p, std::string_view value) const {
         encoded += '"';
     } else
         encoded = value;
-    auto result = source_;
+    std::string result = source_;
     result.replace(c.begin, c.end - c.begin, encoded);
     return result;
 }
@@ -113,28 +124,40 @@ std::string Csv::clear(CellAddress first, CellAddress last) const {
         throw std::runtime_error("Reversed CSV selection.");
     cell(first);
     cell(last);
-    std::vector<Cell> targets;
-    for (auto r = first.row; r <= last.row; ++r)
-        for (auto c = first.column; c <= last.column; ++c)
-            targets.push_back(cell({r, c}));
-    auto result = source_;
-    for (auto i = targets.rbegin(); i != targets.rend(); ++i)
-        result.erase(i->begin, i->end - i->begin);
+    // Validate the whole rectangle before constructing a replacement. The
+    // immutable source owns field offsets; no decoded field copies are needed.
+    for (std::size_t r = first.row; r <= last.row; ++r)
+        for (std::size_t c = first.column; c <= last.column; ++c)
+            static_cast<void>(cell({r, c}));
+    std::string result = source_;
+    // Descending source offsets remain valid as later fields are erased.
+    for (std::size_t row = last.row + 1; row > first.row; --row) {
+        for (std::size_t column = last.column + 1; column > first.column; --column) {
+            const Cell &selected = rows_[row - 1][column - 1];
+            const std::size_t count = selected.end - selected.begin;
+            result.erase(selected.begin, count);
+        }
+    }
     return result;
 }
 namespace {
 using Integer = std::int64_t;
 constexpr Integer limit = std::numeric_limits<Integer>::max() / 10;
-Integer magnitude(Integer n) { return n < 0 ? -n : n; }
+Integer magnitude(Integer n) {
+    const Integer value = n < 0 ? -n : n;
+    return value;
+}
 Integer mul(Integer a, Integer b) {
     if (b && magnitude(a) > limit / magnitude(b))
         throw std::runtime_error("Exact arithmetic capacity exceeded.");
-    return a * b;
+    const Integer product = a * b;
+    return product;
 }
 Integer add(Integer a, Integer b) {
     if ((b > 0 && a > limit - b) || (b < 0 && a < -limit - b))
         throw std::runtime_error("Exact arithmetic capacity exceeded.");
-    return a + b;
+    const Integer sum = a + b;
+    return sum;
 }
 struct Number {
     Integer n{}, d{1};
@@ -145,25 +168,40 @@ struct Number {
             n = -n;
             d = -d;
         }
-        auto g = std::gcd(magnitude(n), d);
+        Integer g = std::gcd(magnitude(n), d);
         n /= g;
         d /= g;
     }
 };
 Number plus(Number a, Number b) {
-    auto g = std::gcd(a.d, b.d);
-    return {add(mul(a.n, b.d / g), mul(b.n, a.d / g)), mul(a.d, b.d / g)};
+    Integer g = std::gcd(a.d, b.d);
+    const Integer left = mul(a.n, b.d / g);
+    const Integer right = mul(b.n, a.d / g);
+    const Integer numerator = add(left, right);
+    const Integer denominator = mul(a.d, b.d / g);
+    const Number result{numerator, denominator};
+    return result;
 }
 Number times(Number a, Number b) {
-    auto g = std::gcd(magnitude(a.n), b.d), h = std::gcd(magnitude(b.n), a.d);
-    return {mul(a.n / g, b.n / h), mul(a.d / h, b.d / g)};
+    Integer g = std::gcd(magnitude(a.n), b.d), h = std::gcd(magnitude(b.n), a.d);
+    const Integer numerator = mul(a.n / g, b.n / h);
+    const Integer denominator = mul(a.d / h, b.d / g);
+    const Number result{numerator, denominator};
+    return result;
 }
 Number divide(Number a, Number b) {
     if (!b.n)
         throw std::runtime_error("Division by zero.");
-    return times(a, {b.d, b.n});
+    const Number reciprocal{b.d, b.n};
+    const Number result = times(a, reciprocal);
+    return result;
 }
-bool less(Number a, Number b) { return plus(a, {-b.n, b.d}).n < 0; }
+bool less(Number a, Number b) {
+    const Number negative{-b.n, b.d};
+    const Number difference = plus(a, negative);
+    const bool result = difference.n < 0;
+    return result;
+}
 Number numeric(std::string_view s) {
     if (s.empty())
         throw std::runtime_error("Blank is not numeric.");
@@ -176,7 +214,7 @@ Number numeric(std::string_view s) {
     Integer n = 0, d = 1;
     bool point = false, digit = false;
     for (; i < s.size(); ++i) {
-        auto c = s[i];
+        const char c = s[i];
         if (c == '.' && !point) {
             point = true;
             continue;
@@ -190,30 +228,31 @@ Number numeric(std::string_view s) {
     }
     if (!digit)
         throw std::runtime_error("Non-numeric content.");
-    return {negative ? -n : n, d};
+    const Number result{negative ? -n : n, d};
+    return result;
 }
 std::string decimal(Number a) {
-    auto den = a.d;
+    Integer den = a.d;
     while (den % 2 == 0)
         den /= 2;
     while (den % 5 == 0)
         den /= 5;
     if (den != 1)
         throw std::runtime_error("Rounding required: use ROUND(expression, decimal_places).");
-    auto n = magnitude(a.n);
+    Integer n = magnitude(a.n);
     std::string out = (a.n < 0 ? "-" : "") + std::to_string(n / a.d);
     n %= a.d;
     if (n)
         out += '.';
     while (n) {
         n *= 10;
-        out += char('0' + n / a.d);
+        out += static_cast<char>('0' + n / a.d);
         n %= a.d;
     }
     return out;
 }
 class Parser {
-  public:
+public:
     Parser(const Csv &table, std::string_view expression) : table_(table), s_(expression) {
         if (s_.size() > 4096)
             throw std::runtime_error("Expression exceeds 4096 bytes.");
@@ -221,18 +260,21 @@ class Parser {
             ++at_;
     }
     Calculation run() {
-        auto n = expression();
+        Number n = expression();
         space();
         if (at_ != s_.size())
             throw std::runtime_error("Unexpected formula text.");
-        return {decimal(n), references_};
+        Calculation result{};
+        result.result = decimal(n);
+        result.references = std::move(references_);
+        return result;
     }
 
-  private:
+private:
     const Csv &table_;
-    std::string_view s_;
+    std::string_view s_{};
     std::size_t at_{}, depth_{};
-    std::vector<CellAddress> references_;
+    std::vector<CellAddress> references_{};
     void space() {
         while (at_ < s_.size() && (s_[at_] == ' ' || s_[at_] == '\t'))
             ++at_;
@@ -246,29 +288,41 @@ class Parser {
         return false;
     }
     void need(char c) {
-        if (!take(c))
+        const bool taken = take(c);
+        if (!taken)
             throw std::runtime_error(std::string("Expected '") + c + "'.");
     }
     Number expression() {
-        auto n = term();
+        Number n = term();
         while (true) {
-            if (take('+'))
-                n = plus(n, term());
-            else if (take('-')) {
-                auto rhs = term();
+            const bool addition = take('+');
+            if (addition) {
+                const Number operand = term();
+                n = plus(n, operand);
+                continue;
+            }
+            const bool subtraction = take('-');
+            if (subtraction) {
+                const Number rhs = term();
                 n = plus(n, {-rhs.n, rhs.d});
             } else
                 return n;
         }
     }
     Number term() {
-        auto n = atom();
+        Number n = atom();
         while (true) {
-            if (take('*'))
-                n = times(n, atom());
-            else if (take('/'))
-                n = divide(n, atom());
-            else
+            const bool multiplication = take('*');
+            if (multiplication) {
+                const Number operand = atom();
+                n = times(n, operand);
+                continue;
+            }
+            const bool division = take('/');
+            if (division) {
+                const Number operand = atom();
+                n = divide(n, operand);
+            } else
                 return n;
         }
     }
@@ -277,158 +331,206 @@ class Parser {
             throw std::runtime_error("Too many referenced cells.");
         references_.push_back(p);
         try {
-            return numeric(table_.cell(p).value);
+            const Cell &input = table_.cell(p);
+            const Number result = numeric(input.value);
+            return result;
         } catch (const std::exception &e) {
             throw std::runtime_error(cell_name(p) + ": " + e.what());
         }
     }
     std::string name() {
         space();
-        auto start = at_;
+        const std::size_t start = at_;
         while (at_ < s_.size() && s_[at_] >= 'A' && s_[at_] <= 'Z')
             ++at_;
-        return std::string(s_.substr(start, at_ - start));
+        const std::string result(s_.substr(start, at_ - start));
+        return result;
     }
     CellAddress address() {
         space();
-        auto start = at_;
+        const std::size_t start = at_;
         name();
         while (at_ < s_.size() && s_[at_] >= '0' && s_[at_] <= '9')
             ++at_;
-        return cell_address(s_.substr(start, at_ - start));
+        const std::string_view name = s_.substr(start, at_ - start);
+        const CellAddress result = cell_address(name);
+        return result;
     }
     std::vector<Number> arguments() {
-        std::vector<Number> values;
-        if (take(')'))
+        std::vector<Number> values{};
+        const bool closed = take(')');
+        if (closed)
             return values;
+        bool more = false;
         do {
             space();
-            auto saved = at_;
+            const std::size_t saved = at_;
             bool range = false;
             if (at_ < s_.size() && s_[at_] >= 'A' && s_[at_] <= 'Z') {
                 name();
-                auto digits = at_;
+                const std::size_t digits = at_;
                 while (at_ < s_.size() && s_[at_] >= '0' && s_[at_] <= '9')
                     ++at_;
-                if (at_ > digits && take(':')) {
+                bool colon = false;
+                if (at_ > digits)
+                    colon = take(':');
+                if (colon) {
                     at_ = saved;
-                    auto first = address();
+                    const CellAddress first = address();
                     need(':');
-                    auto last = address();
+                    const CellAddress last = address();
                     if (first.row > last.row || first.column > last.column)
                         throw std::runtime_error("Reversed cell range.");
                     table_.cell(first);
                     table_.cell(last);
-                    for (auto r = first.row; r <= last.row; ++r)
-                        for (auto c = first.column; c <= last.column; ++c)
-                            values.push_back(reference({r, c}));
+                    for (std::size_t r = first.row; r <= last.row; ++r)
+                        for (std::size_t c = first.column; c <= last.column; ++c) {
+                            const Number value = reference({r, c});
+                            values.push_back(value);
+                        }
                     range = true;
                 }
             }
             if (!range) {
                 at_ = saved;
-                values.push_back(expression());
+                const Number value = expression();
+                values.push_back(value);
             }
-        } while (take(','));
+            more = take(',');
+        } while (more);
         need(')');
         return values;
     }
+    static void require_argument_count(const std::string &name, std::size_t actual,
+                                       std::size_t expected) {
+        if (actual != expected)
+            throw std::runtime_error(name + ": wrong argument count.");
+    }
     Number function(const std::string &name, std::vector<Number> v) {
-        auto count = [&](std::size_t n) {
-            if (v.size() != n)
-                throw std::runtime_error(name + ": wrong argument count.");
-        };
         if (name == "ROUND") {
-            count(2);
+            require_argument_count(name, v.size(), 2);
             if (v[1].d != 1 || v[1].n < 0 || v[1].n > 15)
                 throw std::runtime_error("ROUND places must be an integer from 0 to 15.");
             Integer scale = 1;
             for (Integer i = 0; i < v[1].n; ++i)
                 scale = mul(scale, 10);
-            auto a = times(v[0], {scale});
-            auto n = magnitude(a.n), q = n / a.d, r = n % a.d;
+            const Number a = times(v[0], {scale});
+            Integer n = magnitude(a.n), q = n / a.d, r = n % a.d;
             if (r >= a.d - r)
                 q = add(q, 1);
-            return {a.n < 0 ? -q : q, scale};
+            const Number result{a.n < 0 ? -q : q, scale};
+            return result;
         }
         if (name == "ABS") {
-            count(1);
-            return {magnitude(v[0].n), v[0].d};
+            require_argument_count(name, v.size(), 1);
+            const Integer absolute = magnitude(v[0].n);
+            const Number result{absolute, v[0].d};
+            return result;
         }
         if (name == "FLOOR" || name == "CEILING") {
-            count(1);
-            auto a = v[0];
-            auto n = a.n / a.d;
+            require_argument_count(name, v.size(), 1);
+            const Number a = v[0];
+            Integer n = a.n / a.d;
             if (a.n % a.d) {
                 if (name == "FLOOR" && a.n < 0)
                     --n;
                 if (name == "CEILING" && a.n > 0)
                     ++n;
             }
-            return {n};
+            const Number result{n};
+            return result;
         }
         if (name == "MOD") {
-            count(2);
-            auto ratio = divide(v[0], v[1]);
-            auto q = ratio.n / ratio.d;
+            require_argument_count(name, v.size(), 2);
+            const Number ratio = divide(v[0], v[1]);
+            Integer q = ratio.n / ratio.d;
             if (ratio.n < 0 && ratio.n % ratio.d)
                 --q;
-            auto p = times({q}, v[1]);
-            return plus(v[0], {-p.n, p.d});
+            const Number p = times({q}, v[1]);
+            const Number negative{-p.n, p.d};
+            const Number result = plus(v[0], negative);
+            return result;
         }
         if (v.empty())
             throw std::runtime_error(name + ": expected numeric operands.");
-        if (name == "COUNT")
-            return {static_cast<Integer>(v.size())};
-        if (name == "SUM" || name == "AVERAGE") {
-            Number n;
-            for (auto a : v)
-                n = plus(n, a);
-            return name == "AVERAGE" ? divide(n, {static_cast<Integer>(v.size())}) : n;
+        if (name == "COUNT") {
+            const Integer count = static_cast<Integer>(v.size());
+            const Number result{count};
+            return result;
         }
-        if (name == "MIN" || name == "MAX") {
-            auto n = v.front();
-            for (auto a : v)
-                if (name == "MIN" ? less(a, n) : less(n, a))
-                    n = a;
+        if (name == "SUM" || name == "AVERAGE") {
+            Number n{};
+            for (const Number a : v)
+                n = plus(n, a);
+            if (name == "AVERAGE") {
+                const Number count{static_cast<Integer>(v.size())};
+                n = divide(n, count);
+            }
             return n;
+        }
+        if (name == "MIN") {
+            const std::vector<Number>::const_iterator minimum =
+                std::min_element(v.begin(), v.end(), less);
+            return *minimum;
+        }
+        if (name == "MAX") {
+            const std::vector<Number>::const_iterator maximum =
+                std::max_element(v.begin(), v.end(), less);
+            return *maximum;
         }
         throw std::runtime_error("Unsupported function: " + name);
     }
     Number atom() {
-        if (++depth_ > 32)
+        ++depth_;
+        if (depth_ > 32)
             throw std::runtime_error("Formula nesting exceeds 32 levels.");
         struct Depth {
             std::size_t &d;
             ~Depth() { --d; }
         } depth{depth_};
         space();
-        if (take('+'))
-            return atom();
-        if (take('-')) {
-            auto n = atom();
-            return {-n.n, n.d};
+        const bool positive = take('+');
+        if (positive) {
+            const Number result = atom();
+            return result;
         }
-        if (take('(')) {
-            auto n = expression();
+        const bool negative = take('-');
+        if (negative) {
+            Number n = atom();
+            const Number result{-n.n, n.d};
+            return result;
+        }
+        const bool grouped = take('(');
+        if (grouped) {
+            Number n = expression();
             need(')');
             return n;
         }
-        auto start = at_;
+        const std::size_t start = at_;
         if (at_ < s_.size() && s_[at_] >= 'A' && s_[at_] <= 'Z') {
-            auto id = name();
-            if (take('('))
-                return function(id, arguments());
+            const std::string id = name();
+            const bool function_call = take('(');
+            if (function_call) {
+                std::vector<Number> operands = arguments();
+                const Number result = function(id, std::move(operands));
+                return result;
+            }
             at_ = start;
-            return reference(address());
+            const CellAddress location = address();
+            const Number result = reference(location);
+            return result;
         }
         while (at_ < s_.size() && ((s_[at_] >= '0' && s_[at_] <= '9') || s_[at_] == '.'))
             ++at_;
-        return numeric(s_.substr(start, at_ - start));
+        const std::string_view digits = s_.substr(start, at_ - start);
+        const Number result = numeric(digits);
+        return result;
     }
 };
 } // namespace
 Calculation calculate(const Csv &table, std::string_view expression) {
-    return Parser(table, expression).run();
+    Parser parser(table, expression);
+    Calculation result = parser.run();
+    return result;
 }
 } // namespace swiftedit

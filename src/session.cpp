@@ -7,7 +7,7 @@
 namespace swiftedit {
 namespace {
 std::size_t sequence(std::string_view s, std::size_t i) {
-    auto c = static_cast<unsigned char>(s[i]);
+    const unsigned char c = static_cast<unsigned char>(s[i]);
     if (c < 128)
         return 1;
     std::size_t n = c >= 0xc2 && c <= 0xdf   ? 2
@@ -19,7 +19,7 @@ std::size_t sequence(std::string_view s, std::size_t i) {
     for (std::size_t j = 1; j < n; ++j)
         if ((static_cast<unsigned char>(s[i + j]) & 0xc0) != 0x80)
             return 0;
-    auto second = static_cast<unsigned char>(s[i + 1]);
+    const unsigned char second = static_cast<unsigned char>(s[i + 1]);
     if ((c == 0xe0 && second < 0xa0) || (c == 0xed && second >= 0xa0) ||
         (c == 0xf0 && second < 0x90) || (c == 0xf4 && second >= 0x90))
         return 0;
@@ -30,7 +30,14 @@ void payload(std::string_view s) {
         throw std::runtime_error(
             "Line markers are read-only metadata and must not be included in document text.");
     std::size_t bad{};
-    text_copy(s, &bad);
+    for (std::size_t offset = 0; offset < s.size();) {
+        const std::size_t length = sequence(s, offset);
+        if (length == 0) {
+            ++bad;
+            ++offset;
+        } else
+            offset += length;
+    }
     if (bad)
         throw std::runtime_error("Replacement must be valid UTF-8.");
 }
@@ -40,18 +47,19 @@ void budget(std::size_t n) {
 }
 } // namespace
 PagedFile::PagedFile(const std::filesystem::path &path) {
-    auto h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr,
-                         OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+    const HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE,
+                                 nullptr, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
     if (h == INVALID_HANDLE_VALUE)
         throw std::runtime_error("Cannot open read-only paged file.");
     BY_HANDLE_FILE_INFORMATION info{};
-    if (!GetFileInformationByHandle(h, &info) ||
+    const BOOL inspected = GetFileInformationByHandle(h, &info);
+    if (!inspected ||
         (info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT))) {
         CloseHandle(h);
         throw std::runtime_error("Paged source must be a regular file.");
     }
     handle_ = h;
-    size_ = (std::uint64_t(info.nFileSizeHigh) << 32) | info.nFileSizeLow;
+    size_ = (static_cast<std::uint64_t>(info.nFileSizeHigh) << 32) | info.nFileSizeLow;
 }
 PagedFile::~PagedFile() {
     if (handle_)
@@ -65,21 +73,23 @@ Page PagedFile::page(std::uint64_t offset, std::size_t n) const {
     p.bytes.resize(static_cast<std::size_t>(std::min<std::uint64_t>(n, size_ - offset)));
     LARGE_INTEGER at{};
     at.QuadPart = static_cast<LONGLONG>(offset);
-    if (!SetFilePointerEx(handle_, at, nullptr, FILE_BEGIN))
+    const BOOL sought = SetFilePointerEx(handle_, at, nullptr, FILE_BEGIN);
+    if (!sought)
         throw std::runtime_error("Cannot seek paged source.");
     DWORD got{};
-    if (!ReadFile(handle_, p.bytes.data(), static_cast<DWORD>(p.bytes.size()), &got, nullptr) ||
-        got != p.bytes.size())
+    const DWORD requested = static_cast<DWORD>(p.bytes.size());
+    const BOOL read = ReadFile(handle_, p.bytes.data(), requested, &got, nullptr);
+    if (!read || got != requested)
         throw std::runtime_error("Paged read failed; no document changed.");
     p.next += got;
     return p;
 }
 std::string text_copy(std::string_view s, std::size_t *invalid) {
-    std::string out;
+    std::string out{};
     out.reserve(s.size());
     std::size_t bad{};
     for (std::size_t i = 0; i < s.size();) {
-        auto n = sequence(s, i);
+        const std::size_t n = sequence(s, i);
         if (n) {
             out.append(s.substr(i, n));
             i += n;
@@ -93,25 +103,36 @@ std::string text_copy(std::string_view s, std::size_t *invalid) {
         *invalid = bad;
     return out;
 }
+Session::Session() {
+    undo_.reserve(257);
+    redo_.reserve(257);
+    previews_.reserve(100);
+}
 void Session::open(const std::filesystem::path &source) {
-    auto path = std::filesystem::absolute(source);
-    auto paged = std::make_unique<PagedFile>(path);
-    if (paged->size() >= editable_limit) {
+    std::filesystem::path path = std::filesystem::absolute(source);
+    std::unique_ptr<PagedFile> paged = std::make_unique<PagedFile>(path);
+    if ((*paged).size() >= editable_limit) {
         reset();
         path_ = std::move(path);
         large_ = std::move(paged);
         return;
     }
     paged.reset();
-    auto snapshot = notepad::read_file(path);
+    notepad::FileSnapshot snapshot = notepad::read_file(path);
     if (!snapshot.exists)
         throw std::runtime_error("File no longer exists.");
     if (snapshot.bytes.size() >= editable_limit)
         throw std::runtime_error("File grew; reopen it in read-only mode.");
+    // Allocate all replacement copies before discarding the previous session.
+    std::string text = snapshot.bytes;
+    std::string saved = snapshot.bytes;
+    std::string opened = snapshot.bytes;
     reset();
     path_ = std::move(path);
     snapshot_ = std::move(snapshot);
-    text_ = saved_ = opened_ = snapshot_.bytes;
+    text_ = std::move(text);
+    saved_ = std::move(saved);
+    opened_ = std::move(opened);
 }
 void Session::reset() {
     large_.reset();
@@ -123,7 +144,7 @@ void Session::reset() {
     undo_.clear();
     redo_.clear();
     previews_.clear();
-    ++revision_;
+    ++revision_.value;
 }
 void Session::editable() const {
     if (large_)
@@ -131,18 +152,22 @@ void Session::editable() const {
 }
 Page Session::page(std::uint64_t offset, std::size_t n) const {
     budget(n);
-    if (large_)
-        return large_->page(offset, n);
+    if (large_) {
+        Page result = (*large_).page(offset, n);
+        return result;
+    }
     if (offset > text_.size())
         throw std::runtime_error("Page offset exceeds document size.");
-    auto bytes = text_.substr(static_cast<std::size_t>(offset), n);
-    return {offset, offset + bytes.size(), text_.size(), std::move(bytes)};
+    std::string bytes = text_.substr(static_cast<std::size_t>(offset), n);
+    Page result{offset, offset + bytes.size(), text_.size(), std::move(bytes)};
+    return result;
 }
 std::vector<std::size_t> Session::find(std::string_view query, std::size_t maximum) const {
     editable();
     if (query.empty() || !maximum || maximum > 1000)
         throw std::runtime_error("Use a nonempty query and a match limit of 1..1000.");
-    std::vector<std::size_t> hits;
+    std::vector<std::size_t> hits{};
+    hits.reserve(maximum);
     for (std::size_t i = 0; (i = text_.find(query, i)) != text_.npos && hits.size() < maximum; ++i)
         hits.push_back(i);
     return hits;
@@ -155,59 +180,88 @@ std::vector<Preview> Session::preview(std::string_view before, std::string_view 
         throw std::runtime_error("An edit needs exact source context.");
     if (replacement.size() >= editable_limit)
         throw std::runtime_error("Replacement exceeds editable limit.");
-    std::string needle = std::string(before) + std::string(old) + std::string(after);
-    std::vector<Preview> result;
+    if (before.size() > text_.size() || old.size() > text_.size() - before.size() ||
+        after.size() > text_.size() - before.size() - old.size())
+        throw std::runtime_error("Exact source context not found; no changes made.");
+    const std::size_t context_bytes = before.size() + old.size() + after.size();
+    std::string needle{};
+    needle.reserve(context_bytes);
+    needle.append(before);
+    needle.append(old);
+    needle.append(after);
+    std::vector<Preview> result{};
+    result.reserve(100);
+    EditToken next_token = next_token_;
+    // Context lengths are bounded by the current document above. These sums
+    // fit size_t and remain invariant while collecting matches.
+    const std::size_t preview_bytes_per_match = old.size() + replacement.size() + 160;
+    const std::size_t resulting_text_bytes = text_.size() - old.size() + replacement.size();
+    constexpr std::size_t preview_budget = 32 * 1024 * 1024;
     for (std::size_t i = 0;; ++i) {
-        auto found = text_.find(needle, i);
+        const std::size_t found = text_.find(needle, i);
         if (found == text_.npos)
             break;
-        if (result.size() == 100 ||
-            (result.size() + 1) * (old.size() + replacement.size() + 160) > 32 * 1024 * 1024)
+        if (result.size() == 100 || result.size() + 1 > preview_budget / preview_bytes_per_match)
             throw std::runtime_error("Preview is too broad; provide more exact context.");
-        if (text_.size() - old.size() + replacement.size() >= editable_limit)
+        if (resulting_text_bytes >= editable_limit)
             throw std::runtime_error("Edit would reach the 16 MiB read-only threshold.");
-        auto at = found + before.size();
-        auto lo = at > 80 ? at - 80 : 0;
-        result.push_back({next_token_++, revision_, at, old.size(), text_.substr(lo, at - lo),
-                          std::string(old), std::string(replacement),
-                          text_.substr(at + old.size(), 80)});
+        const std::size_t at = found + before.size();
+        const std::size_t lo = at > 80 ? at - 80 : 0;
+        Preview candidate{};
+        candidate.token = next_token;
+        candidate.revision = revision_;
+        candidate.offset = at;
+        candidate.length = old.size();
+        candidate.before = text_.substr(lo, at - lo);
+        candidate.removed = old;
+        candidate.inserted = replacement;
+        candidate.after = text_.substr(at + old.size(), 80);
+        result.push_back(std::move(candidate));
+        ++next_token.value;
         if (needle.empty())
             break;
         i = found;
     }
     if (result.empty())
         throw std::runtime_error("Exact source context not found; no changes made.");
-    previews_ = result;
+    std::vector<Preview> retained = result;
+    previews_.swap(retained);
+    next_token_ = next_token;
     return result;
 }
 void Session::change(std::string next) {
     editable();
     if (next == text_)
         return;
+    // Copy the current baseline before pruning history: allocation failure
+    // preserves both the document and its complete undo history.
+    std::string previous = text_;
     // Bound snapshot history to 32 MiB; never persist it to disk.
     std::size_t used = text_.size();
-    for (auto &entry : undo_)
+    for (const std::string &entry : undo_)
         used += entry.size();
     while (!undo_.empty() && (used > 32 * 1024 * 1024 || undo_.size() >= 256)) {
         used -= undo_.front().size();
         undo_.erase(undo_.begin());
     }
-    undo_.push_back(text_);
+    undo_.push_back(std::move(previous));
     text_ = std::move(next);
     redo_.clear();
     previews_.clear();
-    ++revision_;
+    ++revision_.value;
 }
-void Session::commit(std::uint64_t token, std::uint64_t revision) {
+void Session::commit(EditToken token, DocumentRevision revision) {
     editable();
     if (revision != revision_)
         throw std::runtime_error("Stale preview: document revision changed.");
-    auto p =
-        std::find_if(previews_.begin(), previews_.end(), [&](auto &p) { return p.token == token; });
+    std::vector<Preview>::const_iterator p = previews_.begin();
+    while (p != previews_.end() && (*p).token != token) {
+        ++p;
+    }
     if (p == previews_.end())
         throw std::runtime_error("Unknown or expired preview token.");
-    auto next = text_;
-    next.replace(p->offset, p->length, p->inserted);
+    std::string next = text_;
+    next.replace((*p).offset, (*p).length, (*p).inserted);
     change(std::move(next));
     previews_.clear();
 }
@@ -219,7 +273,7 @@ bool Session::undo() {
     text_ = std::move(undo_.back());
     undo_.pop_back();
     previews_.clear();
-    ++revision_;
+    ++revision_.value;
     return true;
 }
 bool Session::redo() {
@@ -230,7 +284,7 @@ bool Session::redo() {
     text_ = std::move(redo_.back());
     redo_.pop_back();
     previews_.clear();
-    ++revision_;
+    ++revision_.value;
     return true;
 }
 void Session::restore_opened() {
@@ -240,17 +294,25 @@ void Session::restore_opened() {
 std::size_t Session::illegal_bytes() const {
     editable();
     std::size_t n{};
-    text_copy(text_, &n);
+    for (std::size_t offset = 0; offset < text_.size();) {
+        const std::size_t length = sequence(text_, offset);
+        if (length == 0) {
+            ++n;
+            ++offset;
+        } else
+            offset += length;
+    }
     return n;
 }
-void Session::published(const std::filesystem::path &path, notepad::FileSnapshot snapshot) {
-    path_ = path;
+void Session::published(std::filesystem::path path, std::string saved,
+                        notepad::FileSnapshot snapshot) {
+    path_ = std::move(path);
     snapshot_ = std::move(snapshot);
-    saved_ = text_;
+    saved_ = std::move(saved);
     undo_.clear();
     redo_.clear();
     previews_.clear();
-    ++revision_;
+    ++revision_.value;
 }
 void Session::save() {
     editable();
@@ -258,25 +320,34 @@ void Session::save() {
         throw std::runtime_error("Untitled document requires save-as.");
     if (illegal_bytes())
         throw std::runtime_error("Illegal UTF-8 bytes remain. Edit them or use Save Text Copy.");
-    auto written = notepad::write_file(path_, text_, snapshot_);
-    published(path_, std::move(written));
+    std::filesystem::path destination = path_;
+    std::string saved = text_;
+    notepad::FileSnapshot written = notepad::write_file(destination, text_, snapshot_);
+    published(std::move(destination), std::move(saved), std::move(written));
 }
 void Session::save_as(const std::filesystem::path &target) {
     editable();
     if (illegal_bytes())
         throw std::runtime_error("Illegal UTF-8 bytes remain. Edit them or use Save Text Copy.");
-    auto path = std::filesystem::absolute(target);
-    auto written = notepad::write_file(path, text_, {});
-    published(path, std::move(written));
+    std::filesystem::path path = std::filesystem::absolute(target);
+    std::string saved = text_;
+    notepad::FileSnapshot written = notepad::write_file(path, text_, {});
+    published(std::move(path), std::move(saved), std::move(written));
 }
 void Session::save_text_copy(const std::filesystem::path &target) const {
     editable();
-    notepad::write_file(std::filesystem::absolute(target), text_copy(text_), {});
+    const std::filesystem::path destination = std::filesystem::absolute(target);
+    const std::string sanitized = text_copy(text_);
+    const notepad::FileSnapshot published_copy = notepad::write_file(destination, sanitized, {});
+    static_cast<void>(published_copy);
 }
 std::string normalize_newlines(std::string_view s, std::string_view ending) {
     if (ending != "\n" && ending != "\r" && ending != "\r\n")
         throw std::runtime_error("Expected LF, CR or CRLF.");
-    std::string result;
+    std::string result{};
+    if (s.size() > result.max_size() / 2)
+        throw std::length_error("Normalized text is too large.");
+    result.reserve(s.size() * 2);
     for (std::size_t i = 0; i < s.size(); ++i)
         if (s[i] == '\r' || s[i] == '\n') {
             if (s[i] == '\r' && i + 1 < s.size() && s[i + 1] == '\n')
@@ -287,10 +358,10 @@ std::string normalize_newlines(std::string_view s, std::string_view ending) {
     return result;
 }
 std::string suggested_name(std::string_view s) {
-    auto first = s.substr(0, s.find_first_of("\r\n"));
+    const std::string_view first = s.substr(0, s.find_first_of("\r\n"));
     if (first.size() < 3 || first.front() != '[' || first.back() != ']')
         return "Untitled.txt";
-    auto name = std::string(first.substr(1, first.size() - 2));
+    const std::string name = std::string(first.substr(1, first.size() - 2));
     if (name.size() > 200 || name.find_first_of("<>:\"/\\|?*") != name.npos || name.back() == '.' ||
         name.back() == ' ')
         return "Untitled.txt";
@@ -298,7 +369,7 @@ std::string suggested_name(std::string_view s) {
         if (c < 32)
             return "Untitled.txt";
     std::string base = name.substr(0, name.find('.'));
-    for (auto &c : base)
+    for (char &c : base)
         if (c >= 'a' && c <= 'z')
             c -= 32;
     if (base == "CON" || base == "PRN" || base == "AUX" || base == "NUL" ||
@@ -308,16 +379,21 @@ std::string suggested_name(std::string_view s) {
     return name;
 }
 std::filesystem::path versioned_name(const std::filesystem::path &path) {
-    auto stem = path.stem().wstring(), ext = path.extension().wstring();
-    auto dot = stem.rfind(L'.');
+    std::wstring stem = path.stem().wstring(), ext = path.extension().wstring();
+    const std::size_t dot = stem.rfind(L'.');
     std::uint64_t number = 1;
     if (dot != stem.npos && dot + 1 < stem.size()) {
-        auto suffix = stem.substr(dot + 1);
-        bool digits = std::all_of(suffix.begin(), suffix.end(),
-                                  [](auto c) { return c >= L'0' && c <= L'9'; });
+        const std::wstring suffix = stem.substr(dot + 1);
+        bool digits = true;
+        for (const wchar_t c : suffix) {
+            if (c < L'0' || c > L'9') {
+                digits = false;
+                break;
+            }
+        }
         if (digits) {
             try {
-                auto old = std::stoull(suffix);
+                const unsigned long long old = std::stoull(suffix);
                 if (old == UINT64_MAX)
                     throw std::runtime_error("Version number exhausted.");
                 number = old + 1;
@@ -327,11 +403,16 @@ std::filesystem::path versioned_name(const std::filesystem::path &path) {
             }
         }
     }
-    return path.parent_path() / (stem + L'.' + std::to_wstring(number) + ext);
+    const std::wstring filename = stem + L'.' + std::to_wstring(number) + ext;
+    const std::filesystem::path result = path.parent_path() / filename;
+    return result;
 }
 std::string escape_field(std::string_view s) {
     constexpr char hex[] = "0123456789abcdef";
-    std::string out;
+    std::string out{};
+    if (s.size() > out.max_size() / 4)
+        throw std::length_error("Escaped field is too large.");
+    out.reserve(s.size() * 4);
     for (unsigned char c : s)
         if (c == '\\')
             out += "\\\\";
@@ -340,23 +421,29 @@ std::string escape_field(std::string_view s) {
             out += hex[c >> 4];
             out += hex[c & 15];
         } else
-            out += char(c);
+            out += static_cast<char>(c);
     return out;
 }
+int hex(char c) {
+    int digit = -1;
+    if (c >= '0' && c <= '9')
+        digit = c - '0';
+    else if (c >= 'a' && c <= 'f')
+        digit = c - 'a' + 10;
+    else if (c >= 'A' && c <= 'F')
+        digit = c - 'A' + 10;
+    return digit;
+}
 std::string unescape_field(std::string_view s) {
-    std::string out;
-    auto hex = [](char c) {
-        return c >= '0' && c <= '9'   ? c - '0'
-               : c >= 'a' && c <= 'f' ? c - 'a' + 10
-               : c >= 'A' && c <= 'F' ? c - 'A' + 10
-                                      : -1;
-    };
+    std::string out{};
+    out.reserve(s.size());
     for (std::size_t i = 0; i < s.size(); ++i) {
         if (s[i] != '\\') {
             out += s[i];
             continue;
         }
-        if (++i == s.size())
+        ++i;
+        if (i == s.size())
             throw std::runtime_error("Incomplete escape.");
         switch (s[i]) {
         case '\\':
@@ -374,7 +461,7 @@ std::string unescape_field(std::string_view s) {
         case 'x':
             if (i + 2 >= s.size() || hex(s[i + 1]) < 0 || hex(s[i + 2]) < 0)
                 throw std::runtime_error("Invalid hex escape.");
-            out += char(hex(s[i + 1]) * 16 + hex(s[i + 2]));
+            out += static_cast<char>(hex(s[i + 1]) * 16 + hex(s[i + 2]));
             i += 2;
             break;
         default:

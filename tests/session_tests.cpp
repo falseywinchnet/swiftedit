@@ -8,15 +8,7 @@ void check(bool b, const char *s) {
     if (!b)
         throw std::runtime_error(s);
 }
-template <class F> void refuses(F f) {
-    bool threw = false;
-    try {
-        f();
-    } catch (const std::exception &) {
-        threw = true;
-    }
-    check(threw, "Expected refusal");
-}
+
 void raw(const std::filesystem::path &p, std::string_view s) {
     std::ofstream f(p, std::ios::binary);
     f.write(s.data(), s.size());
@@ -24,81 +16,147 @@ void raw(const std::filesystem::path &p, std::string_view s) {
 int main() {
     try {
         using namespace swiftedit;
-        auto dir = std::filesystem::temp_directory_path() /
-                   ("swiftedit-session-" + std::to_string(GetCurrentProcessId()));
-        check(std::filesystem::create_directory(dir), "unique fixture");
+        const std::filesystem::path dir =
+            std::filesystem::temp_directory_path() /
+            ("swiftedit-session-" + std::to_string(GetCurrentProcessId()));
+        const bool observed_5 = std::filesystem::create_directory(dir);
+        check(observed_5, "unique fixture");
         struct Cleanup {
-            std::filesystem::path dir;
+            std::filesystem::path dir{};
             ~Cleanup() {
-                std::error_code ec;
+                std::error_code ec{};
                 std::filesystem::remove_all(dir, ec);
             }
         } cleanup{dir};
-        auto file = dir / "sample.txt";
+        const std::filesystem::path file = dir / "sample.txt";
         raw(file, "before old after\r\nsecond old after");
-        Session s;
+        Session s{};
         s.open(file);
         check(!s.dirty(), "clean open");
-        auto p = s.preview("", "old", " after", "new");
+        std::vector<Preview> p = s.preview("", "old", " after", "new");
         check(p.size() == 2, "ambiguity enumerated");
         s.commit(p[1].token, p[1].revision);
         check(s.text() == "before old after\r\nsecond new after", "selected exact occurrence");
-        refuses([&] { s.commit(p[0].token, p[0].revision); });
-        check(s.undo() && s.text() == "before old after\r\nsecond old after", "undo exact bytes");
-        check(s.redo(), "redo");
+        {
+            bool refused = false;
+            try {
+                s.commit(p[0].token, p[0].revision);
+            } catch (const std::exception &failure) {
+                refused = true;
+            }
+            check(refused, "Expected refusal");
+        }
+        const bool undone = s.undo();
+        check(undone && s.text() == "before old after\r\nsecond old after", "undo exact bytes");
+        const bool redone = s.redo();
+        check(redone, "redo");
         s.save();
-        check(!s.undo() && !s.dirty(), "successful save resets history");
+        const bool undo_after_save = s.undo();
+        check(!undo_after_save && !s.dirty(), "successful save resets history");
         s.restore_opened();
         check(s.dirty() && s.text() == "before old after\r\nsecond old after",
               "opened baseline survives save");
-        check(s.undo() && !s.dirty(), "restore itself undoable");
-        auto revision = s.revision();
-        refuses([&] { s.preview("", "new", "", "\r\rL1\r\r"); });
+        const bool restore_undone = s.undo();
+        check(restore_undone && !s.dirty(), "restore itself undoable");
+        const DocumentRevision revision = s.revision();
+        {
+            bool refused = false;
+            try {
+                static_cast<void>(s.preview("", "new", "", "\r\rL1\r\r"));
+            } catch (const std::exception &failure) {
+                refused = true;
+            }
+            check(refused, "Expected refusal");
+        }
         check(s.revision() == revision, "marker refusal atomic");
         p = s.preview("", "new", "", "changed");
         s.commit(p[0].token, p[0].revision);
         raw(file, "external");
-        refuses([&] { s.save(); });
-        check(s.dirty() && s.undo(), "failed save retains undo");
-        check(notepad::read_file(file).bytes == "external", "external bytes preserved");
-        auto bad = dir / "bad.bin";
+        {
+            bool refused = false;
+            try {
+                s.save();
+            } catch (const std::exception &failure) {
+                refused = true;
+            }
+            check(refused, "Expected refusal");
+        }
+        check(s.dirty(), "failed save retains undo");
+        const bool failed_save_undone = s.undo();
+        check(failed_save_undone, "failed save retains undo");
+        const notepad::FileSnapshot observed_1 = notepad::read_file(file);
+        check(observed_1.bytes == "external", "external bytes preserved");
+        const std::filesystem::path bad = dir / "bad.bin";
         std::string source = "A";
-        source += char(0xff);
+        source += static_cast<char>(0xff);
         source += "B\r\rC";
         raw(bad, source);
         s.open(bad);
         check(s.text() == source && s.illegal_bytes() == 1, "invalid source byte fidelity");
-        refuses([&] { s.save(); });
-        auto copy = dir / "copy.txt";
+        {
+            bool refused = false;
+            try {
+                s.save();
+            } catch (const std::exception &failure) {
+                refused = true;
+            }
+            check(refused, "Expected refusal");
+        }
+        const std::filesystem::path copy = dir / "copy.txt";
         s.save_text_copy(copy);
-        check(notepad::read_file(copy).bytes == "A B\r\rC", "one illegal byte one space");
-        check(notepad::read_file(bad).bytes == source && !s.dirty(),
-              "copy preserves original and state");
-        refuses([&] { s.save_text_copy(copy); });
-        p = s.preview("A", std::string(1, char(0xff)), "B", "valid");
+        const notepad::FileSnapshot observed_2 = notepad::read_file(copy);
+        check(observed_2.bytes == "A B\r\rC", "one illegal byte one space");
+        const notepad::FileSnapshot observed_3 = notepad::read_file(bad);
+        check(observed_3.bytes == source && !s.dirty(), "copy preserves original and state");
+        {
+            bool refused = false;
+            try {
+                s.save_text_copy(copy);
+            } catch (const std::exception &failure) {
+                refused = true;
+            }
+            check(refused, "Expected refusal");
+        }
+        p = s.preview("A", std::string(1, static_cast<char>(0xff)), "B", "valid");
         s.commit(p[0].token, p[0].revision);
         s.save();
-        check(notepad::read_file(bad).bytes == "AvalidB\r\rC",
+        const notepad::FileSnapshot observed_4 = notepad::read_file(bad);
+        check(observed_4.bytes == "AvalidB\r\rC",
               "repair invalid bytes with source controls preserved");
-        std::string all;
+        std::string all{};
         for (unsigned i = 0; i < 256; ++i)
-            all += char(i);
-        check(unescape_field(escape_field(all)) == all, "transport all bytes roundtrip");
-        check(escape_field("\x1b[31m") == "\\x1b[31m", "terminal controls escaped");
-        refuses([] { unescape_field("\\xq0"); });
-        check(text_copy(std::string("\xc0\x80", 2)) == "  ", "overlong sequence illegal per byte");
-        check(text_copy("e\xcc\x81\xf0\x9f\x98\x80") == "e\xcc\x81\xf0\x9f\x98\x80",
-              "Unicode preserved");
-        check(normalize_newlines("a\r\nb\nc\rd", "\n") == "a\nb\nc\nd",
-              "explicit normalization preserves missing EOF newline");
-        check(suggested_name("[notes.md]\r\nhello") == "notes.md", "bracket name");
-        check(suggested_name("[CON.txt]") == "Untitled.txt", "reserved name");
-        check(suggested_name("[../oops]") == "Untitled.txt", "path not filename");
-        check(versioned_name("report.csv") == std::filesystem::path("report.1.csv"),
-              "version suffix");
-        check(versioned_name("report.9.csv") == std::filesystem::path("report.10.csv"),
-              "version increment");
-        auto big = dir / "large.txt";
+            all += static_cast<char>(i);
+        const std::string escaped_all = escape_field(all);
+        const std::string roundtrip = unescape_field(escaped_all);
+        check(roundtrip == all, "transport all bytes roundtrip");
+        const std::string calculated_1 = escape_field("\x1b[31m");
+        check(calculated_1 == "\\x1b[31m", "terminal controls escaped");
+        {
+            bool refused = false;
+            try {
+                static_cast<void>(unescape_field("\\xq0"));
+            } catch (const std::exception &failure) {
+                refused = true;
+            }
+            check(refused, "Expected refusal");
+        }
+        const std::string calculated_2 = text_copy(std::string("\xc0\x80", 2));
+        check(calculated_2 == "  ", "overlong sequence illegal per byte");
+        const std::string calculated_3 = text_copy("e\xcc\x81\xf0\x9f\x98\x80");
+        check(calculated_3 == "e\xcc\x81\xf0\x9f\x98\x80", "Unicode preserved");
+        const std::string calculated_4 = normalize_newlines("a\r\nb\nc\rd", "\n");
+        check(calculated_4 == "a\nb\nc\nd", "explicit normalization preserves missing EOF newline");
+        const std::string calculated_5 = suggested_name("[notes.md]\r\nhello");
+        check(calculated_5 == "notes.md", "bracket name");
+        const std::string calculated_6 = suggested_name("[CON.txt]");
+        check(calculated_6 == "Untitled.txt", "reserved name");
+        const std::string calculated_7 = suggested_name("[../oops]");
+        check(calculated_7 == "Untitled.txt", "path not filename");
+        const std::filesystem::path calculated_8 = versioned_name("report.csv");
+        check(calculated_8 == std::filesystem::path("report.1.csv"), "version suffix");
+        const std::filesystem::path calculated_9 = versioned_name("report.9.csv");
+        check(calculated_9 == std::filesystem::path("report.10.csv"), "version increment");
+        const std::filesystem::path big = dir / "large.txt";
         {
             std::ofstream f(big, std::ios::binary);
             f.seekp(editable_limit - 1);
@@ -106,18 +164,49 @@ int main() {
         }
         s.open(big);
         check(s.read_only() && s.size() == editable_limit, "exact large threshold");
-        check(s.page(editable_limit - 1, 16).bytes == "Z", "bounded final page");
-        refuses([&] { s.preview("", "Z", "", "z"); });
-        refuses([&] { s.save(); });
-        refuses([&] { s.page(0, maximum_page + 1); });
-        auto small = dir / "nearly-large.txt";
+        const Page final_page = s.page(editable_limit - 1, 16);
+        check(final_page.bytes == "Z", "bounded final page");
+        {
+            bool refused = false;
+            try {
+                static_cast<void>(s.preview("", "Z", "", "z"));
+            } catch (const std::exception &failure) {
+                refused = true;
+            }
+            check(refused, "Expected refusal");
+        }
+        {
+            bool refused = false;
+            try {
+                s.save();
+            } catch (const std::exception &failure) {
+                refused = true;
+            }
+            check(refused, "Expected refusal");
+        }
+        {
+            bool refused = false;
+            try {
+                static_cast<void>(s.page(0, maximum_page + 1));
+            } catch (const std::exception &failure) {
+                refused = true;
+            }
+            check(refused, "Expected refusal");
+        }
+        const std::filesystem::path small = dir / "nearly-large.txt";
         raw(small, std::string(editable_limit - 1, 'x'));
         s.open(small);
         check(!s.read_only() && s.size() == editable_limit - 1, "below threshold editable");
-        refuses([&] {
-            s.preview("", std::string(editable_limit - 1, 'x'), "",
-                      std::string(editable_limit, 'y'));
-        });
+        {
+            bool refused = false;
+            try {
+                static_cast<void>(s.preview("", std::string(editable_limit - 1, 'x'), "",
+                                            std::string(editable_limit, 'y')));
+            } catch (const std::exception &failure) {
+                refused = true;
+            }
+            check(refused, "Expected refusal");
+        }
         std::cout << "Session tests passed: exact previews, stale guard, ambiguity, save undo "
                      "boundary, original restore, malformed bytes, copy safety, escaped transport, "
                      "version names, bounded large pages.\n";

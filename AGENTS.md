@@ -15,3 +15,8 @@ ribbon, tabs, IDE or sidebar. Tests mutate only their unique disposable fixtures
 Build and headless tests are authorized. Coordinate desktop launch/automation
 because the owner is dogfooding other applications. Do not publish remotely
 without checking the destination. Record measured test evidence honestly.
+
+All authored source, tests and tooling must follow docs/PROGRAMMING_HOUSE_STYLE.md.
+Read that exact owner-supplied style before edits. Audit semantic ownership, failure,
+allocation and callback rules as well as spelling. No feature expansion during
+the house-style correction; preserve frozen SDKs and previous published stages.

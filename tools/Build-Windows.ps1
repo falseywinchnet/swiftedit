@@ -8,8 +8,8 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
-$build = if ($BuildDirectory) { [IO.Path]::GetFullPath($BuildDirectory) } else { Join-Path $repo '.build/swiftedit' }
-$stage = if ($StageDirectory) { [IO.Path]::GetFullPath($StageDirectory) } else { Join-Path $repo 'dist/SwiftEdit' }
+$build = if ($BuildDirectory) { [IO.Path]::GetFullPath($BuildDirectory) } else { Join-Path $repo '.build/swiftedit-house-style' }
+$stage = if ($StageDirectory) { [IO.Path]::GetFullPath($StageDirectory) } else { Join-Path $repo 'dist/SwiftEdit-house-style' }
 $env:PATH = "$Toolchain;$GuiSdk/bin;$PickerSdk/bin;$env:PATH"
 function Assert-NotRunning([string]$directory) {
     $prefix = [IO.Path]::GetFullPath($directory).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
@@ -21,14 +21,23 @@ function Assert-NotRunning([string]$directory) {
 }
 function Get-SdkFingerprint {
     $roots = @("$GuiSdk/include", "$GuiSdk/lib", "$GuiSdk/bin", "$PickerSdk/include", "$PickerSdk/lib")
-    $lines = foreach ($root in $roots) {
-        Get-ChildItem -LiteralPath $root -Recurse -File | Sort-Object FullName | ForEach-Object {
-            $_.FullName + ':' + (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
+    $lines = [System.Collections.Generic.List[string]]::new()
+    foreach ($root in $roots) {
+        $files = @(Get-ChildItem -LiteralPath $root -Recurse -File | Sort-Object FullName)
+        foreach ($file in $files) {
+            $fileHash = Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256
+            $entry = $file.FullName + ':' + $fileHash.Hash
+            $lines.Add($entry)
         }
     }
     $sha = [System.Security.Cryptography.SHA256]::Create()
-    try { return [Convert]::ToHexString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes(($lines -join "`n")))) }
-    finally { $sha.Dispose() }
+    try {
+        $manifest = $lines -join "`n"
+        $manifestBytes = [Text.Encoding]::UTF8.GetBytes($manifest)
+        $digest = $sha.ComputeHash($manifestBytes)
+        $fingerprint = [Convert]::ToHexString($digest)
+        return $fingerprint
+    } finally { $sha.Dispose() }
 }
 Push-Location -LiteralPath $repo
 try {
@@ -68,7 +77,8 @@ try {
         foreach ($line in $imports) {
             if ($line -notmatch 'DLL Name:\s*(\S+)') { continue }
             $name = $Matches[1]
-            if (-not $seen.Add($name)) { continue }
+            $unseen = $seen.Add($name)
+            if (-not $unseen) { continue }
             $dependency = $null
             foreach ($dir in @("$GuiSdk/bin", "$PickerSdk/bin", $Toolchain)) {
                 $candidate = Join-Path $dir $name
