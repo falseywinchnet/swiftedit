@@ -37,6 +37,10 @@ the public Application lifecycle. It does not send global keyboard or pointer
 input. SDK contents are hashed; a changed or unknown checkpoint forces a clean
 consumer rebuild, and SDK changes during the build abort packaging.
 
+Use `-BuildDirectory <absolute-path> -StageDirectory <absolute-path>` to build
+a new SDK checkpoint alongside a running copy. The script refuses to replace
+build or staged binaries when a Notepad process is using that directory.
+
 Launch `dist/Notepad/notepad.exe`, optionally with one quoted file path.
 Paths are parsed using the native Unicode command line. Settings are session-only.
 

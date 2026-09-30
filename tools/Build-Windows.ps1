@@ -2,13 +2,23 @@ param(
     [string]$Toolchain = 'C:/Users/Shadow/plan-paint/build-deps/msys64/mingw64/bin',
     [string]$GuiSdk = 'C:/Users/Shadow/file_manager/gui_forms/.build/shadow-sdk',
     [string]$PickerSdk = 'C:/Users/Shadow/file_manager/.build/native-windows-x64/frontend-sdk',
+    [string]$BuildDirectory = '',
+    [string]$StageDirectory = '',
     [switch]$NativeTests
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
-$build = Join-Path $repo '.build/windows'
-$stage = Join-Path $repo 'dist/Notepad'
+$build = if ($BuildDirectory) { [IO.Path]::GetFullPath($BuildDirectory) } else { Join-Path $repo '.build/windows' }
+$stage = if ($StageDirectory) { [IO.Path]::GetFullPath($StageDirectory) } else { Join-Path $repo 'dist/Notepad' }
 $env:PATH = "$Toolchain;$GuiSdk/bin;$PickerSdk/bin;$env:PATH"
+function Assert-NotRunning([string]$directory) {
+    $prefix = [IO.Path]::GetFullPath($directory).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+    foreach ($process in (Get-CimInstance Win32_Process -Filter "Name = 'notepad.exe' OR Name = 'notepad-native-tests.exe' OR Name = 'notepad-editor-tests.exe'")) {
+        if ($process.ExecutablePath -and $process.ExecutablePath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Process $($process.ProcessId) is using $directory. Choose another build/staging directory; the running copy was preserved."
+        }
+    }
+}
 function Get-SdkFingerprint {
     $roots = @("$GuiSdk/include", "$GuiSdk/lib", "$GuiSdk/bin", "$PickerSdk/include", "$PickerSdk/lib")
     $lines = foreach ($root in $roots) {
@@ -22,6 +32,8 @@ function Get-SdkFingerprint {
 }
 Push-Location -LiteralPath $repo
 try {
+    Assert-NotRunning $build
+    Assert-NotRunning $stage
     $sdkFingerprint = Get-SdkFingerprint
     $stamp = Join-Path $build 'sdk-fingerprint.txt'
     $previous = if (Test-Path -LiteralPath $stamp) { (Get-Content -LiteralPath $stamp -Raw).Trim() } else { '' }
@@ -38,6 +50,7 @@ try {
     & "$Toolchain/ctest.exe" --test-dir $build --output-on-failure
     if ($LASTEXITCODE) { throw 'Tests failed' }
     if ((Get-SdkFingerprint) -ne $sdkFingerprint) { throw 'SDK changed during build/tests; rerun against a coherent checkpoint.' }
+    Assert-NotRunning $stage
     New-Item -ItemType Directory -Path $stage -Force | Out-Null
     Copy-Item -LiteralPath "$build/notepad.exe" -Destination $stage -Force
     Copy-Item -LiteralPath "$repo/README.md" -Destination $stage -Force

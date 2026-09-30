@@ -1,5 +1,36 @@
 # Windows development validation
 
+## DPI follow-up checkpoint
+
+The DPI-fixed public GUI.Forms SDK and matching clean rebuilt picker package
+were consumed in a fresh build directory, preserving the original package:
+
+```powershell
+./tools/Build-Windows.ps1 -BuildDirectory C:/Users/Shadow/notepad/.build/windows-dpi -StageDirectory C:/Users/Shadow/notepad/dist/Notepad-dpi -NativeTests
+```
+
+**MEASURED:** all 3/3 suites pass in 2.44 seconds (document 0.08 s, editor
+0.38 s, native 1.96 s). The consumer test additionally checks that scale
+transitions 1.0 → 1.5 → 2.0 → 1.0 preserve document text and selection.
+
+The provider independently reproduced the stale glyph-metric cache bug and
+added device scale to the multiline cache key. Its focused regression covers
+remeasurement, wrapping, row height, hit testing, caret scrolling and warm-cache
+reuse; the provider reports 65/65 toolkit tests passing. The consumer test is
+an integration state-preservation check, not a substitute for that metric oracle.
+
+Updated launch path: `C:/Users/Shadow/notepad/dist/Notepad-dpi/notepad.exe`.
+
+- EXE SHA-256: `624A7A259C8C09CB86A991A9A746A04DF854909B6AA1B833E7A38DADE1B5AEC5`
+- GUI.Forms DLL SHA-256: `3C66E1C188A183EFF2C93833C7C9A3781DE57936A14721F00FA9DDBC865C664F`
+
+The original `dist/Notepad` executable and DLL were not replaced. Build/staging
+paths are configurable, and the build script refuses directories currently used
+by a Notepad process. The source feature set and provisional text/save decisions
+are unchanged.
+
+## Original checkpoint
+
 Date: 2026-09-29, Shadow Windows host, MinGW GCC 16.2.0, Release C++20.
 
 Final clean command: `tools/Build-Windows.ps1 -NativeTests`.

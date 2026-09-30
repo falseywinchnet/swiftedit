@@ -57,6 +57,14 @@ int main() {
         editor->execute("cut");check(text->text().empty(),"Cut");
         editor->execute("paste");check(text->text()=="replacement","Paste");
         editor->execute("wrap");check(text->word_wrap(),"Word wrap menu");
+        const auto before_scale=std::string(text->text());
+        const auto selection_before_scale=text->selection();
+        window.set_scale(1.5);window.perform_layout();
+        static_cast<void>(text->visual_line_count());
+        window.set_scale(2.0);window.perform_layout();
+        static_cast<void>(text->visual_line_count());
+        window.set_scale(1.0);window.perform_layout();
+        check(text->text()==before_scale && text->selection()==selection_before_scale,"DPI transitions preserve document and selection");
         auto path=std::filesystem::temp_directory_path()/("notepad-ui-tests-"+std::to_string(GetCurrentProcessId())+".txt");
         check(!std::filesystem::exists(path),"Unique fixture");
         struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code ec;std::filesystem::remove(path,ec);}} cleanup{path};
