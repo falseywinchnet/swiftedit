@@ -2,6 +2,7 @@
 #include "context.hpp"
 #include "session.hpp"
 #include "session_word_count.hpp"
+#include "session_copy.hpp"
 #include <charconv>
 #include <iostream>
 #include <stdexcept>
@@ -27,6 +28,13 @@ void word_count_progress(const swiftedit::SessionWordCount &count) {
         std::cout << "word-count\t" << count.result() << '\n';
     else
         std::cout << "word-count-progress\t" << count.offset() << '\t' << count.size() << '\n';
+}
+void copy_progress(swiftedit::SessionCopy &copy, swiftedit::SourceClipboard &clipboard) {
+    if (copy.state() == swiftedit::CopyState::complete) {
+        clipboard = copy.take();
+        std::cout << "copied\t" << clipboard.bytes().size() << '\n';
+    } else
+        std::cout << "copy-progress\t" << copy.copied() << '\t' << copy.length() << '\n';
 }
 void page(const swiftedit::Page &p) {
     std::cout << "page\t" << p.offset << '\t' << p.next << '\t' << p.size;
@@ -89,6 +97,8 @@ int main(int argc, char **argv) {
     swiftedit::Session session{};
     swiftedit::ContextCursor context{};
     std::unique_ptr<swiftedit::SessionWordCount> counting{};
+    std::unique_ptr<swiftedit::SessionCopy> copying{};
+    swiftedit::SourceClipboard clipboard{};
     std::string line{};
     std::cout << "ready\tSwiftEdit\t1\n" << std::flush;
     while (true) {
@@ -124,6 +134,39 @@ int main(int argc, char **argv) {
                           << session.dirty() << '\t' << session.read_only();
                 const std::u8string p = session.path().u8string();
                 field(std::string(reinterpret_cast<const char *>(p.data()), p.size()));
+                std::cout << '\n';
+            } else if (cmd == "copy-start") {
+                require_field_count(f, 3);
+                const std::uint64_t offset = number(f[1]);
+                const std::uint64_t length = number(f[2]);
+                copying = std::make_unique<swiftedit::SessionCopy>(session, offset, length);
+                copy_progress(*copying, clipboard);
+            } else if (cmd == "copy-next") {
+                require_field_count(f, 2);
+                const std::uint64_t budget = number(f[1]);
+                if (budget == 0 || budget > swiftedit::maximum_page)
+                    throw std::runtime_error("Copy step budget must be 1..65536 bytes.");
+                if (!copying)
+                    throw std::runtime_error("Start a copy first.");
+                (*copying).step(session, static_cast<std::size_t>(budget));
+                copy_progress(*copying, clipboard);
+            } else if (cmd == "copy-cancel") {
+                require_field_count(f, 1);
+                if (copying)
+                    (*copying).cancel();
+                copying.reset();
+            } else if (cmd == "clipboard-page") {
+                require_field_count(f, 3);
+                const std::uint64_t offset = number(f[1]);
+                const std::uint64_t budget = number(f[2]);
+                const std::string_view bytes = clipboard.bytes();
+                if (offset > bytes.size() || budget == 0 || budget > swiftedit::maximum_page)
+                    throw std::runtime_error("Invalid clipboard page range or budget.");
+                const std::string_view selected = bytes.substr(static_cast<std::size_t>(offset),
+                                                              static_cast<std::size_t>(budget));
+                std::cout << "clipboard\t" << offset << '\t' << offset + selected.size()
+                          << '\t' << bytes.size();
+                field(selected);
                 std::cout << '\n';
             } else if (cmd == "word-count") {
                 require_field_count(f, 1);

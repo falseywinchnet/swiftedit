@@ -7,6 +7,7 @@
 namespace swiftedit {
 class SearchPattern;
 class SessionReplacement;
+class SessionCopy;
 constexpr std::size_t editable_limit = 16 * 1024 * 1024;
 // Session-local identities are deliberately distinct from byte offsets and
 // from one another. Transport conversion occurs only at the CLI boundary.
@@ -44,7 +45,7 @@ struct Preview {
 struct SourceRange {
     std::size_t offset{}, length{};
 };
-// Owned source bytes; only Session can populate this from a validated source range.
+// Owned source bytes populated by Session or a completed SessionCopy range.
 // Clipboard lifetime is independent of its source document.
 class SourceClipboard {
 public:
@@ -53,6 +54,7 @@ public:
 
 private:
     friend class Session;
+    friend class SessionCopy;
     std::string bytes_{};
 };
 // Byte-faithful command model. Malformed input remains editable; publication

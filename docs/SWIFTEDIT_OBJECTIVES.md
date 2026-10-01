@@ -101,3 +101,11 @@ any key cancels pending counting. Large GUI counting remains pending.
    character/control dialogs, and native print/layout preview.
 
 An objective is not complete merely because it appears in this ledger.
+
+Read-only source copying now has a shared cooperative task and command interface.
+It reserves one clipboard buffer, reads at most 64 KiB per step, rejects stale
+source identities/revisions and transfers the completed result without another
+whole-selection copy. Cancellation/failure preserves the previous clipboard.
+Actual 16 MiB file tests cover whole-selection copying, source-close lifetime,
+malformed/control bytes, CRLF, split Unicode and undoable byte-faithful paste.
+Terminal read-only selection controls and GUI integration remain pending.

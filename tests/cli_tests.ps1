@@ -130,6 +130,27 @@ try {
         Assert ($response[-1].StartsWith("ok`tword-count-next`t")) 'Paged count step succeeds'
     }
     Assert ($response[0] -eq "word-count`t8388608") 'Paged whole-document count through CLI'
+    $response = Send-Request -Process $process -Fields @('copy-start','65535','4')
+    Assert ($response[0] -eq "copy-progress`t0`t4") 'Paged copy starts without reading'
+    $response = Send-Request -Process $process -Fields @('copy-next','2')
+    Assert ($response[0] -eq "copy-progress`t2`t4") 'Copy yields after bounded work'
+    $response = Send-Request -Process $process -Fields @('clipboard-page','0','4')
+    Assert ($response[0] -eq "clipboard`t0`t0`t0`t") 'Partial copy never published'
+    $response = Send-Request -Process $process -Fields @('copy-next','2')
+    Assert ($response[0] -eq "copied`t4") 'Complete paged copy publishes once'
+    $response = Send-Request -Process $process -Fields @('clipboard-page','0','4')
+    Assert ($response[0] -eq "clipboard`t0`t4`t4`t x x") 'Copy preserves exact range across boundary'
+    $response = Send-Request -Process $process -Fields @('copy-start','0','100')
+    $response = Send-Request -Process $process -Fields @('copy-next','1')
+    $response = Send-Request -Process $process -Fields @('copy-cancel')
+    $response = Send-Request -Process $process -Fields @('clipboard-page','0','4')
+    Assert ($response[0] -eq "clipboard`t0`t4`t4`t x x") 'Cancelled copy preserves previous clipboard'
+    $response = Send-Request -Process $process -Fields @('copy-start','0','100')
+    $response = Send-Request -Process $process -Fields @('discard')
+    $response = Send-Request -Process $process -Fields @('copy-next','1')
+    Assert ($response[-1].StartsWith("error`tCopy document changed")) 'Copy rejects changed document identity'
+    $response = Send-Request -Process $process -Fields @('clipboard-page','0','4')
+    Assert ($response[0] -eq "clipboard`t0`t4`t4`t x x") 'Failed copy preserves previous clipboard'
     $response = Send-Request -Process $process -Fields @('quit')
     [bool]$exited = $process.WaitForExit(5000)
     Assert ($exited -and $process.ExitCode -eq 0) 'Clean process exit'

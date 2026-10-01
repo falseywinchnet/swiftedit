@@ -53,7 +53,8 @@ existing source CRCR can still be read and saved unchanged.
 
 Files >=16 MiB are read-only via a retained file handle and bounded reads.
 Search/edit/sanitize are currently restricted to smaller files. There is no
-asynchronous whole-file count yet. Read-only paging follows the opened file
+background thread for counting; start/next/cancel provide cooperative counting.
+Read-only paging follows the opened file
 handle if its directory entry is replaced. It does not silently follow a new file.
 
 Word count uses nonempty runs separated by Unicode whitespace, including NBSP
@@ -105,3 +106,26 @@ use `context` to restart. Exact context plus preview/commit remains the edit
 addressing mechanism. Large read-only files use the same bounded reader without
 loading or pre-indexing the whole file. `page` and `find` retain their original
 raw-byte context response; they do not guess line numbers for arbitrary offsets.
+
+## Cooperative source copying
+
+`copy-start<TAB>offset<TAB>length` captures the current document identity and
+revision and reserves clipboard capacity, without scanning the selection.
+Offsets and lengths are unsigned 64-bit source byte values. Read-only large
+files are supported. The response is `copy-progress<TAB>copied<TAB>length`.
+An empty range completes immediately with `copied<TAB>0`.
+
+`copy-next<TAB>budget` reads at most 1..65536 bytes and yields. Completion emits
+`copied<TAB>length` and transfers the full result into the process clipboard.
+`copy-cancel` drops pending work. Starting, cancelling or failing a copy leaves
+the previous completed clipboard intact. Source edits or replacement invalidate
+pending work. Clipboard bytes preserve malformed input, NUL, controls and line
+endings exactly; they are not interpreted or sanitized.
+
+`clipboard-page<TAB>offset<TAB>budget` returns
+`clipboard<TAB>offset<TAB>next<TAB>total<TAB>escaped-bytes`, with budget 1..65536.
+No partial pending copy is exposed. This clipboard belongs to the command
+process, survives document close, and is not the operating-system clipboard.
+Capacity reservation may fail before reading; no clipboard is replaced on that
+failure. Each read is synchronous and can inherit storage latency, but later
+steps and cancellation remain under the caller's control.
