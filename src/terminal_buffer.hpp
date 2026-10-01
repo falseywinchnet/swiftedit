@@ -49,6 +49,6 @@ private:
     DocumentStamp navigation_stamp_{};
     TerminalSelection selection_{};
     std::optional<std::size_t> desired_column_{};
-    std::string newline_{"\r\n"};
+    std::string newline_{notepad::native_newline()};
 };
 } // namespace swiftedit

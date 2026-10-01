@@ -195,3 +195,10 @@ https://github.com/falseywinchnet/swiftedit/actions/runs/36849715223
 The POSIX publication hook is compiled only into the standalone adapter test
 target; production builds have no injected callback. No native GUI Mac build or
 bundle has been validated. Provider-installed SDK archives remain outstanding.
+
+2026-10-01 native newline correction: new documents and files without existing
+endings now use LF on macOS/Linux and CRLF on Windows. Opened files keep their
+first observed ending, including mixed-ending files. GUI New/initial construction
+and terminal reset/initial construction use the same native_newline policy.
+Windows full build and 16 suites passed (3.39s); standalone 4-suite gate passed.
+Cross-platform CI checks the actual compiled host convention and preservation.

@@ -15,6 +15,8 @@ struct Decoded {
 [[nodiscard]] Decoded decode(std::string_view bytes);
 [[nodiscard]] std::string encode(std::string_view text, Encoding encoding);
 [[nodiscard]] std::string encoding_name(Encoding encoding);
+// New files use the host convention; existing endings are never converted implicitly.
+[[nodiscard]] std::string native_newline();
 [[nodiscard]] std::string newline_name(std::string_view text);
 [[nodiscard]] std::string preferred_newline(std::string_view text);
 // Count nonempty runs separated by Unicode whitespace. Punctuation stays in

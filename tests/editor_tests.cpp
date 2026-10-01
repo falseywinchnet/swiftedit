@@ -189,10 +189,11 @@ int main() {
         check(input_routed, "Text input routed");
         window.dispatch_key({gf::KeyAction::down, gf::PhysicalKey::enter});
         window.dispatch_text({"second"});
-        check((*text).text() == "first\r\nsecond", "Configured Enter preserves CRLF");
+        const std::string entered = "first" + notepad::native_newline() + "second";
+        check((*text).text() == entered, "New-document Enter uses native endings");
         (*editor).execute("select-all");
         const std::string selected = (*text).selected_text();
-        check(selected == "first\r\nsecond", "Select all");
+        check(selected == entered, "Select all");
         const gf::TextSelection count_selection = (*text).selection();
         const bool count_dirty = (*editor).document().dirty((*text).text());
         (*editor).execute("word-count");
@@ -204,7 +205,7 @@ int main() {
               "Word Count preserves save state");
         (*text).replace_selection("replacement");
         (*editor).execute("undo");
-        check((*text).text() == "first\r\nsecond", "Menu undo");
+        check((*text).text() == entered, "Menu undo");
         (*editor).execute("redo");
         check((*text).text() == "replacement", "Menu redo");
         (*editor).execute("select-all");

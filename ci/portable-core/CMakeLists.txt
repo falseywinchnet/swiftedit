@@ -6,6 +6,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # This gate builds production CSV/formula code without the native SDK. It is
 # deliberately not named or packaged as a SwiftEdit application build.
 enable_testing()
+add_executable(swiftedit-newline-tests ../../tests/newline_tests.cpp ../../src/newlines.cpp)
+target_include_directories(swiftedit-newline-tests PRIVATE ../../src)
+add_test(NAME newlines COMMAND swiftedit-newline-tests)
 add_library(swiftedit_csv STATIC ../../src/csv.cpp)
 target_include_directories(swiftedit_csv PUBLIC ../../src)
 add_executable(swiftedit-csv-tests ../../tests/csv_tests.cpp)

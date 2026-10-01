@@ -123,7 +123,7 @@ int main() {
               "Undo clamps a caret inside a restored multibyte grapheme to its start");
         terminal.move(swiftedit::TerminalMotion::document_end);
         terminal.enter();
-        check(terminal.session().text().ends_with("\r\n"),
+        check(terminal.session().text().ends_with(notepad::native_newline()),
               "New terminal documents use native Enter endings");
         const std::filesystem::path saved = dir / "saved.txt";
         terminal.save_as(saved);

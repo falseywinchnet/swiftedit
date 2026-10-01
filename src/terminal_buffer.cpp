@@ -11,7 +11,8 @@ void TerminalBuffer::open(const std::filesystem::path &path) {
     selection_ = {};
     desired_column_.reset();
     navigation_.reset();
-    newline_ = session_.read_only() ? "\r\n" : notepad::preferred_newline(session_.text());
+    newline_ = session_.read_only() ? notepad::native_newline()
+                                    : notepad::preferred_newline(session_.text());
 }
 void TerminalBuffer::reset(bool discard) {
     if (session_.dirty() && !discard)
@@ -20,7 +21,7 @@ void TerminalBuffer::reset(bool discard) {
     selection_ = {};
     desired_column_.reset();
     navigation_.reset();
-    newline_ = "\r\n";
+    newline_ = notepad::native_newline();
 }
 void TerminalBuffer::synchronize() {
     if (session_.read_only())

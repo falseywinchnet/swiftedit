@@ -97,7 +97,7 @@ void Editor::continue_operation(Continuation next) {
         save_identity_.reset();
         document_ = {};
         (*text_).set_text("");
-        (*text_).set_newline_sequence("\r\n");
+        (*text_).set_newline_sequence(native_newline());
         refresh();
         focus_text();
         break;
@@ -219,7 +219,7 @@ void Editor::initialize_control_tree() {
     (*text_).set_multiline(true);
     (*text_).set_word_wrap(false);
     (*text_).set_accepts_tab(true);
-    (*text_).set_newline_sequence("\r\n");
+    (*text_).set_newline_sequence(native_newline());
     (*text_).set_maximum_length(gf::TextBox::maximum_multiline_bytes);
     (*text_).set_font({gf::FontRole::monospace, 14, 400, false});
     (*text_).set_accessible_name("Document text");
