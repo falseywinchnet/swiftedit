@@ -3,7 +3,11 @@
 The expanded owner objectives and feature-by-feature implementation status are
 in SWIFTEDIT_OBJECTIVES.md. The new CLI is a command protocol, not the promised
 full-screen terminal, and the GUI has not yet migrated to its byte-faithful model.
-CSV parsing/math are implemented in the core/CLI, not in a graphical table view.
+CSV now has a native table view, formula entry/results and Convert to Value in
+the menu and context menu. Its source still shares the current GUI text-widget
+limits; broad desktop and responsiveness validation remain in progress. Grid
+paste inserts plain clipboard text into the selected cell; rectangular clipboard
+import and column resizing are not implemented.
 
 - Windows is the first implementation. Other platform file adapters are not
   implemented or claimed.

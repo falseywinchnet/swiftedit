@@ -37,4 +37,8 @@ struct Calculation {
 // Exact bounded rational arithmetic: never binary floating point. Intermediate
 // overflow and non-terminating decimals are errors, not approximate results.
 [[nodiscard]] Calculation calculate(const Csv &, std::string_view expression);
+// Formula text stays in Csv source. Each evaluation owns its dependency cache;
+// reopening/evaluating a changed table cannot reuse stale results.
+[[nodiscard]] Calculation calculate_cell(const Csv &, CellAddress);
+[[nodiscard]] std::string convert_to_value(const Csv &, CellAddress);
 } // namespace swiftedit

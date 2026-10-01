@@ -1,5 +1,6 @@
 #pragma once
 #include "document.hpp"
+#include "csv_view.hpp"
 #include <file_manager/document_picker_view.hpp>
 #include <functional>
 #include <gui_forms/application.hpp>
@@ -41,6 +42,7 @@ public:
     void open_file(const std::filesystem::path &source);
     std::shared_ptr<gf::TextBox> text_control() const { return text_; }
     const Document &document() const { return document_; }
+    std::shared_ptr<CsvView> csv_control() const { return csv_; }
 
 private:
     struct Dialog;
@@ -69,6 +71,10 @@ private:
     struct SelectionListener {
         std::weak_ptr<Editor> owner{};
         void operator()(const gf::TextSelection &) const;
+    };
+    struct CsvListener {
+        std::weak_ptr<Editor> owner{};
+        void operator()(const std::string &) const;
     };
     struct AcceleratorListener {
         std::weak_ptr<Editor> owner{};
@@ -124,6 +130,8 @@ private:
     void ready(gf::Window &, gf::ApplicationWindowHandle, const std::filesystem::path &);
     void closing(gf::HostCloseRequest &);
     void refresh();
+    void apply_csv_change(const std::string &);
+    void show_csv(bool);
     void focus_text();
     void error(const std::string &);
     gf::HostDialogChoice message(std::string title, std::string text,
@@ -144,6 +152,8 @@ private:
     void shortcut(gf::Window &, std::uint32_t, gf::Modifier, const std::string &);
     Document document_{};
     std::shared_ptr<gf::TextBox> text_{};
+    std::shared_ptr<CsvView> csv_{};
+    bool csv_visible_{};
     std::shared_ptr<gf::MenuStrip> menu_{};
     std::shared_ptr<gf::Label> name_{}, status_{};
     std::map<std::string, std::shared_ptr<gf::Command>> commands_{};

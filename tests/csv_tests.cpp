@@ -128,17 +128,29 @@ int main() {
             }
             check(refused, "Expected refusal");
         }
-        {
-            bool refused = false;
-            try {
-                calculate_result(nums, "C3");
-            } catch (const std::exception &failure) {
-                refused = true;
-                const std::string_view message = failure.what();
-                check(message.find("C3") != message.npos, "Wrong refusal reason");
-            }
-            check(refused, "Expected refusal");
+        const std::string dependent = calculate_result(nums, "C3");
+        check(dependent == "0.3", "Stored formula references calculate exactly");
+        const Csv formulas("2,=A1*3,=B1+1\r\nunchanged,tail,\"quoted\"");
+        const Calculation formula_value = calculate_cell(formulas, {0, 2});
+        check(formula_value.result == "7", "Chained formula result");
+        const std::string edited_source = formulas.set({0, 0}, "4");
+        const Csv edited_formulas(edited_source);
+        const Calculation refreshed = calculate_cell(edited_formulas, {0, 2});
+        check(refreshed.result == "13", "Changed inputs never reuse stale formula results");
+        const std::string converted = convert_to_value(formulas, {0, 2});
+        check(converted == "2,=A1*3,7\r\nunchanged,tail,\"quoted\"",
+              "Convert to Value changes only the selected formula source span");
+        const Csv cyclic("=B1,=A1");
+        bool cycle_refused = false;
+        try {
+            static_cast<void>(convert_to_value(cyclic, {0, 0}));
+        } catch (const std::runtime_error &failure) {
+            cycle_refused = true;
+            const std::string_view message = failure.what();
+            check(message.find("Circular") != message.npos, "Cycle diagnostic");
         }
+        check(cycle_refused && cyclic.cell({0, 0}).value == "=B1",
+              "Failed conversion preserves the formula");
         {
             bool refused = false;
             try {

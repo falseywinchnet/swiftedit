@@ -1,6 +1,7 @@
 #include "csv.hpp"
 #include <algorithm>
 #include <limits>
+#include <map>
 #include <numeric>
 #include <stdexcept>
 
@@ -251,26 +252,39 @@ std::string decimal(Number a) {
     }
     return out;
 }
+struct Evaluation {
+    const Csv &table;
+    std::vector<CellAddress> active{};
+    std::map<std::pair<std::size_t, std::size_t>, Number> values{};
+    std::size_t references{};
+};
+Number evaluate_cell(Evaluation &, CellAddress);
 class Parser {
 public:
-    Parser(const Csv &table, std::string_view expression) : table_(table), s_(expression) {
+    Parser(Evaluation &evaluation, std::string_view expression)
+        : evaluation_(evaluation), table_(evaluation.table), s_(expression) {
         if (s_.size() > 4096)
             throw std::runtime_error("Expression exceeds 4096 bytes.");
         if (s_.starts_with('='))
             ++at_;
     }
     Calculation run() {
-        Number n = expression();
-        space();
-        if (at_ != s_.size())
-            throw std::runtime_error("Unexpected formula text.");
+        const Number n = run_number();
         Calculation result{};
         result.result = decimal(n);
         result.references = std::move(references_);
         return result;
     }
+    Number run_number() {
+        const Number n = expression();
+        space();
+        if (at_ != s_.size())
+            throw std::runtime_error("Unexpected formula text.");
+        return n;
+    }
 
 private:
+    Evaluation &evaluation_;
     const Csv &table_;
     std::string_view s_{};
     std::size_t at_{}, depth_{};
@@ -327,12 +341,12 @@ private:
         }
     }
     Number reference(CellAddress p) {
-        if (references_.size() >= 100000)
+        if (evaluation_.references >= 100000)
             throw std::runtime_error("Too many referenced cells.");
+        ++evaluation_.references;
         references_.push_back(p);
         try {
-            const Cell &input = table_.cell(p);
-            const Number result = numeric(input.value);
+            const Number result = evaluate_cell(evaluation_, p);
             return result;
         } catch (const std::exception &e) {
             throw std::runtime_error(cell_name(p) + ": " + e.what());
@@ -527,10 +541,60 @@ private:
         return result;
     }
 };
+Number evaluate_cell(Evaluation &evaluation, CellAddress address) {
+    const std::pair<std::size_t, std::size_t> key{address.row, address.column};
+    const std::map<std::pair<std::size_t, std::size_t>, Number>::const_iterator cached =
+        evaluation.values.find(key);
+    if (cached != evaluation.values.end())
+        return (*cached).second;
+    for (const CellAddress active : evaluation.active)
+        if (active == address)
+            throw std::runtime_error("Circular formula reference.");
+    if (evaluation.active.size() >= 64)
+        throw std::runtime_error("Formula dependency depth exceeds 64 cells.");
+    const Cell &cell = evaluation.table.cell(address);
+    Number result{};
+    if (cell.value.starts_with('=')) {
+        evaluation.active.push_back(address);
+        struct ActiveCell {
+            std::vector<CellAddress> &stack;
+            ~ActiveCell() { stack.pop_back(); }
+        } active{evaluation.active};
+        Parser parser(evaluation, cell.value);
+        result = parser.run_number();
+        // A referenced formula must itself have a valid displayable result.
+        const std::string validated_decimal = decimal(result);
+        static_cast<void>(validated_decimal);
+    } else
+        result = numeric(cell.value);
+    evaluation.values.emplace(key, result);
+    return result;
+}
 } // namespace
 Calculation calculate(const Csv &table, std::string_view expression) {
-    Parser parser(table, expression);
+    Evaluation evaluation{table};
+    Parser parser(evaluation, expression);
     Calculation result = parser.run();
+    return result;
+}
+Calculation calculate_cell(const Csv &table, CellAddress address) {
+    const Cell &cell = table.cell(address);
+    if (!cell.value.starts_with('=')) {
+        const Calculation literal{cell.value, {}};
+        return literal;
+    }
+    Evaluation evaluation{table};
+    evaluation.active.push_back(address);
+    Parser parser(evaluation, cell.value);
+    Calculation result = parser.run();
+    return result;
+}
+std::string convert_to_value(const Csv &table, CellAddress address) {
+    const Cell &cell = table.cell(address);
+    if (!cell.value.starts_with('='))
+        throw std::runtime_error("The selected cell does not contain a formula.");
+    const Calculation value = calculate_cell(table, address);
+    std::string result = table.set(address, value.result);
     return result;
 }
 } // namespace swiftedit

@@ -224,6 +224,57 @@ int main() {
         (*editor).execute("new");
         check((*text).text().empty() && (*editor).document().path.empty(),
               "Unsaved Discard permits New");
+        const std::filesystem::path csv_path = path.string() + ".csv";
+        struct CsvCleanup {
+            std::filesystem::path path{};
+            ~CsvCleanup() {
+                std::error_code error{};
+                std::filesystem::remove(path, error);
+            }
+        } csv_cleanup{csv_path};
+        {
+            std::ofstream csv_file(csv_path, std::ios::binary);
+            csv_file << "2,=A1*3\r\n4,5";
+        }
+        (*editor).open_file(csv_path);
+        (*editor).execute("csv-view");
+        const std::shared_ptr<notepad::CsvView> grid = (*editor).csv_control();
+        check((*grid).visible() && !(*text).visible(), "CSV table replaces source presentation");
+        (*grid).select_cell({0, 1});
+        (*grid).commit_cell("=A1*4");
+        check((*text).text() == "2,=A1*4\r\n4,5", "Enter stores formula source");
+        (*editor).execute("csv-convert-value");
+        check((*text).text() == "2,8\r\n4,5", "CSV menu converts formula to value");
+        (*editor).execute("undo");
+        check((*text).text() == "2,=A1*4\r\n4,5", "Conversion is one undo step");
+        const std::vector<gf::MenuItemSpec> &context_items = (*grid).context_menu().items();
+        check(context_items.size() == 1 && context_items[0].text == "Convert to Value",
+              "Cell context menu includes Convert to Value");
+        window.perform_layout();
+        const gf::Rect grid_bounds = (*grid).absolute_bounds();
+        gf::PointerEvent context_press{};
+        context_press.action = gf::PointerAction::down;
+        context_press.button = gf::PointerButton::secondary;
+        context_press.position = {grid_bounds.x + 56 + 144 + 12, grid_bounds.y + 68 + 12};
+        (*grid).on_pointer(context_press);
+        check((*grid).context_menu().is_open(), "Right click opens the cell menu");
+        const bool context_executed = (*context_items[0].command).execute("csv.context");
+        check(context_executed && (*text).text() == "2,8\r\n4,5",
+              "Context menu invokes the same conversion operation");
+        (*grid).context_menu().close();
+        (*editor).execute("undo");
+        (*editor).execute("copy");
+        check(services.clipboard == "=A1*4", "Grid copy uses selected cell source");
+        (*grid).commit_cell("=B1");
+        const std::string cyclic_source((*text).text());
+        (*grid).convert_to_value();
+        check((*text).text() == cyclic_source, "Conversion error preserves formula source");
+        check((*grid).status().find("Circular") != std::string::npos,
+              "Grid exposes formula conversion error");
+        (*editor).execute("csv-clear");
+        check((*text).text() == "2,\r\n4,5", "Grid Delete clears contents without shifting");
+        (*editor).execute("csv-view");
+        check((*text).visible(), "Source toggle restores plain text view");
         std::cout << "Editor headless tests passed: native control input routing, CRLF, menu "
                      "edit/save, undo boundary, mixed endings, oversized-line refusal.\n";
         return 0;

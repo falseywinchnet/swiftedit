@@ -70,6 +70,19 @@ try {
     $response = Send-Request -Process $process -Fields @('commit',$preview[1],$preview[2])
     $response = Send-Request -Process $process -Fields @('csv-calculate','SUM(A1:B2)')
     Assert ($response[0].StartsWith("calculation`t11.3`t")) 'CSV commit updates calculation source'
+    $response = Send-Request -Process $process -Fields @('csv-set','B2','=A2*2')
+    $preview = $response[0].Split("`t")
+    $response = Send-Request -Process $process -Fields @('commit',$preview[1],$preview[2])
+    $response = Send-Request -Process $process -Fields @('csv-value','B2')
+    Assert ($response[0] -eq "value`t8`tA2") 'Formula is evaluated with reference metadata'
+    $response = Send-Request -Process $process -Fields @('csv-convert-to-value','B2')
+    $preview = $response[0].Split("`t")
+    $response = Send-Request -Process $process -Fields @('commit',$preview[1],$preview[2])
+    $response = Send-Request -Process $process -Fields @('csv-get','B2')
+    Assert ($response[0] -eq "cell`tB2`t8") 'Conversion stores a literal value'
+    $response = Send-Request -Process $process -Fields @('undo')
+    $response = Send-Request -Process $process -Fields @('csv-get','B2')
+    Assert ($response[0] -eq "cell`tB2`t=A2*2") 'Conversion undo restores the formula'
     $response = Send-Request -Process $process -Fields @('quit')
     [bool]$exited = $process.WaitForExit(5000)
     Assert ($exited -and $process.ExitCode -eq 0) 'Clean process exit'

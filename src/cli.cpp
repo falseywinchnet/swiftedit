@@ -161,6 +161,17 @@ int main(int argc, char **argv) {
                     const swiftedit::Cell &cell = csv.cell(address);
                     field(cell.value);
                     std::cout << '\n';
+                } else if (cmd == "csv-value") {
+                    require_field_count(f, 2);
+                    const swiftedit::CellAddress address = swiftedit::cell_address(f[1]);
+                    const swiftedit::Calculation result = swiftedit::calculate_cell(csv, address);
+                    std::cout << "value";
+                    field(result.result);
+                    for (const swiftedit::CellAddress reference : result.references) {
+                        const std::string name = swiftedit::cell_name(reference);
+                        field(name);
+                    }
+                    std::cout << '\n';
                 } else if (cmd == "csv-calculate") {
                     require_field_count(f, 2);
                     const swiftedit::Calculation result = swiftedit::calculate(csv, f[1]);
@@ -175,6 +186,10 @@ int main(int argc, char **argv) {
                         require_field_count(f, 3);
                         const swiftedit::CellAddress address = swiftedit::cell_address(f[1]);
                         next = csv.set(address, f[2]);
+                    } else if (cmd == "csv-convert-to-value") {
+                        require_field_count(f, 2);
+                        const swiftedit::CellAddress address = swiftedit::cell_address(f[1]);
+                        next = swiftedit::convert_to_value(csv, address);
                     } else if (cmd == "csv-clear") {
                         require_field_count(f, 3);
                         const swiftedit::CellAddress first = swiftedit::cell_address(f[1]);

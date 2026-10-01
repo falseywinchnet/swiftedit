@@ -33,6 +33,8 @@ returns `ok<TAB>quit`. Requests exceeding 32 MiB of transport text are rejected.
 | `csv-set`, A1, text | Previews a correctly quoted field update; requires commit |
 | `csv-clear`, A1, B3 | Previews contents-only rectangular clear; requires commit |
 | `csv-calculate`, expression | Returns exact result and referenced cells, no document mutation |
+| `csv-value`, A1 | Returns the cell's displayed value and direct formula references; stored formula source is unchanged |
+| `csv-convert-to-value`, A1 | Previews replacement of a formula by its exact value; explicit commit required; errors preserve source |
 | `quit` | Ends session; unsaved state is discarded |
 
 Preview rows contain `preview, token, revision, byte-offset, removed-byte-count,

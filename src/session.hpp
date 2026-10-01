@@ -32,6 +32,9 @@ struct Preview {
     std::size_t offset{}, length{};
     std::string before{}, removed{}, inserted{}, after{};
 };
+struct SourceRange {
+    std::size_t offset{}, length{};
+};
 // Holds a read handle, not a whole-file allocation. No write sharing is granted.
 class PagedFile {
 public:
@@ -62,6 +65,11 @@ public:
                                                std::string_view after,
                                                std::string_view replacement);
     void commit(EditToken token, DocumentRevision revision);
+    // GUI/terminal edits use exact source ranges and an observed revision.
+    // All ranges are validated before one undoable atomic change. Caller owns
+    // the ranges and replacement through the synchronous call.
+    void replace_ranges(const std::vector<SourceRange> &, std::string_view replacement,
+                        DocumentRevision observed);
     [[nodiscard]] bool undo();
     [[nodiscard]] bool redo();
     void restore_opened();
@@ -99,6 +107,7 @@ private:
     DocumentRevision revision_{1};
     EditToken next_token_{1};
 };
+[[nodiscard]] std::size_t utf8_sequence_length(std::string_view, std::size_t offset);
 [[nodiscard]] std::string text_copy(std::string_view, std::size_t *invalid = nullptr);
 [[nodiscard]] std::string normalize_newlines(std::string_view, std::string_view ending);
 [[nodiscard]] std::string suggested_name(std::string_view);

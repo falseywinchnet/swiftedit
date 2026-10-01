@@ -5,8 +5,9 @@
 #include <windows.h>
 
 namespace swiftedit {
-namespace {
-std::size_t sequence(std::string_view s, std::size_t i) {
+std::size_t utf8_sequence_length(std::string_view s, std::size_t i) {
+    if (i >= s.size())
+        return 0;
     const unsigned char c = static_cast<unsigned char>(s[i]);
     if (c < 128)
         return 1;
@@ -25,13 +26,14 @@ std::size_t sequence(std::string_view s, std::size_t i) {
         return 0;
     return n;
 }
+namespace {
 void payload(std::string_view s) {
     if (s.find("\r\r") != s.npos)
         throw std::runtime_error(
             "Line markers are read-only metadata and must not be included in document text.");
     std::size_t bad{};
     for (std::size_t offset = 0; offset < s.size();) {
-        const std::size_t length = sequence(s, offset);
+        const std::size_t length = utf8_sequence_length(s, offset);
         if (length == 0) {
             ++bad;
             ++offset;
@@ -89,7 +91,7 @@ std::string text_copy(std::string_view s, std::size_t *invalid) {
     out.reserve(s.size());
     std::size_t bad{};
     for (std::size_t i = 0; i < s.size();) {
-        const std::size_t n = sequence(s, i);
+        const std::size_t n = utf8_sequence_length(s, i);
         if (n) {
             out.append(s.substr(i, n));
             i += n;
@@ -265,6 +267,42 @@ void Session::commit(EditToken token, DocumentRevision revision) {
     change(std::move(next));
     previews_.clear();
 }
+void Session::replace_ranges(const std::vector<SourceRange> &ranges, std::string_view replacement,
+                             DocumentRevision observed) {
+    editable();
+    if (observed != revision_)
+        throw std::runtime_error("Stale edit: document revision changed.");
+    if (ranges.empty() || ranges.size() > 1000)
+        throw std::runtime_error("Select between 1 and 1000 source ranges.");
+    payload(replacement);
+    std::size_t previous_end = 0;
+    std::size_t previous_offset = 0;
+    std::size_t total_removed = 0;
+    for (std::size_t index = 0; index < ranges.size(); ++index) {
+        const SourceRange &range = ranges[index];
+        if (range.offset > text_.size() || range.length > text_.size() - range.offset)
+            throw std::runtime_error("Edit range exceeds document.");
+        if (index && (range.offset < previous_end || range.offset == previous_offset))
+            throw std::runtime_error("Edit ranges must be ordered and disjoint.");
+        previous_offset = range.offset;
+        previous_end = range.offset + range.length;
+        total_removed += range.length;
+    }
+    const std::size_t retained = text_.size() - total_removed;
+    if (replacement.size() > (editable_limit - 1 - retained) / ranges.size())
+        throw std::runtime_error("Edit would reach the 16 MiB read-only threshold.");
+    const std::size_t resulting_size = retained + replacement.size() * ranges.size();
+    std::string next{};
+    next.reserve(resulting_size);
+    std::size_t copied = 0;
+    for (const SourceRange &range : ranges) {
+        next.append(text_, copied, range.offset - copied);
+        next.append(replacement);
+        copied = range.offset + range.length;
+    }
+    next.append(text_, copied, text_.size() - copied);
+    change(std::move(next));
+}
 bool Session::undo() {
     editable();
     if (undo_.empty())
@@ -295,7 +333,7 @@ std::size_t Session::illegal_bytes() const {
     editable();
     std::size_t n{};
     for (std::size_t offset = 0; offset < text_.size();) {
-        const std::size_t length = sequence(text_, offset);
+        const std::size_t length = utf8_sequence_length(text_, offset);
         if (length == 0) {
             ++n;
             ++offset;

@@ -33,8 +33,8 @@ precedence. The previous DECISIONS.md is historical implementation evidence.
 | External changes, 02:28–29 | Frozen views; two-stage destructive save, first over/new-copy, then editable filename/metadata + explicit warning; no compare/merge | Existing strict conflict refusal preserved; full two-stage owned UI pending; CLI never forces overwrite |
 | Markdown | Source/rendered toggle, common blocks/tables/tasks; no SVG/live HTML; inert links with URL tooltip; ruler only in rendered view | Pending native renderer/provider work |
 | Print | Native OS print, plain/rendered; separate Markdown layout preview without source mutation | Pending public print/preview contract |
-| CSV | `.csv` only, real quoting, flat table, rectangle selection; Delete clears cells without shifting | Tested source-preserving CSV parser/edit model + CLI commands; grid pending |
-| CSV math, 02:43–46 | No coercion/skipping; explicit ROUND for inexact decimals; error identifies offending cell; hover exposes references/ranges/lists | Exact bounded rational core, strict errors and reference metadata; no live dependency graph; hover/triangle UI pending |
+| CSV | `.csv` only, real quoting, flat table, rectangle selection; Delete clears cells without shifting | Native source/table toggle, bounded visible grid, rectangle clear, source entry, scrollbars and CLI; broad desktop QA pending |
+| CSV math, 02:43–46 and 2026-10-01 corrections | Enter stores formula and displays result; menu and right-click Convert to Value; strict exact math/errors/reference hover | Formula dependency evaluation, cycles/depth/work refusal, native formula entry/results/hover highlights and both conversion menus implemented; viewport performance and desktop QA pending |
 | Lifetime | Multiple independent document windows; no tabs or persistent recovery/history | Multiple executable instances work; in-process New Window command pending |
 
 ## Deliberate implementation choices, not additional owner answers
@@ -61,9 +61,12 @@ precedence. The previous DECISIONS.md is historical implementation evidence.
   has checked bounded integers; capacity overflow is an explicit error. This is
   not an arbitrary-precision engine. ROUND allows an inexact intermediate such
   as `10/3`, then deliberately rounds the final argument. No implicit rounding.
-* Formula evaluation is explicit and returns a result/reference set. It does not
-  mutate CSV or recursively evaluate formula cells. Storing live formulas vs
-  writing literal results needs a final UI decision: the interview mentions both.
+* The owner's 2026-10-01 clarification supersedes the earlier formula ambiguity:
+  Enter stores a formula and displays its result. Convert to Value is available
+  in the CSV menu and the cell context menu, replaces the formula with its exact
+  result as one undoable edit, and refuses erroneous formulas unchanged. Formula
+  dependencies evaluate against the current table; cycles, excessive dependency
+  depth (64 cells) and reference work (100000) produce errors. No numeric coercion.
 * The interview assistant's final RTF-detection prompt, earlier overwrite/compare
   suggestions, rejected walk-back-to-A undo, and speculative extra math functions
   were not adopted as confirmed owner requirements.

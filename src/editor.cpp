@@ -52,6 +52,12 @@ void Editor::SelectionListener::operator()(const gf::TextSelection &) const {
     if (self)
         (*self).refresh();
 }
+void Editor::CsvListener::operator()(const std::string &source) const {
+    const std::shared_ptr<Editor> self = lock_alive(owner);
+    if (!self)
+        throw std::runtime_error("Document is no longer available.");
+    (*self).apply_csv_change(source);
+}
 bool Editor::AcceleratorListener::operator()() const {
     const std::shared_ptr<Editor> self = lock_alive(owner);
     if (!self)
@@ -79,6 +85,7 @@ void Editor::continue_operation(Continuation next) {
     case Continuation::none:
         break;
     case Continuation::new_document:
+        show_csv(false);
         document_ = {};
         (*text_).set_text("");
         (*text_).set_newline_sequence("\r\n");
@@ -168,7 +175,10 @@ void Editor::initialize_control_tree() {
            item("newline-lf", "Convert Line Endings to &LF"),
            item("newline-crlf", "Convert Line Endings to &CRLF")}},
          {"format", "F&ormat", {item("wrap", "&Word Wrap"), item("font", "&Font...")}},
-         {"view", "&View", {item("status", "&Status Bar")}},
+         {"view", "&View", {item("status", "&Status Bar"), item("csv-view", "CSV &Table View")}},
+         {"csv",
+          "&CSV",
+          {item("csv-convert-value", "Convert to &Value"), item("csv-clear", "&Clear Cells")}},
          {"help", "&Help", {item("help", "View &Help", "F1"), item("about", "&About SwiftEdit")}}});
     add_child(menu_);
     name_ = gf::make_control<gf::Label>(gf::StableId("notepad.document-name"));
@@ -182,6 +192,11 @@ void Editor::initialize_control_tree() {
     (*text_).set_font({gf::FontRole::monospace, 14, 400, false});
     (*text_).set_accessible_name("Document text");
     add_child(text_);
+    csv_ = gf::make_control<CsvView>(gf::StableId("swiftedit.csv"));
+    (*csv_).set_visible(false);
+    (*csv_).set_context_command(commands_.at("csv-convert-value"));
+    subscriptions_.push_back((*csv_).changed().subscribe(*this, CsvListener{observe()}));
+    add_child(csv_);
     status_ = gf::make_control<gf::Label>(gf::StableId("notepad.status"));
     add_child(status_);
     subscriptions_.push_back((*text_).text_changed().subscribe(*this, TextListener{observe()}));
@@ -197,6 +212,7 @@ void Editor::arrange(gf::Rect bounds) {
     set_child_layout(name_, {8, 28, std::max(0.0, bounds.width - 16), 24});
     const double bottom = show_status_ ? 26 : 0;
     set_child_layout(text_, {0, 52, bounds.width, std::max(0.0, bounds.height - 52 - bottom)});
+    set_child_layout(csv_, {0, 52, bounds.width, std::max(0.0, bounds.height - 52 - bottom)});
     set_child_layout(status_, {8, std::max(52.0, bounds.height - bottom),
                                std::max(0.0, bounds.width - 16), bottom});
 }
@@ -204,6 +220,11 @@ void Editor::refresh() {
     if (!text_ || !status_)
         return;
     const std::string_view content = (*text_).text();
+    if (csv_visible_)
+        (*csv_).set_source(content);
+    (*commands_.at("csv-convert-value")).set_enabled(csv_visible_);
+    (*commands_.at("csv-clear")).set_enabled(csv_visible_);
+    (*commands_.at("csv-view")).set_checked(csv_visible_);
     (*name_).set_text((document_.dirty(content) ? "* " : "") +
                       (document_.path.empty() ? "Untitled" : path_utf8(document_.path)));
     const std::size_t caret = std::min((*text_).selection().caret.value(), content.size());
@@ -235,13 +256,46 @@ void Editor::refresh() {
     (*commands_.at("undo")).set_enabled((*text_).can_undo());
     (*commands_.at("redo")).set_enabled((*text_).can_redo());
     for (const char *id : {"cut", "copy", "delete"})
-        (*commands_.at(id)).set_enabled(!(*text_).selection().empty());
+        (*commands_.at(id)).set_enabled(csv_visible_ || !(*text_).selection().empty());
     (*commands_.at("wrap")).set_checked((*text_).word_wrap());
     (*commands_.at("status")).set_checked(show_status_);
 }
 void Editor::focus_text() {
     if (window())
-        (*window()).request_focus(text_);
+        (*window()).request_focus(csv_visible_ ? std::static_pointer_cast<gf::Control>(csv_)
+                                               : std::static_pointer_cast<gf::Control>(text_));
+}
+void Editor::apply_csv_change(const std::string &source) {
+    if (source == (*text_).text())
+        return;
+    const gf::TextBox::MultilineValidation supported = gf::TextBox::validate_multiline_text(source);
+    if (supported != gf::TextBox::MultilineValidation::valid)
+        throw std::runtime_error(
+            "CSV edit exceeds the current text widget limits; source is unchanged.");
+    const gf::TextSelection previous = (*text_).selection();
+    (*text_).select_all();
+    const bool changed = (*text_).replace_selection(source);
+    if (!changed) {
+        (*text_).select(previous.anchor, previous.caret);
+        throw std::runtime_error("CSV edit was not applied.");
+    }
+    refresh();
+}
+void Editor::show_csv(bool show) {
+    if (show) {
+        std::wstring extension = document_.path.extension().wstring();
+        for (wchar_t &character : extension)
+            if (character >= L'A' && character <= L'Z')
+                character += 32;
+        if (extension != L".csv")
+            throw std::runtime_error("Table view is available only for .csv files.");
+        (*csv_).set_source((*text_).text());
+    }
+    csv_visible_ = show;
+    (*text_).set_visible(!show);
+    (*csv_).set_visible(show);
+    refresh();
+    focus_text();
 }
 gf::HostDialogChoice Editor::message(std::string title, std::string text,
                                      gf::HostMessageButtons buttons) {
@@ -303,6 +357,7 @@ void Editor::open_file(const std::filesystem::path &source) {
         throw std::runtime_error(
             "This development editor supports up to 1 MiB of UTF-8 text and 4096 UTF-8 bytes per "
             "logical line. The current document was kept.");
+    show_csv(false);
     (*text_).set_text(next.saved_text);
     document_ = std::move(next);
     (*text_).set_newline_sequence(preferred_newline(document_.saved_text));
@@ -345,15 +400,32 @@ void Editor::execute(const std::string &id) {
             save(true);
         else if (id == "exit")
             static_cast<void>(handle_.request_close());
+        else if (id == "csv-view")
+            show_csv(!csv_visible_);
+        else if (id == "csv-convert-value")
+            (*csv_).convert_to_value();
+        else if (id == "csv-clear")
+            (*csv_).clear_cells();
         else if (id == "undo")
             (*text_).undo();
         else if (id == "redo")
             (*text_).redo();
-        else if (id == "cut")
-            (*text_).cut();
-        else if (id == "copy")
-            (*text_).copy();
-        else if (id == "paste") {
+        else if (id == "cut" || id == "copy") {
+            if (csv_visible_) {
+                if (!window() || !(*window()).host_services())
+                    throw std::runtime_error("Clipboard service is unavailable.");
+                const std::string copied = (*csv_).copy_cells();
+                const gf::HostServiceStatus status =
+                    (*(*window()).host_services()).write_clipboard_text(copied);
+                if (!status.accepted())
+                    throw std::runtime_error("Clipboard copy failed; cells are unchanged.");
+                if (id == "cut")
+                    (*csv_).clear_cells();
+            } else if (id == "cut")
+                (*text_).cut();
+            else
+                (*text_).copy();
+        } else if (id == "paste") {
             if (!window() || !(*window()).host_services())
                 throw std::runtime_error("Clipboard service is unavailable.");
             const gf::HostClipboardTextResult clip =
@@ -367,6 +439,10 @@ void Editor::execute(const std::string &id) {
                     gf::HostMessageButtons::yes_no);
                 if (choice != gf::HostDialogChoice::yes)
                     return;
+            }
+            if (csv_visible_) {
+                (*csv_).commit_cell(clip.text_utf8);
+                return;
             }
             std::string candidate = std::string((*text_).text());
             candidate.replace((*text_).selection().start().value(), (*text_).selection().length(),
@@ -414,9 +490,12 @@ void Editor::execute(const std::string &id) {
             (*text_).select_all();
             (*text_).replace_selection(converted);
             (*text_).set_newline_sequence(ending);
-        } else if (id == "delete")
-            (*text_).delete_selection();
-        else if (id == "select-all")
+        } else if (id == "delete") {
+            if (csv_visible_)
+                (*csv_).clear_cells();
+            else
+                (*text_).delete_selection();
+        } else if (id == "select-all")
             (*text_).select_all();
         else if (id == "find" || id == "replace")
             show_find();
