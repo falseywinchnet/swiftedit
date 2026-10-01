@@ -1,4 +1,5 @@
 #include "terminal_buffer.hpp"
+#include "terminal_row.hpp"
 #include <iostream>
 #include <fstream>
 #include <windows.h>
@@ -109,6 +110,33 @@ int main() {
         terminal.save_as(saved);
         check(!terminal.session().dirty() && !terminal.undo(),
               "Terminal save establishes shared undo boundary");
+        check(swiftedit::terminal_glyph("\xe4\xb8\xad", 0).cells == 2,
+              "CJK uses two terminal cells");
+        check(swiftedit::terminal_glyph("e\xcc\x81", 0).cells == 1,
+              "Combining mark does not add a cell");
+        check(swiftedit::terminal_glyph("\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x91\xa9", 0).cells ==
+                  2,
+              "Joined emoji occupies two cells");
+        check(swiftedit::terminal_glyph("\t", 3).text == " ", "Tabs use four-cell stops");
+        const swiftedit::TerminalGlyph escape = swiftedit::terminal_glyph("\x1b", 0);
+        check(escape.label && escape.text == "[U+001B]", "Escape control is visible inert text");
+        check(swiftedit::terminal_glyph("\xe2\x80\xae", 0).text == "[U+202E]",
+              "Bidi override is visibly labeled");
+        check(swiftedit::terminal_glyph(std::string("\xff", 1), 0).text == "[BYTE FF]",
+              "Malformed byte is visibly labeled");
+        terminal.reset();
+        terminal.insert("A\xe4\xb8\xad\tZ");
+        terminal.move(swiftedit::TerminalMotion::document_start);
+        terminal.move(swiftedit::TerminalMotion::right);
+        terminal.move(swiftedit::TerminalMotion::right, true);
+        const swiftedit::TerminalRow row = swiftedit::terminal_row(terminal, 0, 0, 8);
+        check(row.total_cells == 5 && row.caret_column == 3 && row.runs.size() == 4 &&
+                  row.runs[1].selected && row.runs[1].cells == 2 && row.runs[2].cells == 1,
+              "Source selection and caret map to terminal cell columns");
+        const swiftedit::TerminalRow clipped = swiftedit::terminal_row(terminal, 0, 2, 2);
+        check(clipped.runs[0].text == " " && clipped.runs[0].source.length == 3 &&
+                  clipped.clipped_left && clipped.clipped_right && clipped.caret_column == 1,
+              "Partial wide glyph never emits a broken character or changes its source range");
         std::cout << "Terminal navigation and shared edit tests passed.\n";
         return 0;
     } catch (const std::exception &failure) {

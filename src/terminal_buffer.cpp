@@ -233,4 +233,14 @@ std::size_t TerminalBuffer::line_count() {
     const std::size_t result = (*navigation_).line_count();
     return result;
 }
+SourceRange TerminalBuffer::grapheme_range(std::size_t byte_offset) {
+    synchronize();
+    if (byte_offset >= session_.text().size() ||
+        !(*navigation_).is_grapheme_boundary(gf::Utf8Offset(byte_offset)))
+        throw std::runtime_error("Terminal glyph offset must start a source grapheme.");
+    const gf::GraphemeIndex index = (*navigation_).grapheme_index(gf::Utf8Offset(byte_offset));
+    const gf::Utf8Range range = (*navigation_).grapheme_range(index);
+    const SourceRange result{range.start.value(), range.end.value() - range.start.value()};
+    return result;
+}
 } // namespace swiftedit

@@ -395,3 +395,29 @@ input loop, safe Unicode cell layout, large-file terminal pagination, shortcuts,
 search/wildcard controls and interactive validation remain. Full metadata rebuild
 on a changed editable buffer is synchronous and needs measurement/optimization
 before a responsiveness claim.
+
+## Terminal cell layout - 2026-10-01
+
+Pinned Unicode 17 EastAsianWidth.txt and emoji-data.txt alongside the existing
+UnicodeData.txt and Unicode license. tools/Generate-TerminalUnicode.py verifies
+all input hashes and generates 520 classification ranges. Regeneration is
+identical (terminal_unicode.inc SHA-256
+D36984E4D2128ECAC3DA045BFE67FB4EE6D7ECC06052E53B27535BBB5668354F).
+Sources: https://www.unicode.org/Public/17.0.0/ucd/EastAsianWidth.txt and
+https://www.unicode.org/Public/17.0.0/ucd/emoji/emoji-data.txt .
+
+TerminalGlyph emits inert ASCII labels for control/malformed source, retains
+printable graphemes, uses four-cell tab stops and a declared cell-width policy.
+TerminalRow maps logical source lines, selection and caret to horizontal cell
+viewports without slicing printable graphemes. Partial wide cells are blanked;
+label clipping never changes the atomic source range. Tests cover CJK, combining
+marks, joined emoji, tabs, escape/bidi controls, malformed bytes, selection/caret
+mapping and horizontal clipping. Twelve suites passed in 2.96 s. House-style
+spelling: zero findings in 51 authored files, plus semantic boundedness and
+source/display review.
+
+No claim of console-host compatibility or completed terminal UI: native console
+render/input integration is next. Width policy is a declared Unicode-based
+approximation requiring host validation, especially complex-script clusters and
+emoji/text variation. Current row construction scans the whole logical line;
+long-line latency and caching/yielding remain part of the unfinished lag work.

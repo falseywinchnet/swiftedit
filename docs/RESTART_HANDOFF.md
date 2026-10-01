@@ -74,3 +74,10 @@ model alone is not the promised nano-like UI. Metadata rebuilding is synchronous
 final lag scan remains outstanding. Private navigation placeholders never reach
 source/output. Session still refuses newly inserted malformed UTF-8, including
 an internally cut malformed sequence; resolve explicitly during terminal work.
+
+2026-10-01 terminal layout checkpoint: TerminalGlyph/TerminalRow now provide
+inert control/illegal-byte labels, Unicode 17 width policy, tab expansion,
+source/selection/caret cell mapping and horizontal clipping. New pinned width/
+emoji sources and deterministic generator are checked in. Twelve suites pass;
+51-file spelling scan clean. Console host/input loop is still next. Do not claim
+host Unicode geometry proven; row construction still scans a full logical line.

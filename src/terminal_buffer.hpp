@@ -32,6 +32,7 @@ public:
     std::size_t line_index();
     SourceRange line_range(std::size_t);
     std::size_t line_count();
+    SourceRange grapheme_range(std::size_t byte_offset);
 
 private:
     void synchronize();
