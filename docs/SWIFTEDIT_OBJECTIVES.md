@@ -24,7 +24,7 @@ precedence. The previous DECISIONS.md is historical implementation evidence.
 | Controls, later correction | Existing Unicode controls remain real editable content, shown visibly and inert | Session preserves valid UTF-8 controls; terminal transport escapes all controls; GUI glyphs/inspector/pickers pending |
 | Selection | Ctrl/Cmd+drag discontiguous selection; equal lengths parallel edits, unequal lengths copy-only | Provider only has one anchor/caret pair; pending provider contract |
 | Search | Flagged single-character wildcard slot; literal punctuation remains literal; no regex | Native flagged query field/right-click, grapheme Find/Replace and wrapping; normalized Ctrl+? tested, native host mapping and interruptible orchestration pending |
-| Status | Grapheme character count, selection length; separate word-count tool | GUI counts graphemes; column still scalar-based; Document > Word Count reports document/selection; CLI shares counting core |
+| Status | Grapheme character count, selection length; separate word-count tool | GUI count, selection length and column use graphemes; line lookup uses cached line starts; Document > Word Count reports document/selection; CLI shares counting core |
 | Navigation | Paged navigation, draggable scrollbar; no jump-byte/jump-line product UI | Low-level CLI byte page cursor implemented; GUI scrollbar/virtualization pending |
 | Wrap, 02:32 | No wrap / wrap to window; intelligent breaks at spaces by default, visual only | Existing provider space/tab wrap with grapheme fallback; no separate preference yet |
 | Insert, 02:32 | Date and time as plain text | Document menu + F5, local ISO-style timestamp |
@@ -35,6 +35,7 @@ precedence. The previous DECISIONS.md is historical implementation evidence.
 | Print | Native OS print, plain/rendered; separate Markdown layout preview without source mutation | Pending public print/preview contract |
 | CSV | `.csv` only, real quoting, flat table, rectangle selection; Delete clears cells without shifting | Native source/table toggle, bounded visible grid, rectangle clear, source entry, scrollbars and CLI; broad desktop QA pending |
 | CSV math, 02:43–46 and 2026-10-01 corrections | Enter stores formula and displays result; menu and right-click Convert to Value; strict exact math/errors/reference hover | Formula dependency evaluation, cycles/depth/work refusal, native formula entry/results/hover highlights and both conversion menus implemented; viewport performance and desktop QA pending |
+| CSV code shading, 02:36 | Triple backticks in a cell give it a gray background; no HTML formatting or hierarchy | The table uses its themed code background for cells containing triple backticks. Source characters remain visible and unchanged; selection highlighting takes precedence. Native visual QA pending |
 | Lifetime | Multiple independent document windows; no tabs or persistent recovery/history | Multiple executable instances work; in-process New Window command pending |
 
 ## Deliberate implementation choices, not additional owner answers

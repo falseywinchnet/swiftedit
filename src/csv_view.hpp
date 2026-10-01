@@ -42,7 +42,7 @@ private:
     struct CellDisplay {
         std::string text{}, detail{};
         std::set<std::pair<std::size_t, std::size_t>> visible_references{};
-        bool formula{}, error{};
+        bool formula{}, error{}, code_background{};
     };
     std::weak_ptr<CsvView> observe();
     void prepare_view();

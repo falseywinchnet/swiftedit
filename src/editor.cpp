@@ -280,23 +280,25 @@ void Editor::refresh() {
     (*name_).set_text((document_.dirty(content) ? "* " : "") +
                       (document_.path.empty() ? "Untitled" : path_utf8(document_.path)));
     const std::size_t caret = std::min((*text_).selection().caret.value(), content.size());
-    std::size_t line = 1, column = 1;
-    for (std::size_t i = 0; i < caret; ++i) {
-        if (content[i] == '\r') {
-            ++line;
-            column = 1;
-            if (i + 1 < caret && content[i + 1] == '\n')
-                ++i;
-        } else if (content[i] == '\n') {
-            ++line;
-            column = 1;
-        } else if ((static_cast<unsigned char>(content[i]) & 0xc0) != 0x80)
-            ++column;
-    }
     if (content != counted_text_.utf8()) {
         counted_text_.set_text(content);
         character_count_ = counted_text_.grapheme_count().value();
     }
+    // Find the last indexed line start at or before the caret. Line starts
+    // include zero even for an empty document; low is the one-based line number.
+    std::size_t low = 0, high = counted_text_.line_count();
+    while (low < high) {
+        const std::size_t middle = low + (high - low) / 2;
+        if (counted_text_.line_start(gf::LineIndex(middle)).value() <= caret)
+            low = middle + 1;
+        else
+            high = middle;
+    }
+    const std::size_t line = low;
+    const gf::Utf8Offset line_start = counted_text_.line_start(gf::LineIndex(line - 1));
+    const std::size_t line_character = counted_text_.grapheme_index(line_start).value();
+    const std::size_t caret_character = counted_text_.grapheme_index(gf::Utf8Offset(caret)).value();
+    const std::size_t column = caret_character - line_character + 1;
     const gf::TextSelection selection = (*text_).selection();
     const std::size_t first_character = counted_text_.grapheme_index(selection.start()).value();
     const std::size_t last_character = counted_text_.grapheme_index(selection.end()).value();

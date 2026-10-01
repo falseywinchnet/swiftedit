@@ -210,3 +210,14 @@ for source/SDK pins, checksums, packaging/sign/startup evidence and limitations.
 The earlier missing-SDK/Mac-app gate is resolved. Next work resumes the unfinished
 expanded feature set, especially shared-session GUI migration and public-provider
 coordination; the final end-to-end lag/bug scan remains pending.
+
+2026-10-01 continued consumer work: CSV cells containing triple backticks now use
+the theme's code background, preserving literal source and selection priority.
+This explicit 02:36 owner requirement was missing from the ledger and is now
+recorded. Status columns now count graphemes, using binary lookup over the
+existing TextStore line starts instead of scanning from the document beginning.
+Regressions cover combining marks, joined emoji, CRLF/mixed endings, trailing
+empty lines and empty content. Local pinned-SDK build and 16 suites passed in
+2.29 s; 71-file C++ spelling scan clean. Cross-platform native CI is pending.
+The provider coordinator resumed A2; it remains a visual-only initial service,
+not the D4 editing capability required for complete GUI migration.

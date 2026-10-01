@@ -168,10 +168,38 @@ void verify_callback_revocation() {
     retained_closing(expired_close);
     check(!expired_close.cancel, "Retained closing callback ignores destroyed editor");
 }
+void verify_grapheme_status() {
+    const std::shared_ptr<notepad::Editor> editor =
+        gf::make_control<notepad::Editor>(gf::StableId("test.status-editor"));
+    gf::Window window(editor, {800, 600});
+    const std::shared_ptr<gf::TextBox> text = (*editor).text_control();
+    const std::shared_ptr<gf::Label> status =
+        std::dynamic_pointer_cast<gf::Label>(window.find("notepad.status"));
+    check(status != nullptr, "Status label exists");
+    const std::string first_line = "e\xcc\x81\xf0\x9f\x91\xa9\xe2\x80\x8d\xf0\x9f\x92\xbb";
+    (*text).set_text(first_line + "\r\nx\rz\n");
+    (*text).select(gf::Utf8Offset(3), gf::Utf8Offset(3));
+    check((*status).text().starts_with("Ln 1, Col 2 |"),
+          "Combining sequence advances one displayed character column");
+    (*text).select(gf::Utf8Offset(first_line.size()), gf::Utf8Offset(first_line.size()));
+    check((*status).text().starts_with("Ln 1, Col 3 |"),
+          "Joined emoji advances one displayed character column");
+    const gf::Utf8Offset second_line(first_line.size() + 2);
+    (*text).select(second_line, second_line);
+    check((*status).text().starts_with("Ln 2, Col 1 |"), "CRLF is one line break");
+    const gf::Utf8Offset end((*text).text().size());
+    (*text).select(end, end);
+    check((*status).text().starts_with("Ln 4, Col 1 |"),
+          "Mixed endings and trailing empty line use indexed line starts");
+    (*text).set_text("");
+    check((*status).text().starts_with("Ln 1, Col 1 | 0 characters |"),
+          "Empty document starts at line one column one");
+}
 int main() {
     try {
         verify_callback_revocation();
         verify_conflict_fields();
+        verify_grapheme_status();
         namespace gf = gui_forms;
         const std::shared_ptr<notepad::Editor> editor =
             gf::make_control<notepad::Editor>(gf::StableId("test.editor"));

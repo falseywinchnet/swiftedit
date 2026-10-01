@@ -134,6 +134,7 @@ void CsvView::prepare_view() {
             const swiftedit::Cell &cell = (*table_).cell(address);
             CellDisplay display{};
             display.formula = cell.value.starts_with('=');
+            display.code_background = cell.value.find("```") != std::string::npos;
             try {
                 const swiftedit::Calculation value = swiftedit::calculate_cell(*table_, address);
                 display.text = cell_label(value.result);
@@ -378,6 +379,8 @@ void CsvView::on_paint(gf::Painter &painter, gf::Rect) {
                               column <= std::max(anchor_.column, caret_.column);
         if (selected)
             painter.fill_rect(rect, style.accent_light);
+        else if (entry.second.code_background)
+            painter.fill_rect(rect, style.face_light);
         painter.stroke_rect(rect, style.border, 1);
         if (hover && (*hover).visible_references.contains(entry.first))
             painter.stroke_rect(rect, style.accent, 2);
