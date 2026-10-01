@@ -67,4 +67,5 @@ jobs:
           path: |
             .build/native-${{ matrix.platform }}/Testing/Temporary/
             .build/native-${{ matrix.platform }}/mac-package-*/startup.log
+            .build/native-${{ matrix.platform }}/mac-package-*/idle-stack*.txt
           if-no-files-found: ignore

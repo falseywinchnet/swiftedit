@@ -80,6 +80,24 @@ def wait_alive(child: subprocess.Popen[bytes], seconds: int, log: Path) -> None:
     raise RuntimeError('Packaged app exited during observation; inspect ' + str(log))
 
 
+def sample_idle_stack(pid: int, stage: Path) -> str:
+    """Sample only the owned child, after the CPU interval to avoid measurement overlap."""
+    report: Path = stage / 'idle-stack.txt'
+    diagnostic: Path = stage / 'idle-stack-status.txt'
+    try:
+        result: subprocess.CompletedProcess[str] = subprocess.run(
+            ['/usr/bin/sample', str(pid), '5', '1', '-file', str(report)],
+            check=False, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            timeout=30)
+    except subprocess.TimeoutExpired:
+        diagnostic.write_text('Stack sampling exceeded the 30-second bound.\n', encoding='utf-8')
+        return 'unavailable: sampling timeout'
+    diagnostic.write_text(result.stdout, encoding='utf-8')
+    if result.returncode != 0 or not report.is_file():
+        return 'unavailable: inspect idle-stack-status.txt'
+    return 'captured: idle-stack.txt; five seconds at one millisecond intervals'
+
+
 def verify_startup(executable: Path, stage: Path) -> dict[str, object]:
     """Own one child and a disposable fixture; always reap the child on exit."""
     fixture: Path = stage / 'startup-fixture.txt'
@@ -111,6 +129,8 @@ def verify_startup(executable: Path, stage: Path) -> dict[str, object]:
                 'scope': 'ten quiet seconds with an empty text fixture on the CI runner; '
                          'focus and occlusion not controlled; no idle-performance pass threshold'}
             print('Packaged idle CPU: ' + json.dumps(observation))
+            observation['stack_sample'] = sample_idle_stack(child.pid, stage)
+            wait_alive(child, 1, log)
             return observation
         finally:
             if child.poll() is None:
