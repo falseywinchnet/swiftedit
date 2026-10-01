@@ -28,7 +28,9 @@ import and column resizing are not implemented.
   cancel stale work; snapshot/final-publication latency still needs measurement.
   No regex, whole-word
   or selection-only modes.
-- No printing/page setup, Characters dialog, syntax
+- Character Inspector reports selected/caret Unicode values; the full Unicode
+  picker and separate explanatory control insertion dialog remain unfinished.
+- No printing/page setup, syntax
   colors, settings persistence, recovery files, installer, file association or
   OS-default changes.
 - External changes are checked during saving. There is no filesystem watcher,

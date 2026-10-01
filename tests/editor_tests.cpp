@@ -350,6 +350,15 @@ int main() {
         check(!(*editor).search_pending() && (*text).text() == replacement_source &&
                   (*text).selection() == before_failed_replace,
               "Oversized replacement line is refused without content or selection mutation");
+        (*text).set_text("e\xcc\x81");
+        (*text).select(gf::Utf8Offset(0), gf::Utf8Offset(0));
+        const gf::TextSelection inspector_selection = (*text).selection();
+        (*editor).execute("inspect-characters");
+        check(services.last_message.find("COMBINING ACUTE ACCENT") != std::string::npos &&
+                  services.last_message.find("U+0065") != std::string::npos,
+              "Inspector at caret covers the complete combining grapheme");
+        check((*text).text() == "e\xcc\x81" && (*text).selection() == inspector_selection,
+              "Inspector preserves source and selection");
         std::cout << "Editor headless tests passed: native control input routing, CRLF, menu "
                      "edit/save, undo boundary, mixed endings, oversized-line refusal.\n";
         return 0;

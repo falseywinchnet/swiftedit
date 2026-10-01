@@ -65,6 +65,10 @@ try {
     Copy-Item -LiteralPath "$build/swiftedit-cli.exe" -Destination $stage -Force
     Copy-Item -LiteralPath "$repo/README.md" -Destination $stage -Force
     Copy-Item -LiteralPath "$repo/docs" -Destination $stage -Recurse -Force
+    $licenseStage = Join-Path $stage 'licenses'
+    New-Item -ItemType Directory -Path $licenseStage -Force | Out-Null
+    Copy-Item -LiteralPath "$repo/third_party/unicode/LICENSE.txt" -Destination (Join-Path $licenseStage 'Unicode.txt') -Force
+    Copy-Item -LiteralPath "$repo/third_party/md4c/LICENSE.md" -Destination (Join-Path $licenseStage 'MD4C.md') -Force
     Copy-Item -LiteralPath "$GuiSdk/share/GUIForms/fonts" -Destination $stage -Recurse -Force
     $queue = [System.Collections.Generic.Queue[string]]::new()
     $queue.Enqueue("$stage/SwiftEdit.exe")

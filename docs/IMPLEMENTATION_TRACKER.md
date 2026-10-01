@@ -20,6 +20,9 @@ a measured lag/bug scan. This file tracks work; unchecked items are not complete
 - [ ] Native Markdown rendering, inert links, source toggle and rendered ruler.
 - [ ] Native print, Markdown layout preview, multiple independent windows.
 - [ ] Character/control inspector and insertion tools.
+  - Inspector is implemented, with Unicode 17 catalog, safe control/illegal-byte
+    reporting and full-grapheme-at-caret inspection. Separate picker dialogs and
+    insertion workflows remain unfinished.
 - [ ] Final native interaction/visual checks and measured lag scan/fixes.
 
 CSV clarification: Enter stores a formula and displays its result. Convert to

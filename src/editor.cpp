@@ -1,5 +1,6 @@
 #include "editor.hpp"
 #include "session.hpp"
+#include "characters.hpp"
 #include <algorithm>
 #include <chrono>
 #include <ctime>
@@ -178,6 +179,7 @@ void Editor::initialize_control_tree() {
           "&Document",
           {item("restore-opened", "Restore As &Opened..."),
            item("date-time", "Insert &Date and Time", "F5"), item("word-count", "&Word Count..."),
+           item("inspect-characters", "Inspect &Characters..."),
            item("newline-lf", "Convert Line Endings to &LF"),
            item("newline-crlf", "Convert Line Endings to &CRLF")}},
          {"format", "F&ormat", {item("wrap", "&Word Wrap"), item("font", "&Font...")}},
@@ -490,6 +492,18 @@ void Editor::execute(const std::string &id) {
                 throw std::runtime_error("Paste exceeds this GUI's document/line limits or "
                                          "contains invalid UTF-8. No text was changed.");
             (*text_).replace_selection(clip.text_utf8);
+        } else if (id == "inspect-characters") {
+            const gf::TextSelection selected = (*text_).selection();
+            const std::string_view content = (*text_).text();
+            std::size_t first = selected.start().value();
+            std::size_t length = selected.length();
+            if (!length && first < content.size()) {
+                const gf::Utf8Offset end =
+                    counted_text_.next_grapheme_boundary(gf::Utf8Offset(first));
+                length = end.value() - first;
+            }
+            const std::string report = swiftedit::inspect_characters(content.substr(first, length));
+            message("Character Inspector", report);
         } else if (id == "restore-opened") {
             const gf::HostDialogChoice choice =
                 message("Restore as opened?",

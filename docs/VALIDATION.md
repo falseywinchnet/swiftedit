@@ -245,3 +245,26 @@ and an oversized logical line preserves source and selection. All eight headless
 suites passed in 1.84 s; C++ spelling scan has zero findings in 32 authored files.
 Snapshot construction and final validation/publication still run synchronously
 and remain part of the final measured lag scan; native performance is not certified.
+
+## 2026-10-01 Unicode catalog and character inspection
+
+Added pinned Unicode 17.0.0 UnicodeData and NameAliases inputs with SHA-256 checks,
+upstream license/provenance and a deterministic offline generator. The immutable
+catalog uses binary search across 40555 assigned records/ranges. Hangul and unified
+ideograph range names are generated from code point values; private-use entries
+identify font/agreement-dependent meaning. Ordinary/control categories are separate;
+surrogates, unassigned values and noncharacters are excluded from insertion encoding.
+
+Document > Inspect Characters reports code points, names/categories and exact UTF-8
+bytes for a selection or the caret's full grapheme. Output is bounded to 32 scalar
+values/illegal bytes and emits no source controls. Specific explanations exist for
+common controls; other entries currently have category explanations. Separate picker
+dialogs and their insertion workflows are not yet implemented.
+
+Core tests cover ASCII, C0/C1 aliases, bidi controls, Hangul range endpoints, CJK,
+supplementary encoding, NUL preservation, invalid scalar input, category filtering,
+safe illegal-byte inspection and bounded output. GUI test verifies combining-grapheme
+inspection and unchanged source/selection. Nine suites passed in 2.09 s; final affected
+character/editor tests passed in 0.34 s. Generator rerun succeeded against pinned hashes.
+Packaging/install definitions now include Unicode and MD4C licenses; no new binary
+stage or native desktop validation is claimed at this checkpoint.
