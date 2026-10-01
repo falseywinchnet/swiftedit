@@ -1,6 +1,7 @@
 #include "markdown_view.hpp"
 #include "query_field.hpp"
 #include "csv_view.hpp"
+#include <algorithm>
 #include <iostream>
 #include <stdexcept>
 
@@ -9,6 +10,8 @@ class ObservingPainter final : public gf::Painter {
 public:
     std::size_t measurements{}, texts{};
     std::string drawn{};
+    std::vector<std::string> labels{};
+    std::size_t reference_outlines{};
     bool fail_measurement{};
     gf::Point translation{};
     void save() override {}
@@ -16,7 +19,10 @@ public:
     void translate(gf::Point point) override { translation = point; }
     void clip_rect(gf::Rect) override {}
     void fill_rect(gf::Rect, gf::Color) override {}
-    void stroke_rect(gf::Rect, gf::Color, double) override {}
+    void stroke_rect(gf::Rect, gf::Color, const double width) override {
+        if (width == 2)
+            ++reference_outlines;
+    }
     void draw_line(gf::Point, gf::Point, gf::Color, double) override {}
     void draw_image(gf::ImageId, gf::Rect, double) override {
         throw std::runtime_error("Markdown must not load image resources.");
@@ -24,6 +30,7 @@ public:
     void draw_text_utf8(gf::Point, std::string_view text, gf::FontSpec, gf::Color) override {
         ++texts;
         drawn.append(text);
+        labels.emplace_back(text);
     }
     gf::Size measure_text_utf8(std::string_view text, gf::FontSpec font) override {
         ++measurements;
@@ -37,8 +44,45 @@ void check(bool good, const char *message) {
     if (!good)
         throw std::runtime_error(message);
 }
+void verify_duplicate_formulas() {
+    const std::shared_ptr<notepad::CsvView> grid =
+        gf::make_control<notepad::CsvView>(gf::StableId("formulas.csv"));
+    gf::Window window(grid, {800, 600});
+    (*grid).set_source("21,=A1*2,=A1*2\n5,=A1*2,=A1*2");
+    window.perform_layout();
+    ObservingPainter first{};
+    (*grid).on_paint(first, {0, 0, 800, 600});
+    check(std::count(first.labels.begin(), first.labels.end(), "42") == 4,
+          "Identical formulas at different addresses retain all displayed results");
+    gf::PointerEvent hover{};
+    hover.action = gf::PointerAction::move;
+    hover.position = {354, 106}; // C2, a reused formula display.
+    (*grid).on_pointer(hover);
+    ObservingPainter highlighted{};
+    (*grid).on_paint(highlighted, {0, 0, 800, 600});
+    check(highlighted.reference_outlines == 1 && (*grid).status() == "=A1*2 | References: A1",
+          "Reused formula preserves reference tooltip and visible reference outline");
+    (*grid).set_source("3,=A1*2,=A1*2\n5,=A1*2,=A1*2");
+    ObservingPainter edited{};
+    (*grid).on_paint(edited, {0, 0, 800, 600});
+    check(std::count(edited.labels.begin(), edited.labels.end(), "6") == 4 &&
+              std::count(edited.labels.begin(), edited.labels.end(), "42") == 0,
+          "Source change cannot reuse a previous refresh's calculation");
+    (*grid).set_source("=B1,=B1\n1,=A2");
+    ObservingPainter cyclic{};
+    (*grid).on_paint(cyclic, {0, 0, 800, 600});
+    check(std::count(cyclic.labels.begin(), cyclic.labels.end(), "#ERROR") == 2,
+          "Identical cyclic formulas remain errors at both root addresses");
+    (*grid).set_source("7,=A1,=A1");
+    ObservingPainter recovered{};
+    (*grid).on_paint(recovered, {0, 0, 800, 600});
+    check(std::count(recovered.labels.begin(), recovered.labels.end(), "7") == 3 &&
+              std::count(recovered.labels.begin(), recovered.labels.end(), "#ERROR") == 0,
+          "Repairing formula source clears all previous errors");
+}
 int main() {
     try {
+        verify_duplicate_formulas();
         const std::shared_ptr<notepad::CsvView> grid =
             gf::make_control<notepad::CsvView>(gf::StableId("test.csv"));
         gf::Window grid_window(grid, {800, 600});

@@ -157,6 +157,12 @@ void CsvView::prepare_view() {
     if (tooltip_)
         (*tooltip_).hide();
     const std::size_t row_end = std::min((*table_).rows().size(), top_ + visible_rows_);
+    // The table and viewport stay fixed throughout this synchronous refresh.
+    // Reuse only successful identical formula displays: absolute references
+    // have identical results/highlights, and success excludes a root-dependent
+    // cycle. Borrowed keys and source addresses expire before any table edit.
+    // Reuse display records rather than retaining potentially huge reference lists.
+    std::map<std::string_view, swiftedit::CellAddress> formula_sources{};
     for (std::size_t row = top_; row < row_end; ++row) {
         const std::size_t column_end =
             std::min((*table_).rows()[row].size(), left_ + visible_columns_);
@@ -165,6 +171,16 @@ void CsvView::prepare_view() {
             const swiftedit::Cell &cell = (*table_).cell(address);
             CellDisplay display{};
             display.formula = cell.value.starts_with('=');
+            if (display.formula) {
+                const std::map<std::string_view, swiftedit::CellAddress>::const_iterator found =
+                    formula_sources.find(cell.value);
+                if (found != formula_sources.end()) {
+                    const swiftedit::CellAddress previous = (*found).second;
+                    const CellDisplay &prepared = cells_.at({previous.row, previous.column});
+                    cells_.emplace(std::pair<std::size_t, std::size_t>{row, column}, prepared);
+                    continue;
+                }
+            }
             display.code_background = cell.value.find("```") != std::string::npos;
             try {
                 const swiftedit::Calculation value = swiftedit::calculate_cell(*table_, address);
@@ -187,7 +203,10 @@ void CsvView::prepare_view() {
                 display.detail = failure.what();
                 display.error = true;
             }
+            const bool reusable = display.formula && !display.error;
             cells_.emplace(std::pair<std::size_t, std::size_t>{row, column}, std::move(display));
+            if (reusable)
+                formula_sources.emplace(cell.value, address);
         }
     }
     cached_rows_ = visible_rows_;

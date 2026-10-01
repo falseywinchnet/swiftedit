@@ -9,6 +9,7 @@ namespace gf = gui_forms;
 class ResultPainter final : public gf::Painter {
 public:
     std::size_t results{};
+    std::string expected{"1024"};
     bool error{};
     void save() override {}
     void restore() override {}
@@ -19,7 +20,7 @@ public:
     void draw_line(gf::Point, gf::Point, gf::Color, double) override {}
     void draw_image(gf::ImageId, gf::Rect, double) override {}
     void draw_text_utf8(gf::Point, std::string_view text, gf::FontSpec, gf::Color) override {
-        if (text == "1024")
+        if (text == expected)
             ++results;
         if (text == "#ERROR")
             error = true;
@@ -27,19 +28,21 @@ public:
 };
 int main(int argc, char **argv) {
     try {
-        if (argc != 2)
-            throw std::runtime_error("Usage: swiftedit-csv-view-bench samples.csv");
+        if (argc != 2 && (argc != 3 || std::string_view(argv[2]) != "--large"))
+            throw std::runtime_error("Usage: swiftedit-csv-view-bench samples.csv [--large]");
         std::ofstream output(argv[1]);
         if (!output)
             throw std::runtime_error("Cannot write benchmark samples.");
         output << "sample,milliseconds\n" << std::fixed << std::setprecision(6);
         std::string source{};
-        for (std::size_t row = 0; row < 512; ++row) {
+        const std::size_t rows = argc == 3 ? 8192 : 512;
+        const std::string formula = ",=SUM(A1:A" + std::to_string(rows) + ")";
+        for (std::size_t row = 0; row < rows; ++row) {
             if (row)
                 source += '\n';
             source += '2';
             for (std::size_t column = 1; column < 8; ++column)
-                source += ",=SUM(A1:A512)";
+                source += formula;
         }
         const std::shared_ptr<notepad::CsvView> view =
             gf::make_control<notepad::CsvView>(gf::StableId("bench.csv"));
@@ -57,6 +60,7 @@ int main(int argc, char **argv) {
             const std::chrono::duration<double, std::milli> elapsed =
                 std::chrono::steady_clock::now() - start;
             ResultPainter painter{};
+            painter.expected = std::to_string(rows * 2);
             (*view).on_paint(painter, {0, 0, 800, 600});
             if (!wheel.handled || painter.error || painter.results != 85)
                 throw std::runtime_error(
