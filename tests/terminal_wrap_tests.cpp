@@ -1,4 +1,5 @@
 #include "terminal_wrap.hpp"
+#include "terminal_wrap_view.hpp"
 #include "platform.hpp"
 #include <fstream>
 #include <iostream>
@@ -57,8 +58,55 @@ void verify(swiftedit::TerminalBuffer &buffer, std::size_t line, std::size_t wid
           "Visual wrapping must not edit the document");
 }
 } // namespace
+void verify_view() {
+    swiftedit::TerminalBuffer buffer{};
+    swiftedit::TerminalWrapView view{};
+    buffer.insert("abcdef\r\nx\r\nabcdef");
+    buffer.move_to(2, buffer.session().stamp());
+    view.move(buffer, swiftedit::TerminalMotion::down, false, 1, 3);
+    check(buffer.selection().caret == 5, "Down moves by a visual row");
+    view.move(buffer, swiftedit::TerminalMotion::down, false, 1, 3);
+    check(buffer.selection().caret == 6, "Down enters the empty full-width continuation");
+    view.move(buffer, swiftedit::TerminalMotion::down, false, 1, 3);
+    check(buffer.selection().caret == 9, "Short logical line clamps the desired display column");
+    view.move(buffer, swiftedit::TerminalMotion::down, false, 1, 3);
+    check(buffer.selection().caret == 13, "Longer row restores the desired display column");
+    view.move(buffer, swiftedit::TerminalMotion::up, true, 4, 3);
+    check(buffer.selection().caret == 2 && buffer.selection().anchor == 13,
+          "Page-sized backwards navigation preserves the anchor across CRLF");
+    const std::vector<swiftedit::TerminalWrappedRow> &first = view.frame(buffer, 3, 2);
+    check(first.size() == 2 && first[0].display.caret_column == 2,
+          "Viewport reveals caret above its old top");
+    view.move(buffer, swiftedit::TerminalMotion::document_end, false, 1, 3);
+    const std::vector<swiftedit::TerminalWrappedRow> &last = view.frame(buffer, 3, 2);
+    check(last.size() == 2 && last[1].display.caret_column == 0,
+          "Viewport reveals final continuation at its bottom");
+    const std::vector<swiftedit::TerminalWrappedRow> &resized = view.frame(buffer, 4, 2);
+    check(!resized.empty() && resized[0].display.caret_column == 2,
+          "Width change recomputes the source caret's visual row");
+    view.move(buffer, swiftedit::TerminalMotion::home, false, 1, 4);
+    check(buffer.selection().caret == 15, "Home uses visual row start");
+    view.move(buffer, swiftedit::TerminalMotion::end, true, 1, 4);
+    check(buffer.selection().anchor == 15 && buffer.selection().caret == 17,
+          "Shift End uses visual row end");
+    buffer.insert("Z");
+    const std::vector<swiftedit::TerminalWrappedRow> &edited = view.frame(buffer, 4, 2);
+    check(edited[0].display.caret_column == 1, "An edit invalidates old wrap spans");
+    buffer.reset(true);
+    const std::vector<swiftedit::TerminalWrappedRow> &empty = view.frame(buffer, 4, 2);
+    check(empty.size() == 1 && empty[0].display.caret_column == 0,
+          "A new document invalidates retained viewport state");
+    bool refused = false;
+    try {
+        static_cast<void>(view.frame(buffer, 4, 297));
+    } catch (const std::exception &) {
+        refused = true;
+    }
+    check(refused, "Visible row retention has an explicit upper bound");
+}
 int main() {
     try {
+        verify_view();
         swiftedit::TerminalBuffer buffer{};
         verify(buffer, 0, 5, {""});
         buffer.insert("one two three");

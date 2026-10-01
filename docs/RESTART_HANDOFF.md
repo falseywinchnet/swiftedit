@@ -266,3 +266,27 @@ All 17 headless suites passed in 2.37s; the expanded column sweep passed afterwa
 The 74-file spelling audit was clean. These operations are not yet wired into
 the console viewport or keys; the integration and responsiveness work above
 remain required. No new native desktop launch was performed locally.
+
+2026-10-01 wrapped viewport integration: TerminalWrapView now owns a bounded
+visible-row collection and source-based visual navigation. Windows console F2
+toggles no-wrap/wrap-to-window; arrows, Page Up/Down, Home/End and Shift extension
+use visual rows when enabled. Ctrl+Home/End remain document motions. Width or
+document stamp changes invalidate geometry; vertical movement retains display
+column across shorter rows. Local 17-suite regression passed in 2.15s; 76-file
+spelling audit clean. Prior 9b1b0b2 native run 36856216549 and portable run
+36856216518 both succeeded on all platforms.
+
+Coordinated owned hidden-console smoke passed exit 0 in under one second on
+2026-10-01 04:39 local. It now also verifies F2, wrapped Down/Home insertion,
+exact saved source bytes, return to no-wrap and restored console mode. SHA256:
+3A4C4B9D94D05EA410FDD58A5C00590A5B7B2F371F6AB68CA481EA8427869F9D.
+Logs: .build/swiftedit-sdk-6def54a/wrap-smoke-20261001-043922.stdout.txt and
+.stderr.txt. Desktop slot released to coordinator immediately afterward.
+
+Next: measure and improve long-line wrap location/reverse movement. Current
+locate/previous scan logical lines synchronously and can repeat scans for a
+page; do not claim responsiveness/cancellation complete. First-use Unicode
+metadata is also synchronous. Geometry reset currently reveals caret at the
+top after an edit/resize; preserve useful scroll context during subsequent
+viewport refinement. Add measured long-line and resize evidence, then expand
+the remaining owner feature set/provider integration. The goal stays active.

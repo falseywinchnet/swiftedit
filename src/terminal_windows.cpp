@@ -1,4 +1,5 @@
 #include "terminal_row.hpp"
+#include "terminal_wrap_view.hpp"
 #include "terminal_page.hpp"
 #include "terminal_search.hpp"
 #include "terminal_query.hpp"
@@ -135,6 +136,8 @@ public:
 #ifdef SWIFTEDIT_TERMINAL_SMOKE
     std::size_t search_hits() const { return search_hits_; }
     std::size_t replacement_count() const { return replacement_.count(); }
+    std::size_t viewport_width() const { return width_; }
+    bool wraps() const { return wrap_; }
     bool wildcard_enabled() const {
         const swiftedit::SearchPattern pattern = query_.pattern();
         return pattern.slots()[0].wildcard;
@@ -258,6 +261,21 @@ private:
                 position(screen, run.row + 1, run.column);
                 screen += run.text;
             }
+        } else if (wrap_) {
+            const std::vector<swiftedit::TerminalWrappedRow> &wrapped =
+                wrap_view_.frame(buffer_, width_, rows_);
+            for (std::size_t row = 0; row < wrapped.size(); ++row) {
+                const swiftedit::TerminalRow &visible = wrapped[row].display;
+                for (const swiftedit::TerminalRun &run : visible.runs) {
+                    position(screen, row + 1, run.column);
+                    screen += run.selected ? "\x1b[7m" : "\x1b[0m";
+                    screen += run.text;
+                }
+                if (visible.caret_column) {
+                    cursor_column = visible.caret_column;
+                    cursor_row = row + 1;
+                }
+            }
         } else {
             const std::size_t caret_line = buffer_.line_index();
             if (caret_line < top_)
@@ -311,7 +329,7 @@ private:
                         "Read-only: PgDn Next  PgUp Previous  Ctrl+Home First  ^X Exit", width_);
         else
             status_line(screen, height - 1,
-                        "Shift+arrows Select  ^C Copy  ^K Cut line/selection  ^U Paste", width_);
+                        "Shift+arrows Select  ^C Copy  ^K Cut  ^U Paste  F2 Wrap", width_);
         if (prompt_ == Prompt::none && cursor_column) {
             position(screen, cursor_row, *cursor_column);
             screen += "\x1b[?25h";
@@ -354,6 +372,12 @@ private:
             input_ += text;
         } else
             buffer_.insert(text);
+    }
+    void move(swiftedit::TerminalMotion motion, bool extend, std::size_t count = 1) {
+        if (wrap_)
+            wrap_view_.move(buffer_, motion, extend, count, width_);
+        else
+            buffer_.move(motion, extend, count);
     }
     void key(const KEY_EVENT_RECORD &event) {
         const bool ctrl = (event.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) != 0;
@@ -504,33 +528,38 @@ private:
             }
         }
         switch (key) {
+        case VK_F2:
+            if (!buffer_.session().read_only()) {
+                wrap_ = !wrap_;
+                wrap_view_ = swiftedit::TerminalWrapView{};
+                status_ = wrap_ ? "Wrap to window" : "No wrap";
+            }
+            break;
         case VK_LEFT:
-            buffer_.move(swiftedit::TerminalMotion::left, shift);
+            move(swiftedit::TerminalMotion::left, shift);
             break;
         case VK_RIGHT:
-            buffer_.move(swiftedit::TerminalMotion::right, shift);
+            move(swiftedit::TerminalMotion::right, shift);
             break;
         case VK_UP:
-            buffer_.move(swiftedit::TerminalMotion::up, shift);
+            move(swiftedit::TerminalMotion::up, shift);
             break;
         case VK_DOWN:
-            buffer_.move(swiftedit::TerminalMotion::down, shift);
+            move(swiftedit::TerminalMotion::down, shift);
             break;
         case VK_HOME:
-            buffer_.move(ctrl ? swiftedit::TerminalMotion::document_start
-                              : swiftedit::TerminalMotion::home,
-                         shift);
+            move(ctrl ? swiftedit::TerminalMotion::document_start : swiftedit::TerminalMotion::home,
+                 shift);
             break;
         case VK_END:
-            buffer_.move(ctrl ? swiftedit::TerminalMotion::document_end
-                              : swiftedit::TerminalMotion::end,
-                         shift);
+            move(ctrl ? swiftedit::TerminalMotion::document_end : swiftedit::TerminalMotion::end,
+                 shift);
             break;
         case VK_PRIOR:
-            buffer_.move(swiftedit::TerminalMotion::up, shift, rows_);
+            move(swiftedit::TerminalMotion::up, shift, rows_);
             break;
         case VK_NEXT:
-            buffer_.move(swiftedit::TerminalMotion::down, shift, rows_);
+            move(swiftedit::TerminalMotion::down, shift, rows_);
             break;
         case VK_BACK:
             buffer_.erase(true);
@@ -566,6 +595,8 @@ private:
     Console console_{};
     swiftedit::TerminalBuffer buffer_{};
     swiftedit::TerminalRowCache row_cache_{};
+    swiftedit::TerminalWrapView wrap_view_{};
+    bool wrap_{};
     swiftedit::TerminalPager pager_{};
     swiftedit::TerminalSearch search_{};
     swiftedit::TerminalReplace replacement_{};
@@ -585,7 +616,7 @@ int wmain(int argc, wchar_t **argv) {
         if (argc > 2 || (argc == 2 && std::wstring_view(argv[1]) == L"--help")) {
             std::cout << "SwiftEdit interactive terminal\nUsage: swiftedit-terminal [file]\n"
                          "Ctrl+S Save, Ctrl+R Open, Ctrl+X Exit, Shift+arrows Select, "
-                         "Ctrl+Z/Y Undo/Redo, Ctrl+K Cut, Ctrl+U Paste.\n";
+                         "Ctrl+Z/Y Undo/Redo, Ctrl+K Cut, Ctrl+U Paste, F2 Wrap to window.\n";
             return argc > 2 ? 1 : 0;
         }
         Terminal terminal{};
@@ -709,6 +740,33 @@ int wmain() {
         if (notepad::read_file(path).bytes != expected)
             throw std::runtime_error(
                 "Console input/save/undo did not preserve expected UTF-8 bytes.");
+        const std::filesystem::path wrap_path = dir / "wrap.txt";
+        const std::string wrap_source(4096, 'a');
+        {
+            std::ofstream file(wrap_path, std::ios::binary);
+            file << wrap_source;
+        }
+        FlushConsoleInputBuffer(console.input);
+        enqueue(console.input, VK_F2);
+        enqueue(console.input, VK_DOWN);
+        enqueue(console.input, VK_HOME);
+        enqueue(console.input, 'X', L'X');
+        enqueue(console.input, 'S', 0, LEFT_CTRL_PRESSED);
+        enqueue(console.input, VK_F2);
+        enqueue(console.input, 'X', 0, LEFT_CTRL_PRESSED);
+        std::size_t wrap_width = 0;
+        {
+            Terminal terminal{};
+            if (terminal.run(wrap_path) != 0 || terminal.wraps())
+                throw std::runtime_error("Terminal wrap toggle did not return to no-wrap.");
+            wrap_width = terminal.viewport_width();
+        }
+        std::string wrap_expected = wrap_source;
+        wrap_expected.insert(wrap_width, "X");
+        if (notepad::read_file(wrap_path).bytes != wrap_expected)
+            throw std::runtime_error("Wrapped Down/Home/edit saved the wrong source position.");
+        if (!GetConsoleMode(console.input, &restored) || restored != mode)
+            throw std::runtime_error("Wrapped terminal did not restore input mode.");
         const std::filesystem::path large_path = dir / "large.txt";
         {
             std::ofstream file(large_path, std::ios::binary);
@@ -735,7 +793,7 @@ int wmain() {
         if (!GetConsoleMode(console.input, &restored) || restored != mode)
             throw std::runtime_error("Read-only terminal did not restore input mode.");
         std::cout << "Owned console smoke passed: input, supplementary Unicode, save, dirty-exit "
-                     "cancel, undo, large-file pages and mode restoration.\n";
+                     "cancel, undo, wrapped editing, large-file pages and mode restoration.\n";
         return 0;
     } catch (const std::exception &failure) {
         std::cerr << failure.what() << '\n';

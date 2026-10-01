@@ -7,9 +7,10 @@ buffer when it exits normally or unwinds an exception.
 
 | Input | Operation |
 |---|---|
-| Arrow keys, Home/End | Grapheme/line navigation |
+| Arrow keys, Home/End | Grapheme/line navigation; visual rows when wrapped |
 | Ctrl+Home/End | Beginning/end of document |
-| Page Up/Down | Move by the current number of visible logical lines |
+| Page Up/Down | Move by the visible row count (visual rows when wrapped) |
+| F2 | Toggle no-wrap / wrap-to-window for editable documents |
 | Shift plus navigation | Extend selection |
 | Typing, Enter, Tab | Replace selection or insert text |
 | Backspace/Delete | Delete one complete grapheme or selection |
@@ -42,7 +43,15 @@ are preserved across reads. Oversized graphemes that exceed the context limit
 are reported unavailable, preserving the source. Read-only range selection/copy
 and more granular line navigation still need implementation.
 
-This executable is unfinished. Wrap preferences,
+Wrap is visual only: source spaces, tabs and line endings remain exact. Space/tab
+boundaries are preferred, with whole-grapheme breaks for longer words. Up/Down
+retain a desired display column across short rows; Home/End target the current
+visual row. A full-width ending uses an empty continuation for the end caret.
+Resize and edits invalidate geometry. The viewport retains at most 296 rows,
+but initial and reverse row location still scan logical lines synchronously;
+long-line performance and interruptibility need further work. F2 is session-local.
+
+This executable is unfinished. Persistent wrap preferences,
 Text-copy prompt, full conflict review, external
 clipboard integration and further interactive/accessibility checks remain.
 Internal Copy/Cut captures an owned source clipboard, so malformed UTF-8 and
