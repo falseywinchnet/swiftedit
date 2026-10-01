@@ -55,8 +55,10 @@ PatternScan::PatternScan(std::string_view source, SearchPattern pattern, std::si
     : source_(checked_source(source)), pattern_(std::move(pattern)), match_case_(match_case) {
     candidate_ = source_.grapheme_index(gui_forms::Utf8Offset(byte_start)).value();
 }
-void PatternScan::restart() {
-    candidate_ = 0;
+void PatternScan::restart() { seek(0); }
+void PatternScan::seek(std::size_t byte_start) {
+    const std::size_t next = source_.grapheme_index(gui_forms::Utf8Offset(byte_start)).value();
+    candidate_ = next;
     slot_ = 0;
     byte_ = 0;
 }
@@ -113,6 +115,72 @@ SearchProgress PatternScan::step(std::size_t work_budget) {
     }
     result.next_grapheme = candidate_;
     result.complete = slots.size() > count || candidate_ > count - slots.size();
+    result.work = work;
+    return result;
+}
+ReplacementScan::ReplacementScan(std::string_view source, SearchPattern pattern,
+                                 std::string replacement, bool match_case,
+                                 std::size_t maximum_bytes)
+    : scan_(source, std::move(pattern), 0, match_case), replacement_(std::move(replacement)),
+      maximum_(maximum_bytes) {
+    if (maximum_ >= editable_limit)
+        throw std::runtime_error("Replacement output budget must remain below 16 MiB.");
+    const gui_forms::TextStore validated(replacement_);
+    static_cast<void>(validated);
+    // Reserve once so incremental copies do not trigger an ever larger copy.
+    result_.text.reserve(maximum_);
+}
+void ReplacementScan::append(std::string_view text, std::size_t &offset, std::size_t end,
+                             std::size_t &budget) {
+    const std::size_t count = std::min(end - offset, budget);
+    if (count > maximum_ - result_.text.size())
+        throw std::runtime_error("Replacement exceeds document byte limit.");
+    result_.text.append(text.substr(offset, count));
+    offset += count;
+    budget -= count;
+}
+bool ReplacementScan::step(std::size_t budget) {
+    if (!budget || budget > 65536)
+        throw std::runtime_error("Replacement work budget must be 1..65536 operations.");
+    if (phase_ == Phase::consumed)
+        throw std::runtime_error("Replacement result was already consumed.");
+    while (budget && phase_ != Phase::complete) {
+        if (phase_ == Phase::search) {
+            const SearchProgress progress = scan_.step(budget);
+            budget -= progress.work;
+            if (progress.match) {
+                match_ = *progress.match;
+                phase_ = Phase::unchanged;
+            } else if (progress.complete)
+                phase_ = Phase::tail;
+        } else if (phase_ == Phase::unchanged) {
+            append(scan_.text(), copied_, match_.offset, budget);
+            if (copied_ == match_.offset) {
+                inserted_ = 0;
+                phase_ = Phase::replacement;
+            }
+        } else if (phase_ == Phase::replacement) {
+            append(replacement_, inserted_, replacement_.size(), budget);
+            if (inserted_ == replacement_.size()) {
+                copied_ = match_.offset + match_.length;
+                scan_.seek(copied_);
+                ++result_.count;
+                phase_ = Phase::search;
+            }
+        } else if (phase_ == Phase::tail) {
+            append(scan_.text(), copied_, scan_.text().size(), budget);
+            if (copied_ == scan_.text().size())
+                phase_ = Phase::complete;
+        }
+    }
+    const bool complete = phase_ == Phase::complete;
+    return complete;
+}
+PatternReplacement ReplacementScan::take_result() {
+    if (phase_ != Phase::complete)
+        throw std::runtime_error("Replacement is not complete or was already consumed.");
+    PatternReplacement result = std::move(result_);
+    phase_ = Phase::consumed;
     return result;
 }
 SearchProgress search_slice(const gui_forms::TextStore &source, const SearchPattern &pattern,

@@ -319,6 +319,37 @@ int main() {
             window.poll_frame_schedule(gf::FrameClock::now() + std::chrono::seconds(1)));
         check(!(*editor).search_pending() && (*text).selection().caret.value() == 1,
               "Moving the caret cancels pending search without overriding navigation");
+        const std::string replacement_source(3000, 'a');
+        (*text).set_text(replacement_source);
+        (*query).set_text("a");
+        const std::shared_ptr<gf::TextBox> replacement = (*editor).replacement_control();
+        (*replacement).set_text("b");
+        (*editor).execute("replace-all");
+        check((*editor).search_pending() && (*text).text() == replacement_source,
+              "Replace All yields without publishing partial document changes");
+        (*replacement).set_text("c");
+        static_cast<void>(
+            window.poll_frame_schedule(gf::FrameClock::now() + std::chrono::seconds(1)));
+        check(!(*editor).search_pending() && (*text).text() == replacement_source,
+              "Changing replacement text cancels the prepared edit intact");
+        (*replacement).set_text("b");
+        (*editor).execute("replace-all");
+        for (std::size_t index = 0; (*editor).search_pending() && index < 20; ++index)
+            static_cast<void>(
+                window.poll_frame_schedule(gf::FrameClock::now() + std::chrono::seconds(1)));
+        check(!(*editor).search_pending() && (*text).text() == std::string(3000, 'b'),
+              "Scheduled Replace All publishes the complete result");
+        (*editor).execute("undo");
+        check((*text).text() == replacement_source, "Scheduled Replace All is one undoable edit");
+        (*replacement).set_text("long");
+        const gf::TextSelection before_failed_replace = (*text).selection();
+        (*editor).execute("replace-all");
+        for (std::size_t index = 0; (*editor).search_pending() && index < 20; ++index)
+            static_cast<void>(
+                window.poll_frame_schedule(gf::FrameClock::now() + std::chrono::seconds(1)));
+        check(!(*editor).search_pending() && (*text).text() == replacement_source &&
+                  (*text).selection() == before_failed_replace,
+              "Oversized replacement line is refused without content or selection mutation");
         std::cout << "Editor headless tests passed: native control input routing, CRLF, menu "
                      "edit/save, undo boundary, mixed endings, oversized-line refusal.\n";
         return 0;

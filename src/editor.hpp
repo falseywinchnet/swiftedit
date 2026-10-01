@@ -48,6 +48,7 @@ public:
     const Document &document() const { return document_; }
     std::shared_ptr<CsvView> csv_control() const { return csv_; }
     std::shared_ptr<QueryField> query_control() const { return query_; }
+    std::shared_ptr<gf::TextBox> replacement_control() const { return replacement_; }
 
 private:
     struct Dialog;
@@ -151,6 +152,7 @@ private:
     void show_find();
     void find_next();
     void advance_search();
+    void advance_replacement();
     void cancel_search();
     void replace_one();
     void replace_every();
@@ -186,11 +188,14 @@ private:
     gf::TextStore counted_text_{};
     std::size_t character_count_{};
     struct FindWork {
-        swiftedit::PatternScan scan;
+        std::unique_ptr<swiftedit::PatternScan> scan{};
+        std::unique_ptr<swiftedit::ReplacementScan> replace{};
+        std::string replacement{};
         std::uint64_t source_revision{}, query_revision{};
         gf::TextSelection selection{};
         bool match_case{}, wrapped{};
         FindWork(std::string_view, swiftedit::SearchPattern, std::size_t, bool);
+        FindWork(std::string_view, swiftedit::SearchPattern, std::string, bool);
     };
     std::unique_ptr<FindWork> search_{};
     gf::FrameRequestToken search_frame_{};

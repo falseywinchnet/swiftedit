@@ -226,3 +226,22 @@ cancellation refinements, affected display/editor suites passed in 0.17 s. Spell
 audit zero findings in 32 authored files. Snapshot preparation and final publication
 still require measured latency evidence; Replace All orchestration remains a
 separate unfinished synchronous path.
+
+## 2026-10-01 incremental Replace All
+
+ReplacementScan owns the source/query snapshot, reserves bounded output once,
+and charges both search comparisons and output-copy bytes to each work slice.
+It keeps partial output private and disallows consumption before completion.
+Matches do not overlap; empty replacements and unmatched tails follow the same
+state machine. GUI Replace All schedules continuation through the frame scheduler,
+cancels on changes to source/query/case/selection/replacement, validates the finished
+result, then applies one undoable edit. No document edits occur during preparation.
+
+Core tests compare one-operation slices against Unicode wildcard results, reject
+premature result access, and verify nonoverlapping deletion and tail retention.
+Editor tests verify pending work leaves content unchanged, replacement edits cancel,
+scheduled completion produces the exact result, one undo restores the source,
+and an oversized logical line preserves source and selection. All eight headless
+suites passed in 1.84 s; C++ spelling scan has zero findings in 32 authored files.
+Snapshot construction and final validation/publication still run synchronously
+and remain part of the final measured lag scan; native performance is not certified.

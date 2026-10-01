@@ -535,6 +535,10 @@ void Editor::execute(const std::string &id) {
                 (*text_).delete_selection();
         } else if (id == "select-all")
             (*text_).select_all();
+        else if (id == "replace-all")
+            replace_every();
+        else if (id == "replace-one")
+            replace_one();
         else if (id == "find" || id == "replace")
             show_find();
         else if (id == "find-next") {
@@ -663,7 +667,13 @@ void Editor::show_find() {
 }
 Editor::FindWork::FindWork(std::string_view source, swiftedit::SearchPattern pattern,
                            std::size_t start, bool sensitive)
-    : scan(source, std::move(pattern), start, sensitive), match_case(sensitive) {}
+    : scan(std::make_unique<swiftedit::PatternScan>(source, std::move(pattern), start, sensitive)),
+      match_case(sensitive) {}
+Editor::FindWork::FindWork(std::string_view source, swiftedit::SearchPattern pattern,
+                           std::string inserted, bool sensitive)
+    : replace(std::make_unique<swiftedit::ReplacementScan>(
+          source, std::move(pattern), inserted, sensitive, gf::TextBox::maximum_multiline_bytes)),
+      replacement(std::move(inserted)), match_case(sensitive) {}
 void Editor::cancel_search() {
     search_frame_.disconnect();
     search_.reset();
@@ -699,17 +709,22 @@ void Editor::advance_search() {
     FindWork &work = *search_;
     if (work.source_revision != counted_text_.revision() ||
         work.query_revision != (*query_).revision() || work.selection != (*text_).selection() ||
-        work.match_case != (*match_case_).checked()) {
+        work.match_case != (*match_case_).checked() ||
+        (work.replace && work.replacement != (*replacement_).text())) {
         cancel_search();
         (*find_status_)
             .set_text("Search cancelled because the document, selection or query changed.");
         return;
     }
-    swiftedit::SearchProgress progress = work.scan.step(4096);
+    if (work.replace) {
+        advance_replacement();
+        return;
+    }
+    swiftedit::SearchProgress progress = (*work.scan).step(4096);
     if (!progress.match && progress.complete && !work.wrapped) {
-        work.scan.restart();
+        (*work.scan).restart();
         work.wrapped = true;
-        progress = work.scan.step(4096);
+        progress = (*work.scan).step(4096);
     }
     if (progress.match) {
         const swiftedit::SourceRange found = *progress.match;
@@ -746,15 +761,37 @@ void Editor::replace_one() {
     find_next();
 }
 void Editor::replace_every() {
+    cancel_search();
     if ((*query_).text().empty()) {
         (*find_status_).set_text("Enter the literal text to replace.");
         return;
     }
-    const gf::TextStore source((*text_).text());
     const swiftedit::SearchPattern pattern = (*query_).pattern();
-    const swiftedit::PatternReplacement result =
-        swiftedit::replace_pattern(source, pattern, (*replacement_).text(),
-                                   (*match_case_).checked(), gf::TextBox::maximum_multiline_bytes);
+    std::unique_ptr<FindWork> work = std::make_unique<FindWork>(
+        (*text_).text(), pattern, std::string((*replacement_).text()), (*match_case_).checked());
+    (*work).source_revision = counted_text_.revision();
+    (*work).query_revision = (*query_).revision();
+    (*work).selection = (*text_).selection();
+    search_ = std::move(work);
+    advance_search();
+}
+void Editor::advance_replacement() {
+    const bool complete = (*(*search_).replace).step(4096);
+    if (!complete) {
+        if (window()) {
+            (*find_status_)
+                .set_text("Preparing replacements... Close Find to cancel. Document unchanged.");
+            const gf::FrameTime deadline = gf::FrameClock::now() + std::chrono::milliseconds(1);
+            search_frame_ = (*window()).schedule_paint(shared_from_this(), deadline);
+        } else {
+            cancel_search();
+            (*find_status_).set_text("Replacement requires an attached window.");
+        }
+        return;
+    }
+    const swiftedit::PatternReplacement result = (*(*search_).replace).take_result();
+    const gf::TextSelection original_selection = (*search_).selection;
+    cancel_search();
     if (gf::TextBox::validate_multiline_text(result.text) !=
         gf::TextBox::MultilineValidation::valid) {
         (*find_status_)
@@ -765,6 +802,7 @@ void Editor::replace_every() {
         (*text_).select_all();
         const bool replaced = (*text_).replace_selection(result.text);
         if (!replaced) {
+            (*text_).select(original_selection.anchor, original_selection.caret);
             (*find_status_).set_text("Replacement was not applied.");
             return;
         }

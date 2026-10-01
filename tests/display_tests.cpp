@@ -144,6 +144,30 @@ int main() {
         const swiftedit::SearchProgress unicode_finished = unicode_scan.step(1);
         check(unicode_finished.match && (*unicode_finished.match).length == 3,
               "Resumed literal byte comparison preserves the complete grapheme");
+        swiftedit::ReplacementScan incremental(searchable.utf8(), pattern, "X", true, 100);
+        bool replacement_complete = incremental.step(1);
+        check(!replacement_complete, "Replacement yields before publishing a partial result");
+        bool premature_refused = false;
+        try {
+            static_cast<void>(incremental.take_result());
+        } catch (const std::runtime_error &) {
+            premature_refused = true;
+        }
+        check(premature_refused, "Partial replacement result cannot be consumed");
+        for (std::size_t index = 0; !replacement_complete && index < 200; ++index)
+            replacement_complete = incremental.step(1);
+        check(replacement_complete, "One-operation replacement slices eventually complete");
+        const swiftedit::PatternReplacement incremental_result = incremental.take_result();
+        check(incremental_result.text == replaced.text &&
+                  incremental_result.count == replaced.count,
+              "Incremental wildcard replacement matches exact synchronous result");
+        swiftedit::ReplacementScan nonoverlapping("aaaaa", swiftedit::SearchPattern("aa"), "", true,
+                                                  5);
+        while (!nonoverlapping.step(1)) {
+        }
+        const swiftedit::PatternReplacement deletion = nonoverlapping.take_result();
+        check(deletion.text == "a" && deletion.count == 2,
+              "Incremental deletion skips overlapping matches and preserves tail");
         std::cout << "Display mapping and atomic source-range tests passed.\n";
         return 0;
     } catch (const std::exception &failure) {

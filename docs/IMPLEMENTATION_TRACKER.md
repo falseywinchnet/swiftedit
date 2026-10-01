@@ -38,8 +38,9 @@ missing from the consumed SDK; Ctrl+Shift+slash is tested with normalized events
 only, and provider has the native fix request. Native focus/IME/accessibility and
 query-flag undo semantics require review. Find Next now yields through the frame
 scheduler with a byte-comparison work budget and cancels stale work. Replace All
-still drains search slices synchronously; cooperative cancellation/yield there is
-required before the final responsiveness gate. Snapshot preparation also needs
+now incrementally scans and copies into a private bounded result, then publishes
+one undoable edit. Source/query/selection/replacement changes cancel pending work.
+Snapshot preparation and final validation/publication still need latency
 measurement. Do not count this as complete
 terminal wildcard support or a completed search latency scan.
 
