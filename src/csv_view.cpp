@@ -79,19 +79,12 @@ void CsvView::set_source(std::string_view source) {
     caret_.row = std::min(caret_.row, (*table_).rows().size() - 1);
     caret_.column = std::min(caret_.column, (*table_).rows()[caret_.row].size() - 1);
     anchor_ = caret_;
-    (*vertical_)
-        .set_range(0, static_cast<double>(std::max<std::size_t>(1, (*table_).rows().size() - 1)));
-    (*horizontal_).set_range(0, static_cast<double>(std::max<std::size_t>(1, columns_ - 1)));
-    (*vertical_).set_enabled((*table_).rows().size() > 1);
-    (*horizontal_).set_enabled(columns_ > 1);
-    if ((*table_).rows().size() == 1)
-        (*vertical_).set_value(0);
-    if (columns_ == 1)
-        (*horizontal_).set_value(0);
+    update_scrollbars();
     update_field();
     prepare_view();
 }
 void CsvView::arrange(gf::Rect bounds) {
+    const std::size_t old_rows = visible_rows_, old_columns = whole_columns_;
     arrange_self(bounds);
     set_child_layout(entry_,
                      {header_width, 4, std::max(0.0, bounds.width - header_width - 20), 30});
@@ -106,9 +99,46 @@ void CsvView::arrange(gf::Rect bounds) {
         static_cast<std::size_t>(std::max(1.0, (bounds.width - header_width - 18) / column_width)) +
             1,
         std::size_t(1), std::size_t(32));
+    whole_columns_ = std::clamp(
+        static_cast<std::size_t>(std::max(1.0, (bounds.width - header_width - 18) / column_width)),
+        std::size_t(1), std::size_t(32));
     (*vertical_).set_large_change(static_cast<double>(visible_rows_));
-    (*horizontal_).set_large_change(static_cast<double>(visible_columns_));
+    (*horizontal_).set_large_change(static_cast<double>(whole_columns_));
+    update_scrollbars();
+    if (old_rows != visible_rows_ || old_columns != whole_columns_)
+        reveal_caret();
     prepare_view();
+}
+void CsvView::update_scrollbars() {
+    if (!table_)
+        return;
+    const std::size_t row_count = (*table_).rows().size();
+    const std::size_t last_top = row_count > visible_rows_ ? row_count - visible_rows_ : 0;
+    const std::size_t last_left = columns_ > whole_columns_ ? columns_ - whole_columns_ : 0;
+    // Scrollbar ranges need a nonzero extent even when disabled. Explicitly
+    // reset fitting axes so an earlier narrow layout cannot retain blank space.
+    (*vertical_).set_range(0, static_cast<double>(std::max<std::size_t>(1, last_top)));
+    (*horizontal_).set_range(0, static_cast<double>(std::max<std::size_t>(1, last_left)));
+    (*vertical_).set_enabled(last_top != 0);
+    (*horizontal_).set_enabled(last_left != 0);
+    if (!last_top)
+        (*vertical_).set_value(0);
+    if (!last_left)
+        (*horizontal_).set_value(0);
+}
+void CsvView::reveal_caret() {
+    if (!table_)
+        return;
+    if (caret_.row < top_)
+        (*vertical_).set_value(static_cast<double>(caret_.row));
+    else if (caret_.row >= top_ + visible_rows_)
+        (*vertical_).set_value(static_cast<double>(caret_.row - visible_rows_ + 1));
+    // Painting includes a partially exposed column, but navigation must use
+    // only complete columns so the selected cell is not hidden at the edge.
+    if (caret_.column < left_)
+        (*horizontal_).set_value(static_cast<double>(caret_.column));
+    else if (caret_.column >= left_ + whole_columns_)
+        (*horizontal_).set_value(static_cast<double>(caret_.column - whole_columns_ + 1));
 }
 void CsvView::prepare_view() {
     if (!table_)
@@ -175,6 +205,7 @@ void CsvView::select_cell(swiftedit::CellAddress address) {
     static_cast<void>((*table_).cell(address));
     caret_ = address;
     anchor_ = address;
+    reveal_caret();
     update_field();
     invalidate(gf::Dirty::paint);
 }
@@ -265,7 +296,8 @@ void CsvView::on_pointer(gf::PointerEvent &event) {
         return;
     }
     if (event.action == gf::PointerAction::wheel) {
-        (*vertical_).increment(event.wheel_delta.y < 0 ? 3 : -3);
+        if (table_ && (*table_).rows().size() > visible_rows_)
+            (*vertical_).increment(event.wheel_delta.y < 0 ? 3 : -3);
         event.handled = true;
         return;
     }
@@ -341,14 +373,7 @@ void CsvView::on_key(gf::KeyEvent &event) {
         caret_ = next;
         if (!gf::has_modifier(event.modifiers, gf::Modifier::shift))
             anchor_ = next;
-        if (next.row < top_)
-            (*vertical_).set_value(static_cast<double>(next.row));
-        else if (next.row >= top_ + visible_rows_)
-            (*vertical_).set_value(static_cast<double>(next.row - visible_rows_ + 1));
-        if (next.column < left_)
-            (*horizontal_).set_value(static_cast<double>(next.column));
-        else if (next.column >= left_ + visible_columns_)
-            (*horizontal_).set_value(static_cast<double>(next.column - visible_columns_ + 1));
+        reveal_caret();
         update_field();
         invalidate(gf::Dirty::paint);
         event.handled = true;

@@ -411,3 +411,17 @@ raw samples and limitations are in performance/2026-10-01-csv-view/. This is
 headless component evidence, not nativepaint or maximum-workload completion.
 496bd40 native36859063461 succeeded; earlier7b76967 native36858915672 was
 cancelled/superseded. Do not report the cancelled run passed. SDK remains6def54a.
+
+CSV viewport audit reproduced a partially visible-column bug: at800px width,
+keyboard selection treated the sixth sliver column as fully visible. A failing
+regression established it. Navigation now uses whole-column capacity while
+painting can include a partial column; explicit selection and geometry changes
+also reveal the caret. Scrollbar extents use content minus whole viewport size,
+reset fitting axes, and wheel input cannot move through a disabled placeholder
+range. During development the full suite caught an obsolete horizontal offset
+breaking the existing right-click conversion test; corrected extent/reset logic
+fixes it. Regressions cover arrow reveal, explicit selection, shrink/expand,
+smaller source and fitting-row wheel input. All17 suites passed1.75s;78-file
+spelling audit clean. No local native desktop launch. Continued under the latest
+goal continuation after the prior verified remote checkpoint; full feature and
+native responsiveness completion remain open.

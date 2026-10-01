@@ -1,5 +1,6 @@
 #include "markdown_view.hpp"
 #include "query_field.hpp"
+#include "csv_view.hpp"
 #include <iostream>
 #include <stdexcept>
 
@@ -38,6 +39,40 @@ void check(bool good, const char *message) {
 }
 int main() {
     try {
+        const std::shared_ptr<notepad::CsvView> grid =
+            gf::make_control<notepad::CsvView>(gf::StableId("test.csv"));
+        gf::Window grid_window(grid, {800, 600});
+        (*grid).set_source("a,b,c,d,e,f,g,h");
+        grid_window.perform_layout();
+        const std::shared_ptr<gf::HScrollBar> horizontal =
+            std::dynamic_pointer_cast<gf::HScrollBar>(grid_window.find("csv.horizontal"));
+        check(static_cast<bool>(horizontal), "CSV horizontal scrollbar exists");
+        for (std::size_t column = 0; column < 5; ++column) {
+            gf::KeyEvent right{};
+            right.physical_key = gf::PhysicalKey::right;
+            (*grid).on_key(right);
+            check(right.handled, "CSV arrow navigation handled");
+        }
+        check((*grid).selected() == swiftedit::CellAddress{0, 5} && (*horizontal).value() == 1,
+              "Selecting the partially visible sixth cell scrolls it fully into view");
+        (*grid).select_cell({0, 7});
+        check((*horizontal).value() == 3, "Explicit cell selection also reveals its whole column");
+        (*grid).arrange({0, 0, 400, 600});
+        check((*horizontal).value() == 6,
+              "Narrowing the viewport retains whole selected-cell visibility");
+        (*grid).arrange({0, 0, 1600, 600});
+        check((*horizontal).value() == 0, "Expanding to fit all columns resets horizontal offset");
+        (*grid).arrange({0, 0, 400, 600});
+        (*grid).set_source("a,b");
+        check((*horizontal).value() == 0, "A smaller source resets obsolete horizontal extent");
+        const std::shared_ptr<gf::VScrollBar> vertical =
+            std::dynamic_pointer_cast<gf::VScrollBar>(grid_window.find("csv.vertical"));
+        gf::PointerEvent fitting_wheel{};
+        fitting_wheel.action = gf::PointerAction::wheel;
+        fitting_wheel.wheel_delta.y = -1;
+        (*grid).on_pointer(fitting_wheel);
+        check(vertical && (*vertical).value() == 0,
+              "Wheel input cannot scroll fitting rows into a disabled placeholder range");
         const std::shared_ptr<notepad::QueryField> query =
             gf::make_control<notepad::QueryField>(gf::StableId("test.query"));
         gf::Window query_window(query, {300, 32});

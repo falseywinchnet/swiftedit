@@ -46,6 +46,8 @@ private:
     };
     std::weak_ptr<CsvView> observe();
     void prepare_view();
+    void reveal_caret();
+    void update_scrollbars();
     void update_field();
     void publish(std::string);
     std::optional<swiftedit::CellAddress> hit(gf::Point) const;
@@ -62,6 +64,7 @@ private:
     std::map<std::pair<std::size_t, std::size_t>, CellDisplay> cells_{};
     swiftedit::CellAddress anchor_{}, caret_{};
     std::size_t columns_{}, top_{}, left_{}, visible_rows_{1}, visible_columns_{1};
+    std::size_t whole_columns_{1};
     std::size_t cached_rows_{}, cached_columns_{};
     bool cells_dirty_{true};
     bool dragging_{};
