@@ -601,3 +601,12 @@ beside #ERROR, using existing public Painter primitives and themed text color.
 No source/calculation/tooltip changes. Existing cycle/recovery tests and all20
 local suites passed3.67s;101-file spelling audit clean. Native visual inspection
 pending; no local desktop launched.
+
+Mac shortcut audit found file/search commands registered Control only. Added
+Meta aliases for New/Open/Save/Find/Replace and Meta+Shift+S for Save As, retaining
+Control bindings. Headless routed-key regression verifies Control/Meta Save
+publishes exact bytes, both New Window aliases invoke once without mutation, and
+Meta New creates an untitled document. Full20 suites passed3.71s; after a test
+style cleanup the editor suite passed1.71s,101-file spelling clean. Physical
+native keyboard validation remains separate. Provider owner has now corrected
+the single-file fixture bound and is preparing the next candidate.

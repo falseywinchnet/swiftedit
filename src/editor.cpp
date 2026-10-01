@@ -711,9 +711,12 @@ void Editor::ready(gf::Window &w, gf::ApplicationWindowHandle handle,
     };
     const Shortcut shortcuts[] = {
         {K::n, "new"}, {K::o, "open"}, {K::s, "save"}, {K::f, "find"}, {K::h, "replace"}};
-    for (const Shortcut &binding : shortcuts)
+    for (const Shortcut &binding : shortcuts) {
         shortcut(w, binding.key, M::control, binding.command);
+        shortcut(w, binding.key, M::meta, binding.command);
+    }
     shortcut(w, K::s, M::control | M::shift, "save-as");
+    shortcut(w, K::s, M::meta | M::shift, "save-as");
     shortcut(w, K::n, M::control | M::shift, "new-window");
     shortcut(w, K::n, M::meta | M::shift, "new-window");
     shortcut(w, K::f3, M::none, "find-next");

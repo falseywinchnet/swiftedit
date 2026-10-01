@@ -496,6 +496,63 @@ struct WindowLaunchProbe {
         }
     };
 };
+void verify_file_shortcuts() {
+    const std::filesystem::path directory = std::filesystem::temp_directory_path() /
+        ("swiftedit-file-keys-" + std::to_string(test_process_id()));
+    check(std::filesystem::create_directory(directory), "Own shortcut fixture");
+    struct Cleanup {
+        std::filesystem::path directory{};
+        ~Cleanup() {
+            std::error_code ignored{};
+            std::filesystem::remove_all(directory, ignored);
+        }
+    } cleanup{directory};
+    const std::filesystem::path path = directory / "document.txt";
+    static_cast<void>(notepad::write_file(path, "original\n", {}));
+    WindowLaunchProbe launch{};
+    const std::shared_ptr<notepad::Editor> editor =
+        gf::make_control<notepad::Editor>(gf::StableId("file-keys.editor"),
+                                         WindowLaunchProbe::Callback{&launch});
+    std::vector<gf::ApplicationWindow> windows = (*editor).application_windows(path);
+    gf::Window &window = *windows.front().model;
+    TestServices services{};
+    gf::HostSession host(window, capabilities(), &services);
+    const gf::HostDispatchResult attached = host.dispatch({1, 0, gf::HostAttachEvent{{800, 600}, 1}});
+    check(attached.accepted(), "Shortcut host attached");
+    windows.front().options.ready(window, {});
+    window.perform_layout();
+    const std::shared_ptr<gf::TextBox> text = (*editor).text_control();
+    int invocations = 0;
+    for (const gf::Modifier modifier : {gf::Modifier::control, gf::Modifier::meta}) {
+        const std::string replacement = modifier == gf::Modifier::control ? "control save\n" :
+                                                                           "command save\n";
+        (*text).select_all();
+        (*text).replace_selection(replacement);
+        check(window.request_focus(text), "Focus shortcut document");
+        gf::KeyEvent key{};
+        key.action = gf::KeyAction::down;
+        key.physical_key = gf::PhysicalKey::s;
+        key.modifiers = modifier;
+        check(window.dispatch_key(key), "Control/Command Save handled");
+        const notepad::FileSnapshot saved = notepad::read_file(path);
+        check(saved.bytes == replacement && !(*editor).document().dirty((*text).text()),
+              "Control and Command Save use ordinary document publication");
+        key.physical_key = gf::PhysicalKey::n;
+        key.modifiers = modifier | gf::Modifier::shift;
+        check(window.dispatch_key(key), "Control/Command Shift New Window handled");
+        ++invocations;
+        check(launch.calls == invocations && (*text).text() == replacement,
+              "New Window shortcut invokes once and preserves current source");
+    }
+    gf::KeyEvent create{};
+    create.action = gf::KeyAction::down;
+    create.physical_key = gf::PhysicalKey::n;
+    create.modifiers = gf::Modifier::meta;
+    check(window.dispatch_key(create) && (*text).text().empty() && (*editor).document().path.empty(),
+          "Command New opens an untitled document through the existing command");
+    check(services.dialogs == 0, "Shortcut operations do not spuriously prompt");
+    host.shutdown();
+}
 int main(const int argc, char **const argv) {
     try {
         if (argc == 2 && std::string_view(argv[1]) == "--picker-file-links") {
@@ -504,6 +561,7 @@ int main(const int argc, char **const argv) {
             return 0;
         }
         verify_callback_revocation();
+        verify_file_shortcuts();
         verify_picker_home();
 #ifndef _WIN32
         verify_picker_directory_links();
