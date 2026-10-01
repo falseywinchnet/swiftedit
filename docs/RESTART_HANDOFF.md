@@ -229,3 +229,25 @@ from .1635 ms to .0035 ms; p95 .2006 to .0045 ms. Raw samples, source/binary has
 scope and reproducible command are in performance/2026-10-01-editor-navigation/.
 This is component callback evidence only. Local 16-suite regression passed in
 2.04 s; 72-file spelling scan clean. New native CI remains pending this checkpoint.
+
+Verified follow-up: be353db native run 36854587884 and portable run 36854587765
+both completed successfully across Windows, macOS and Linux.
+
+Terminal wrap work now has a source-preserving visual-row core in
+terminal_wrap.hpp / terminal_row.cpp. terminal_wrap_span computes one span;
+terminal_wrapped_row produces source-mapped inert runs. Spaces/tabs are preferred
+breaks, long words fall back at grapheme boundaries, tabs use visual-row stops,
+and source whitespace is not trimmed. A full-width logical ending has an empty
+continuation row for its end caret. Narrow views may clip a whole wide glyph or
+inert label but never split its source range. All 17 local suites passed (2.69s),
+including new conservation, resize-width, combining/wide glyph, malformed/control,
+CRLF, and end-caret checks. This is layout groundwork, not a shipped wrap toggle.
+
+Continue by integrating editable viewport/navigation and an explicit wrap toggle
+in terminal_windows.cpp. Track top/caret visual positions as logical line plus
+source offset, not byte-as-column coordinates. A nonterminal span advances by its
+source length; a terminal span advances to the next logical line. Width and
+DocumentStamp must invalidate retained geometry. Bound retained navigation data
+and yield/cancel slow preparation; current first-use TerminalBuffer Unicode
+metadata still rebuilds synchronously and is not made interruptible by this core.
+Then coordinate the owned-console smoke and measure wrapped navigation/resize.

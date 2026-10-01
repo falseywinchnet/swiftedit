@@ -1,4 +1,5 @@
 #include "terminal_row.hpp"
+#include "terminal_wrap.hpp"
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
@@ -69,6 +70,55 @@ TerminalRow render_row(TerminalBuffer &buffer, SourceRange range, std::size_t fi
     return result;
 }
 } // namespace
+TerminalWrapSpan terminal_wrap_span(TerminalBuffer &buffer, std::size_t line, std::size_t start,
+                                    std::size_t width) {
+    validate_view(0, width);
+    const SourceRange logical = buffer.line_range(line);
+    const std::size_t end = logical.offset + logical.length;
+    if (start < logical.offset || start > end)
+        throw std::runtime_error("Wrapped row start is outside its logical line.");
+    const std::string &source = buffer.session().text();
+    std::size_t offset = start, cells = 0;
+    std::optional<std::size_t> word_break{};
+    while (offset < end) {
+        const SourceRange grapheme = buffer.grapheme_range(offset);
+        const std::string_view bytes(source.data() + offset, grapheme.length);
+        const TerminalGlyph glyph = terminal_glyph(bytes, cells);
+        if (glyph.cells > width - cells) {
+            if (offset == start) {
+                // A wide grapheme or inert label in a narrower viewport still
+                // advances atomically. The painter clips its display, not source.
+                offset += grapheme.length;
+            } else if (word_break) {
+                offset = *word_break;
+            }
+            const TerminalWrapSpan result{{start, offset - start}, false};
+            return result;
+        }
+        cells += glyph.cells;
+        offset += grapheme.length;
+        if (bytes == " " || bytes == "\t")
+            word_break = offset;
+        if (cells == width) {
+            if (offset < end && word_break)
+                offset = *word_break;
+            const TerminalWrapSpan result{{start, offset - start}, false};
+            return result;
+        }
+    }
+    const TerminalWrapSpan result{{start, offset - start}, true};
+    return result;
+}
+TerminalWrappedRow terminal_wrapped_row(TerminalBuffer &buffer, std::size_t line, std::size_t start,
+                                        std::size_t width) {
+    TerminalWrappedRow result{};
+    result.span = terminal_wrap_span(buffer, line, start, width);
+    const SourceRange range = result.span.source;
+    result.display = render_row(buffer, range, 0, width, range.offset, 0, {});
+    if (!result.span.logical_end && buffer.selection().caret == range.offset + range.length)
+        result.display.caret_column.reset();
+    return result;
+}
 TerminalRow terminal_row(TerminalBuffer &buffer, std::size_t line, std::size_t first_column,
                          std::size_t width) {
     validate_view(first_column, width);
