@@ -569,3 +569,14 @@ Measured 1 MiB ASCII warm-row p50 127.2604 -> 0.0279 ms; insert+row 171.5926 ->
 `docs/performance/2026-10-01-terminal-rows/README.md`. These are component timings,
 not end-to-end snappiness evidence. Edit metadata still rebuilds synchronously;
 wrapping, provider integration and final full lag/bug scan remain unfinished.
+
+2026-10-01 paged file portability checkpoint: PagedFile/Page moved to independent
+paged_file.hpp. Windows retained-handle semantics are in paged_windows.cpp; the
+actual Windows Session links that adapter. paged_posix.cpp uses bounded pread,
+regular-file/NOFOLLOW checks and before/after identity/size/mtime/ctime checks.
+POSIX cannot prevent uncooperative writes; changed pages are refused, not frozen
+by a mandatory lock. Common tests cover exact raw bytes, EOF, offsets, budget and
+32 MiB bounded tail reads; POSIX adds mutation, symlink and nonblocking FIFO tests.
+Windows full 15-suite run passed (2.43s); standalone core/readers 2/2 passed.
+CI now compiles both adapters on their actual runners. Mac/Linux result pending
+for this commit; native application save adapter/SDK/package still unfinished.

@@ -5,7 +5,6 @@
 #include <charconv>
 #include <limits>
 #include <stdexcept>
-#include <windows.h>
 
 namespace swiftedit {
 std::size_t utf8_sequence_length(std::string_view s, std::size_t i) {
@@ -67,44 +66,6 @@ void budget(std::size_t n) {
         throw std::runtime_error("Page budget must be 1..65536 bytes.");
 }
 } // namespace
-PagedFile::PagedFile(const std::filesystem::path &path) {
-    const HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE,
-                                 nullptr, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
-    if (h == INVALID_HANDLE_VALUE)
-        throw std::runtime_error("Cannot open read-only paged file.");
-    BY_HANDLE_FILE_INFORMATION info{};
-    const BOOL inspected = GetFileInformationByHandle(h, &info);
-    if (!inspected ||
-        (info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT))) {
-        CloseHandle(h);
-        throw std::runtime_error("Paged source must be a regular file.");
-    }
-    handle_ = h;
-    size_ = (static_cast<std::uint64_t>(info.nFileSizeHigh) << 32) | info.nFileSizeLow;
-}
-PagedFile::~PagedFile() {
-    if (handle_)
-        CloseHandle(handle_);
-}
-Page PagedFile::page(std::uint64_t offset, std::size_t n) const {
-    budget(n);
-    if (offset > size_)
-        throw std::runtime_error("Page offset exceeds file size.");
-    Page p{offset, offset, size_, {}};
-    p.bytes.resize(static_cast<std::size_t>(std::min<std::uint64_t>(n, size_ - offset)));
-    LARGE_INTEGER at{};
-    at.QuadPart = static_cast<LONGLONG>(offset);
-    const BOOL sought = SetFilePointerEx(handle_, at, nullptr, FILE_BEGIN);
-    if (!sought)
-        throw std::runtime_error("Cannot seek paged source.");
-    DWORD got{};
-    const DWORD requested = static_cast<DWORD>(p.bytes.size());
-    const BOOL read = ReadFile(handle_, p.bytes.data(), requested, &got, nullptr);
-    if (!read || got != requested)
-        throw std::runtime_error("Paged read failed; no document changed.");
-    p.next += got;
-    return p;
-}
 std::string text_copy(std::string_view s, std::size_t *invalid) {
     std::string out{};
     out.reserve(s.size());

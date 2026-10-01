@@ -1,5 +1,6 @@
 #pragma once
 #include "document.hpp"
+#include "paged_file.hpp"
 #include <memory>
 #include <vector>
 
@@ -7,7 +8,6 @@ namespace swiftedit {
 class SearchPattern;
 class SessionReplacement;
 constexpr std::size_t editable_limit = 16 * 1024 * 1024;
-constexpr std::size_t maximum_page = 64 * 1024;
 // Session-local identities are deliberately distinct from byte offsets and
 // from one another. Transport conversion occurs only at the CLI boundary.
 struct EditToken {
@@ -35,10 +35,6 @@ struct DocumentStamp {
     DocumentIdentity identity{};
     DocumentRevision revision{};
 };
-struct Page {
-    std::uint64_t offset{}, next{}, size{};
-    std::string bytes{};
-};
 struct Preview {
     EditToken token{};
     DocumentRevision revision{};
@@ -58,20 +54,6 @@ public:
 private:
     friend class Session;
     std::string bytes_{};
-};
-// Holds a read handle, not a whole-file allocation. No write sharing is granted.
-class PagedFile {
-public:
-    explicit PagedFile(const std::filesystem::path &);
-    ~PagedFile();
-    PagedFile(const PagedFile &) = delete;
-    PagedFile &operator=(const PagedFile &) = delete;
-    [[nodiscard]] Page page(std::uint64_t offset, std::size_t budget) const;
-    [[nodiscard]] std::uint64_t size() const { return size_; }
-
-private:
-    void *handle_{};
-    std::uint64_t size_{};
 };
 // Byte-faithful command model. Malformed input remains editable; publication
 // requires valid UTF-8 or an explicitly requested sanitized text copy.

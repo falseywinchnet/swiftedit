@@ -151,3 +151,14 @@ not end-to-end snappiness evidence. Edit metadata still rebuilds synchronously;
 wrapping, provider integration and final full lag/bug scan remain unfinished.
 
 2026-10-01 MacBook dogfood direction: see MACOS_BUILD_HANDOFF.md. Native Windows build and all 14 suites passed after startup/localtime/picker guards. SDK-independent production CSV core build and tests also passed locally. New cross-platform core CI runs on push; its remote result is not yet known and it does not package the app. Public TextStore::replace probe retained; no speculative metadata optimization integrated. Mac SDK/POSIX adapters/native packaging still unfinished.
+
+2026-10-01 paged file portability checkpoint: PagedFile/Page moved to independent
+paged_file.hpp. Windows retained-handle semantics are in paged_windows.cpp; the
+actual Windows Session links that adapter. paged_posix.cpp uses bounded pread,
+regular-file/NOFOLLOW checks and before/after identity/size/mtime/ctime checks.
+POSIX cannot prevent uncooperative writes; changed pages are refused, not frozen
+by a mandatory lock. Common tests cover exact raw bytes, EOF, offsets, budget and
+32 MiB bounded tail reads; POSIX adds mutation, symlink and nonblocking FIFO tests.
+Windows full 15-suite run passed (2.43s); standalone core/readers 2/2 passed.
+CI now compiles both adapters on their actual runners. Mac/Linux result pending
+for this commit; native application save adapter/SDK/package still unfinished.
