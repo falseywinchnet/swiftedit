@@ -1,14 +1,14 @@
 # Repeated formula viewport latency
 
-Measured on local Windows, Release, installed provider SDK0322371. The baseline
-is application574cad0 plus the benchmark's new --large fixture selector. The
+Measured on local Windows, Release, installed provider SDK 0322371. The baseline
+is application 574cad0 plus the benchmark's new --large fixture selector. The
 changed implementation reuses successful identical formula displays within one
-synchronous viewport refresh. Five warmup scrolls precede31 measured scrolls.
+synchronous viewport refresh. Five warmup scrolls precede 31 measured scrolls.
 Raw samples for all four runs are included here.
 
-The larger fixture is876543 source bytes:8192 rows,8 columns, first column2,
-remaining cells =SUM(A1:A8192). The800x600 viewport renders85 exact16384 results.
-The original fixture has512 rows,51199 source bytes and85 exact1024 results.
+The larger fixture is 876,543 source bytes: 8,192 rows, 8 columns, first column 2,
+remaining cells =SUM(A1:A8192). The 800×600 viewport renders 85 exact 16384 results.
+The original fixture has 512 rows, 51,199 source bytes and 85 exact 1024 results.
 The benchmark validates every visible result and rejects error cells after each
 scroll. Timings cover wheel handling and viewport preparation, excluding the
 subsequent observing-painter check, native rasterization and presentation.
@@ -31,6 +31,6 @@ refresh call, and exact source formula spelling is unchanged.
 
 View regressions cover duplicate results, editing a dependency, restoring valid
 source after cycles, cyclic identical formulas at different roots, and reference
-hover text/highlighting on a reused display. All19 local suites pass. This is a
+hover text/highlighting on a reused display. All 19 local suites pass. This is a
 specific repeated-formula improvement, not a bound on a viewport full of distinct
 expensive expressions and not a complete application responsiveness audit.
