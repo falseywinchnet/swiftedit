@@ -17,7 +17,10 @@ returns `ok<TAB>quit`. Requests exceeding 32 MiB of transport text are rejected.
 | Request fields | Behavior |
 |---|---|
 | `info` | Emits revision, byte size, dirty 0/1, read-only 0/1, path |
-| `word-count` | Emits `word-count, count` for valid UTF-8 editable text; observes working text without changing revision/history; paged files are refused |
+| `word-count` | Emits `word-count, count` for valid UTF-8 editable text; observes working text without changing revision/history; use the incremental commands for paged files |
+| `word-count-start` | Replaces any previous count task for the current document. Emits `word-count-progress, 0, size` without reading source bytes, or `word-count, 0` for an empty document |
+| `word-count-next, budget` | Reads at most 1..65536 bytes. Emits `word-count-progress, offset, size`, or final `word-count, count`. Rejects a changed document identity/revision, file read failure or malformed UTF-8; no partial count is published. A failed task must be restarted |
+| `word-count-cancel` | Discards the count task immediately between steps. Does not change document content, selection, revision or undo history; harmless without an active task |
 | `open`, path | Opens an existing file and emits stamped context for first 4096 bytes; dirty session requires save or explicit discard first |
 | `discard` | Explicitly drops the current document and starts empty |
 | `page`, offset, byte-budget | 1–65536 bytes; emits `page, offset, next, total, bytes` |

@@ -44,6 +44,17 @@ try {
     Assert ($response[0] -eq "page`t0`t11`t11`thello\x0aworld") 'Exact escaped page'
     $response = Send-Request -Process $process -Fields @('word-count')
     Assert ($response[0] -eq "word-count`t2") 'Shared word count observes working text'
+    $response = Send-Request -Process $process -Fields @('word-count-start')
+    Assert ($response[0] -eq "word-count-progress`t0`t11") 'Count start performs no source scan'
+    $response = Send-Request -Process $process -Fields @('word-count-next','6')
+    Assert ($response[0] -eq "word-count-progress`t6`t11") 'Count advances within explicit budget'
+    $response = Send-Request -Process $process -Fields @('word-count-next','6')
+    Assert ($response[0] -eq "word-count`t2") 'Incremental count publishes completed result'
+    $response = Send-Request -Process $process -Fields @('word-count-start')
+    $response = Send-Request -Process $process -Fields @('word-count-cancel')
+    Assert ($response[-1].StartsWith("ok`tword-count-cancel`t")) 'Explicit count cancellation'
+    $response = Send-Request -Process $process -Fields @('word-count-next','1')
+    Assert ($response[-1].StartsWith("error`tStart a word count")) 'Cancelled count cannot continue'
     $target = (Join-Path $fixture 'new.txt').Replace('\','\\')
     $response = Send-Request -Process $process -Fields @('save-as',$target)
     Assert ($response[-1].StartsWith("ok`tsave-as")) 'Save creates new file'
@@ -101,6 +112,24 @@ try {
     $response = Send-Request -Process $process -Fields @('undo')
     $response = Send-Request -Process $process -Fields @('csv-get','B2')
     Assert ($response[0] -eq "cell`tB2`t=A2*2") 'Conversion undo restores the formula'
+    $response = Send-Request -Process $process -Fields @('discard')
+    $largeCountPath = Join-Path $fixture 'large-count.txt'
+    $largeCountStream = [IO.File]::Open($largeCountPath,[IO.FileMode]::CreateNew)
+    try {
+        $countBlock = [Text.Encoding]::UTF8.GetBytes(('x ' * 32768))
+        for ($blockIndex = 0; $blockIndex -lt 256; ++$blockIndex) {
+            $largeCountStream.Write($countBlock,0,$countBlock.Length)
+        }
+    } finally { $largeCountStream.Dispose() }
+    $response = Send-Request -Process $process -Fields @('open',$largeCountPath.Replace('\','\\'))
+    Assert ($response[-1].StartsWith("ok`topen`t")) 'Open real paged count fixture'
+    $response = Send-Request -Process $process -Fields @('word-count-start')
+    Assert ($response[0] -eq "word-count-progress`t0`t16777216") 'Paged count begins without scanning'
+    for ($countStep = 0; $countStep -lt 256; ++$countStep) {
+        $response = Send-Request -Process $process -Fields @('word-count-next','65536')
+        Assert ($response[-1].StartsWith("ok`tword-count-next`t")) 'Paged count step succeeds'
+    }
+    Assert ($response[0] -eq "word-count`t8388608") 'Paged whole-document count through CLI'
     $response = Send-Request -Process $process -Fields @('quit')
     [bool]$exited = $process.WaitForExit(5000)
     Assert ($exited -and $process.ExitCode -eq 0) 'Clean process exit'

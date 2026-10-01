@@ -1,6 +1,7 @@
 #include "csv.hpp"
 #include "context.hpp"
 #include "session.hpp"
+#include "session_word_count.hpp"
 #include <charconv>
 #include <iostream>
 #include <stdexcept>
@@ -20,6 +21,12 @@ void require_field_count(const std::vector<std::string> &fields, std::size_t exp
 void field(std::string_view s) {
     const std::string escaped = swiftedit::escape_field(s);
     std::cout << '\t' << escaped;
+}
+void word_count_progress(const swiftedit::SessionWordCount &count) {
+    if (count.state() == swiftedit::WordCountState::complete)
+        std::cout << "word-count\t" << count.result() << '\n';
+    else
+        std::cout << "word-count-progress\t" << count.offset() << '\t' << count.size() << '\n';
 }
 void page(const swiftedit::Page &p) {
     std::cout << "page\t" << p.offset << '\t' << p.next << '\t' << p.size;
@@ -81,6 +88,7 @@ int main(int argc, char **argv) {
     }
     swiftedit::Session session{};
     swiftedit::ContextCursor context{};
+    std::unique_ptr<swiftedit::SessionWordCount> counting{};
     std::string line{};
     std::cout << "ready\tSwiftEdit\t1\n" << std::flush;
     while (true) {
@@ -121,9 +129,27 @@ int main(int argc, char **argv) {
                 require_field_count(f, 1);
                 if (session.read_only())
                     throw std::runtime_error(
-                        "Whole-document word count is unavailable for paged files.");
+                        "Use word-count-start and word-count-next for paged files.");
                 const std::size_t words = notepad::word_count(session.text());
                 std::cout << "word-count\t" << words << '\n';
+            } else if (cmd == "word-count-start") {
+                require_field_count(f, 1);
+                counting = std::make_unique<swiftedit::SessionWordCount>(session);
+                word_count_progress(*counting);
+            } else if (cmd == "word-count-next") {
+                require_field_count(f, 2);
+                const std::uint64_t budget = number(f[1]);
+                if (budget == 0 || budget > swiftedit::maximum_page)
+                    throw std::runtime_error("Word count step budget must be 1..65536 bytes.");
+                if (!counting)
+                    throw std::runtime_error("Start a word count first.");
+                (*counting).step(session, static_cast<std::size_t>(budget));
+                word_count_progress(*counting);
+            } else if (cmd == "word-count-cancel") {
+                require_field_count(f, 1);
+                if (counting)
+                    (*counting).cancel();
+                counting.reset();
             } else if (cmd == "open") {
                 require_field_count(f, 2);
                 if (session.dirty())

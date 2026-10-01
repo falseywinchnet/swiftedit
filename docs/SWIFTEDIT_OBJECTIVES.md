@@ -77,14 +77,18 @@ precedence. The previous DECISIONS.md is historical implementation evidence.
 2026-10-01 resumed checkpoint: the separate Word Count tool is implemented with
 an explicit whitespace-run policy, shared by GUI and CLI. It does not mutate
 content, selection, revision or history. Language-specific segmentation remains
-outside this initial policy; paged whole-document counts remain pending.
+outside this initial policy. Paged whole-document counting is available through
+the incremental command protocol; terminal-screen and large GUI integration
+remain pending.
 
 The shared count now uses a constant-space streaming UTF-8 accumulator. Words
 and partial scalars survive chunk boundaries; malformed, overlong, surrogate,
 out-of-range and truncated sequences fail without publishing a partial count.
 Tests cover every split of representative Unicode text, single-byte chunks and
-failed/finished counter states. This is the counting core only: a cancellable,
-document-stamped paged task and its command/UI integration remain unfinished.
+failed/finished counter states. A document-stamped task reads at most 64 KiB per
+step, rejects stale documents and supports immediate cancellation between steps.
+The command protocol exposes start/next/cancel, tested with an actual 16 MiB
+read-only file. This does not yet provide the terminal-screen or large GUI UI.
 
 1. Migrate GUI to the session command model with source/display position mapping;
    preserve toolkit ownership and negotiate virtual/paged text rendering.
