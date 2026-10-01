@@ -48,6 +48,17 @@ struct Preview {
 struct SourceRange {
     std::size_t offset{}, length{};
 };
+// Owned source bytes; only Session can populate this from a validated source range.
+// Clipboard lifetime is independent of its source document.
+class SourceClipboard {
+public:
+    SourceClipboard() = default;
+    std::string_view bytes() const { return bytes_; }
+
+private:
+    friend class Session;
+    std::string bytes_{};
+};
 // Holds a read handle, not a whole-file allocation. No write sharing is granted.
 class PagedFile {
 public:
@@ -86,6 +97,8 @@ public:
     // Deferred GUI work must match both document lifetime and revision.
     void replace_ranges(const std::vector<SourceRange> &, std::string_view replacement,
                         DocumentStamp observed);
+    [[nodiscard]] SourceClipboard copy_range(SourceRange, DocumentStamp) const;
+    void paste_range(SourceRange, const SourceClipboard &, DocumentStamp);
     [[nodiscard]] bool undo();
     [[nodiscard]] bool redo();
     void restore_opened();

@@ -27,7 +27,9 @@ public:
     std::size_t commit_replacement(SessionReplacement &);
     void enter();
     void erase(bool backward);
-    std::string cut();
+    SourceClipboard copy();
+    SourceClipboard cut();
+    void paste(const SourceClipboard &);
     bool undo();
     bool redo();
     void save();

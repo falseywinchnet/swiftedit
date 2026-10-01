@@ -124,3 +124,17 @@ identity/revision, consumes completion once and moves output into change().
 All thirteen suites passed; extra direct stale/no-op reuse tests passed. No new
 native run in this slice. Full goal remains open, including snapshot/publication
 latency, wrapping, clipboard/save parity and provider GUI integration.
+
+2026-10-01 source clipboard checkpoint: Session now issues owned SourceClipboard
+snapshots from checked source ranges. Terminal Copy/Cut/Paste uses these snapshots
+to preserve malformed bytes and existing CRCR verbatim, including after the source
+document is replaced. Cut captures before deletion; paste checks destination
+identity/revision, range and the editable size limit before one undoable edit.
+External payload validation remains unchanged. Build and all thirteen headless
+suites passed (3.08 s total); regressions cover byte roundtrips, cross-document
+lifetime, stale capture/destination, range/capacity refusal and undo preservation.
+House-style spelling audit: zero findings across sixty authored files; semantic
+review checked ownership, source-only construction and publication ordering.
+No new native console run for this slice, and suite runtime is not UI latency.
+Full goal remains open: wrapping, large-file interaction, external clipboard/save
+parity, public-provider GUI integration and final measured lag/bug validation.

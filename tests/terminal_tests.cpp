@@ -54,10 +54,10 @@ int main() {
         terminal.move(swiftedit::TerminalMotion::left);
         check(terminal.selection().caret == 4 && terminal.selected_range().length == 0,
               "Left collapses selection to start");
-        const std::string cut = terminal.cut();
-        check(cut == "abcd\n" && terminal.session().text() == "x\nabcdef",
+        const swiftedit::SourceClipboard cut = terminal.cut();
+        check(cut.bytes() == "abcd\n" && terminal.session().text() == "x\nabcdef",
               "Cut without selection removes one full logical line");
-        terminal.insert(cut);
+        terminal.paste(cut);
         check(terminal.session().text() == "abcd\nx\nabcdef", "Internal cut text pastes exactly");
         terminal.reset(true);
         const std::string malformed("\xff\xcc\x81Z", 4);
@@ -88,6 +88,21 @@ int main() {
               "Illegal bytes survive undo");
         terminal.select_all();
         check(terminal.selected_text() == malformed, "Copy returns exact source bytes");
+        const swiftedit::SourceClipboard raw_copy = terminal.copy();
+        const swiftedit::SourceClipboard raw_cut = terminal.cut();
+        check(terminal.session().text().empty(), "Cut captures malformed source before deletion");
+        terminal.paste(raw_cut);
+        check(terminal.session().text() == malformed, "Malformed cut/paste preserves exact bytes");
+        check(terminal.undo() && terminal.session().text().empty(), "Paste is one undo step");
+        terminal.paste(raw_copy);
+        bool external_refused = false;
+        try {
+            terminal.insert(malformed);
+        } catch (const std::exception &) {
+            external_refused = true;
+        }
+        check(external_refused && terminal.session().text() == malformed,
+              "External malformed payload remains refused");
         terminal.move(swiftedit::TerminalMotion::document_end);
         terminal.insert("changed");
         const std::string dirty = terminal.session().text();
@@ -297,6 +312,32 @@ int main() {
         }
         terminal.reset(true);
         terminal.open(crcr_path);
+        terminal.select_all();
+        const swiftedit::SourceClipboard crcr_copy = terminal.copy();
+        terminal.paste(crcr_copy);
+        check(terminal.session().text() == "cat\r\rcat",
+              "CRCR source clipboard remains byte-faithful");
+        swiftedit::Session destination{};
+        destination.paste_range({0, 0}, raw_copy, destination.stamp());
+        check(destination.text() == malformed, "Clipboard survives source document replacement");
+        const swiftedit::DocumentStamp old_destination = destination.stamp();
+        destination.paste_range({0, malformed.size()}, crcr_copy, destination.stamp());
+        bool stale_paste_refused = false;
+        try {
+            destination.paste_range({0, 0}, raw_copy, old_destination);
+        } catch (const std::exception &) {
+            stale_paste_refused = true;
+        }
+        check(stale_paste_refused && destination.text() == "cat\r\rcat",
+              "Stale destination refuses clipboard publication");
+        bool range_paste_refused = false;
+        try {
+            destination.paste_range({destination.text().size(), 1}, raw_copy, destination.stamp());
+        } catch (const std::exception &) {
+            range_paste_refused = true;
+        }
+        check(range_paste_refused && destination.text() == "cat\r\rcat",
+              "Out-of-bounds clipboard publication preserves destination");
         replacement.begin(terminal, swiftedit::SearchPattern("cat"), "dog", true);
         while (replacement.state() == swiftedit::TerminalReplaceState::pending)
             static_cast<void>(replacement.step(terminal, 4));
@@ -312,6 +353,28 @@ int main() {
         }
         check(metadata_refused && terminal.session().text() == "cat\r\rcat",
               "Caller-inserted metadata stays forbidden despite source-preserving operation");
+        swiftedit::Session near_limit{};
+        near_limit.replace_ranges({{0, 0}}, std::string(swiftedit::editable_limit - 2, 'x'),
+                                  near_limit.stamp());
+        const swiftedit::DocumentStamp before_capacity = near_limit.stamp();
+        bool capacity_refused = false;
+        try {
+            near_limit.paste_range({0, 0}, raw_copy, before_capacity);
+        } catch (const std::exception &) {
+            capacity_refused = true;
+        }
+        check(capacity_refused && near_limit.revision() == before_capacity.revision &&
+                  near_limit.size() == swiftedit::editable_limit - 2,
+              "Oversized paste preserves source and revision");
+        check(near_limit.undo() && near_limit.text().empty(),
+              "Refused paste does not add an undo step");
+        bool stale_copy_refused = false;
+        try {
+            static_cast<void>(near_limit.copy_range({0, 0}, before_capacity));
+        } catch (const std::exception &) {
+            stale_copy_refused = true;
+        }
+        check(stale_copy_refused, "Clipboard capture requires the observed source revision");
         swiftedit::Session issued{};
         issued.replace_ranges({{0, 0}}, "cat", issued.stamp());
         std::unique_ptr<swiftedit::SessionReplacement> plan =

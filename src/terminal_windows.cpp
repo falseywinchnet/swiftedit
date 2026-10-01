@@ -500,7 +500,7 @@ private:
                 static_cast<void>(buffer_.redo());
                 return;
             case 'C':
-                clipboard_ = buffer_.selected_text();
+                clipboard_ = buffer_.copy();
                 status_ = "Copied selection";
                 return;
             case 'K':
@@ -508,7 +508,7 @@ private:
                 status_ = "Cut to terminal clipboard";
                 return;
             case 'U':
-                buffer_.insert(clipboard_);
+                buffer_.paste(clipboard_);
                 return;
             }
         }
@@ -580,7 +580,8 @@ private:
     bool replace_query_{};
     swiftedit::TerminalQuery query_{};
     Prompt prompt_{Prompt::none};
-    std::string input_{}, clipboard_{}, status_{"F1 Help"};
+    std::string input_{}, status_{"F1 Help"};
+    swiftedit::SourceClipboard clipboard_{};
     std::size_t top_{}, left_{}, width_{80}, rows_{20};
     wchar_t high_surrogate_{};
     bool done_{}, exit_after_save_{};

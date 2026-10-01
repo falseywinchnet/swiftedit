@@ -208,7 +208,18 @@ void TerminalBuffer::erase(bool backward) {
     selection_ = {range.offset, range.offset};
     desired_column_.reset();
 }
-std::string TerminalBuffer::cut() {
+SourceClipboard TerminalBuffer::copy() {
+    const SourceRange range = selected_range();
+    SourceClipboard result = session_.copy_range(range, session_.stamp());
+    return result;
+}
+void TerminalBuffer::paste(const SourceClipboard &clipboard) {
+    const SourceRange range = selected_range();
+    session_.paste_range(range, clipboard, session_.stamp());
+    selection_ = {range.offset + clipboard.bytes().size(), range.offset + clipboard.bytes().size()};
+    desired_column_.reset();
+}
+SourceClipboard TerminalBuffer::cut() {
     SourceRange range = selected_range();
     if (!range.length) {
         const std::size_t line = line_at(selection_.caret);
@@ -218,7 +229,7 @@ std::string TerminalBuffer::cut() {
                                     : session_.text().size();
         range.length = end - range.offset;
     }
-    std::string result = session_.text().substr(range.offset, range.length);
+    SourceClipboard result = session_.copy_range(range, session_.stamp());
     if (range.length) {
         session_.replace_ranges({range}, "", session_.stamp());
         selection_ = {range.offset, range.offset};

@@ -359,6 +359,33 @@ void Session::replace_ranges(const std::vector<SourceRange> &ranges, std::string
     next.append(text_, copied, text_.size() - copied);
     change(std::move(next));
 }
+SourceClipboard Session::copy_range(SourceRange range, DocumentStamp observed) const {
+    editable();
+    if (observed.identity != identity_ || observed.revision != revision_)
+        throw std::runtime_error("Stale copy: document changed.");
+    if (range.offset > text_.size() || range.length > text_.size() - range.offset)
+        throw std::runtime_error("Copy range exceeds document.");
+    SourceClipboard result{};
+    result.bytes_ = text_.substr(range.offset, range.length);
+    return result;
+}
+void Session::paste_range(SourceRange range, const SourceClipboard &clipboard,
+                          DocumentStamp observed) {
+    editable();
+    if (observed.identity != identity_ || observed.revision != revision_)
+        throw std::runtime_error("Stale paste: document changed.");
+    if (range.offset > text_.size() || range.length > text_.size() - range.offset)
+        throw std::runtime_error("Paste range exceeds document.");
+    const std::size_t retained = text_.size() - range.length;
+    if (clipboard.bytes_.size() > editable_limit - 1 - retained)
+        throw std::runtime_error("Paste would reach the 16 MiB read-only threshold.");
+    std::string next{};
+    next.reserve(retained + clipboard.bytes_.size());
+    next.append(text_, 0, range.offset);
+    next.append(clipboard.bytes_);
+    next.append(text_, range.offset + range.length, text_.size() - range.offset - range.length);
+    change(std::move(next));
+}
 bool Session::undo() {
     editable();
     if (undo_.empty())

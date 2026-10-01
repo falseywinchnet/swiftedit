@@ -45,8 +45,8 @@ and more granular line navigation still need implementation.
 This executable is unfinished. Wrap preferences,
 Text-copy prompt, full conflict review, external
 clipboard integration and further interactive/accessibility checks remain.
-An internal cut containing malformed UTF-8 cannot yet be pasted back through
-Session's valid-insertion rule; Undo still restores it. Long logical lines and
+Internal Copy/Cut captures an owned source clipboard, so malformed UTF-8 and
+existing CRCR bytes paste back exactly. New external insertions remain validated. Long logical lines and
 metadata rebuilding need the requested measured lag scan. A display-layout
 failure retains the input loop so Save and Exit remain available.
 
