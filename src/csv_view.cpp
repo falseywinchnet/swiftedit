@@ -167,9 +167,7 @@ void CsvView::prepare_view() {
     formula_sources_.clear();
     next_calculation_ = 0;
     cells_.clear();
-    hovered_.reset();
-    if (tooltip_)
-        (*tooltip_).hide();
+    clear_hover();
     const std::size_t row_end = std::min((*table_).rows().size(), top_ + visible_rows_);
     for (std::size_t row = top_; row < row_end; ++row) {
         const std::size_t column_end =
@@ -386,14 +384,21 @@ std::optional<swiftedit::CellAddress> CsvView::hit(gf::Point position) const {
     const std::optional<swiftedit::CellAddress> result = address;
     return result;
 }
+void CsvView::clear_hover() {
+    const bool displayed = hovered_.has_value();
+    hovered_.reset();
+    if (tooltip_)
+        (*tooltip_).hide();
+    if (displayed) {
+        status_.clear();
+        invalidate(gf::Dirty::paint);
+    }
+}
 void CsvView::on_pointer(gf::PointerEvent &event) {
     if (event.phase != gf::EventPhase::target)
         return;
     if (event.action == gf::PointerAction::leave) {
-        hovered_.reset();
-        if (tooltip_)
-            (*tooltip_).hide();
-        invalidate(gf::Dirty::paint);
+        clear_hover();
         return;
     }
     if (event.action == gf::PointerAction::wheel) {
@@ -407,8 +412,11 @@ void CsvView::on_pointer(gf::PointerEvent &event) {
         set_pointer_capture(false);
     }
     const std::optional<swiftedit::CellAddress> cell = hit(event.position);
-    if (!cell)
+    if (!cell) {
+        if (event.action == gf::PointerAction::move)
+            clear_hover();
         return;
+    }
     if (event.action == gf::PointerAction::down) {
         select_cell(*cell);
         if (window())
@@ -423,14 +431,18 @@ void CsvView::on_pointer(gf::PointerEvent &event) {
         }
         event.handled = true;
     } else if (event.action == gf::PointerAction::move) {
-        if (dragging_) {
+        const bool selection_changed = dragging_ &&
+            (caret_.row != (*cell).row || caret_.column != (*cell).column);
+        if (selection_changed) {
             caret_ = *cell;
             update_field();
         }
+        const std::pair<std::size_t, std::size_t> key{(*cell).row, (*cell).column};
+        if (hovered_ == key && !selection_changed)
+            return;
         const std::map<std::pair<std::size_t, std::size_t>, CellDisplay>::const_iterator found =
             cells_.find({(*cell).row, (*cell).column});
         if (found != cells_.end()) {
-            const std::pair<std::size_t, std::size_t> key{(*cell).row, (*cell).column};
             status_ = (*found).second.detail;
             if (hovered_ != key && window()) {
                 if (!tooltip_)
@@ -442,7 +454,8 @@ void CsvView::on_pointer(gf::PointerEvent &event) {
                     (*tooltip_).show(shared_from_this());
             }
             hovered_ = key;
-        }
+        } else
+            clear_hover();
         invalidate(gf::Dirty::paint);
     }
 }

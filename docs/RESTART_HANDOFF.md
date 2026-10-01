@@ -616,3 +616,17 @@ and Meta+W routes through the existing exit/unsaved-close path. The two-editor
 native fixture uses that routed key on Mac and still checks the remaining
 editor's lifetime. Local Windows build and 20 suites passed in 3.69 seconds;
 101-file spelling audit passed. Mac-specific execution is pending native CI.
+
+CSV hover correction: moving into headers or other non-cell space now clears
+reference outlines and hover detail. Repeated movement within the same cell
+avoids repaint and redundant selection-field updates. Source/viewport replacement
+clears old hover state; asynchronous formula completion still refreshes the
+current hover. Regression checks assert zero dirty marks for unchanged movement
+and cleared reference outlines after leaving the grid. All 20 local suites
+passed in 3.62 seconds; 101-file spelling audit passed. No source/save semantics
+or retained callback ownership changed. This is not a blank-editor CPU fix.
+
+Native CI 36890043148 and core 36890043097 passed for b4b6462, including the Mac
+Command-W path in the real two-editor lifetime fixture. Physical keyboard and
+warning-symbol visual inspection remain outstanding. Provider 4d24f43 native
+CI 36889995777 is still running; installed SDK remains 0322371.

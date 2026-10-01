@@ -64,6 +64,20 @@ void verify_duplicate_formulas() {
     (*grid).on_paint(highlighted, {0, 0, 800, 600});
     check(highlighted.reference_outlines == 1 && (*grid).status() == "=A1*2 | References: A1",
           "Reused formula preserves reference tooltip and visible reference outline");
+    window.reset_activity_metrics();
+    (*grid).on_pointer(hover);
+    check(window.metrics().snapshot().dirty_marks == 0,
+          "Repeated hover in the same cell does not dirty the view");
+    hover.position = {4, 46}; // Row/column header area, still inside this control.
+    (*grid).on_pointer(hover);
+    ObservingPainter outside{};
+    (*grid).on_paint(outside, {0, 0, 800, 600});
+    check(outside.reference_outlines == 0 && (*grid).status().empty(),
+          "Moving off cells clears stale formula highlights and hover detail");
+    window.reset_activity_metrics();
+    (*grid).on_pointer(hover);
+    check(window.metrics().snapshot().dirty_marks == 0,
+          "Repeated movement outside the grid does not dirty an already clear hover");
     (*grid).set_source("3,=A1*2,=A1*2\n5,=A1*2,=A1*2");
     settle_formulas(*grid);
     ObservingPainter edited{};

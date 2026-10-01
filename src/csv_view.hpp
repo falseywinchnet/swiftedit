@@ -54,6 +54,7 @@ private:
     void reveal_caret();
     void update_scrollbars();
     void update_field();
+    void clear_hover();
     void publish(std::string);
     std::optional<swiftedit::CellAddress> hit(gf::Point) const;
     std::unique_ptr<swiftedit::Csv> table_{};
