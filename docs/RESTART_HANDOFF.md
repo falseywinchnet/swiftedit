@@ -436,3 +436,19 @@ to0.3082ms; worst87.4842 to0.3371ms. Raw before/after, source/binary identities 
 scope in performance/2026-10-01-csv-clear/. This excludes parsing, editor undo/
 publication and nativepainting. No local desktop launch. Prior4e15c30 native
 36860154826 last observedlive; portable36860154953 passed. Full goal still open.
+
+Date/time parity: GUI F5 and terminal F5 now share date_time.cpp's checked local
+calendar conversion and locale-independent ASCII formatting. The terminal uses
+normal selection replacement and undo; read-only edits remain refused. Fixed
+local calendar fixture verifies formatting, selection replacement and one-step
+undo. All 17 suites passed in 2.16s; 81-file spelling audit clean. Native F5 key
+delivery was compiled but not exercised in a new desktop smoke. Previous
+cf71f5d native run 36860466943 and portable 36860466924 both succeeded; the
+gh watch process exited successfully. No local process remains.
+
+Coordinator explicitly reports shared GUI work remains paused in its own chat
+after the new shutdown notice, requiring direct owner resume there. Consumer
+work continues under this chat's repeated goal continuations, but do not claim
+A2/W1/print availability or alter provider source ownership. Full objective
+still requires GUI session migration, visible controls/multiselection, large
+GUI documents, document windows/print and comprehensive native responsiveness.

@@ -27,6 +27,7 @@ buffer when it exits normally or unwinds an exception.
 | Ctrl+U | Paste from that private clipboard |
 | Escape in a prompt | Cancel |
 | F1 | Short help |
+| F5 | Insert local date and time as plain text, replacing the selection |
 
 The terminal uses the same Session source/edit/save model as the command
 interface. Existing mixed endings remain exact; Enter uses the opened file's
@@ -43,6 +44,11 @@ trying to go farther back reports the limit and offers Ctrl+Home. Full graphemes
 are preserved across reads. Oversized graphemes that exceed the context limit
 are reported unavailable, preserving the source. Read-only range selection/copy
 and more granular line navigation still need implementation.
+
+F5 shares the GUI's formatter and inserts `YYYY-MM-DD HH:MM:SS` using local
+calendar time. The timestamp is ordinary source text, with no retained clock
+link or automatic updates. Insertion is one undoable edit and is refused in
+read-only documents through the normal editing guard.
 
 Wrap is visual only: source spaces, tabs and line endings remain exact. Space/tab
 boundaries are preferred, with whole-grapheme breaks for longer words. Up/Down

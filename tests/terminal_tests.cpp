@@ -3,6 +3,7 @@
 #include "terminal_page.hpp"
 #include "terminal_search.hpp"
 #include "terminal_query.hpp"
+#include "date_time.hpp"
 #include <iostream>
 #include <fstream>
 #include "platform.hpp"
@@ -16,6 +17,26 @@ void check(bool condition, const char *message) {
 int main() {
     try {
         swiftedit::TerminalBuffer terminal{};
+        std::tm calendar{};
+        calendar.tm_year = 126;
+        calendar.tm_mon = 9;
+        calendar.tm_mday = 1;
+        calendar.tm_hour = 12;
+        calendar.tm_min = 34;
+        calendar.tm_sec = 56;
+        calendar.tm_isdst = -1;
+        const std::time_t instant = std::mktime(&calendar);
+        check(instant != static_cast<std::time_t>(-1), "Local timestamp fixture is representable");
+        const std::string timestamp = notepad::local_date_time(instant);
+        check(timestamp == "2026-10-01 12:34:56",
+              "Shared local date/time uses plain stable formatting");
+        terminal.insert("replace me");
+        terminal.select_all();
+        terminal.insert(timestamp);
+        check(terminal.session().text() == timestamp, "Timestamp insertion replaces the selection");
+        check(terminal.undo() && terminal.session().text() == "replace me",
+              "Timestamp insertion is one undoable edit");
+        terminal.reset(true);
         terminal.move(swiftedit::TerminalMotion::left);
         terminal.move(swiftedit::TerminalMotion::right);
         terminal.erase(true);

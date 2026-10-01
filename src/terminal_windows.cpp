@@ -3,6 +3,7 @@
 #include "terminal_page.hpp"
 #include "terminal_search.hpp"
 #include "terminal_query.hpp"
+#include "date_time.hpp"
 #include <algorithm>
 #include <iostream>
 #ifdef SWIFTEDIT_TERMINAL_SMOKE
@@ -646,6 +647,11 @@ private:
         case VK_TAB:
             buffer_.insert("\t");
             break;
+        case VK_F5: {
+            const std::string timestamp = notepad::current_date_time();
+            buffer_.insert(timestamp);
+            break;
+        }
         case VK_F3: {
             swiftedit::SearchPattern pattern = query_.pattern();
             search_.begin(buffer_, std::move(pattern));
@@ -692,7 +698,7 @@ int wmain(int argc, wchar_t **argv) {
             std::cout << "SwiftEdit interactive terminal\nUsage: swiftedit-terminal [file]\n"
                          "Ctrl+S Save, Ctrl+R Open, Ctrl+X Exit, Shift+arrows Select, "
                          "Ctrl+Z/Y Undo/Redo, Ctrl+K Cut, Ctrl+U Paste, Ctrl+T Save Text Copy, "
-                         "F2 Wrap to window.\n";
+                         "F2 Wrap to window, F5 Insert Date and Time.\n";
             return argc > 2 ? 1 : 0;
         }
         Terminal terminal{};

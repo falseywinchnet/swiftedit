@@ -1,11 +1,9 @@
 #include "editor.hpp"
 #include "session.hpp"
 #include "characters.hpp"
+#include "date_time.hpp"
 #include <algorithm>
 #include <chrono>
-#include <ctime>
-#include <iomanip>
-#include <sstream>
 #include <stdexcept>
 
 namespace notepad {
@@ -606,19 +604,8 @@ void Editor::execute(const std::string &id) {
                       "word; languages without spaces are not segmented.";
             message("Word Count", report);
         } else if (id == "date-time") {
-            const std::time_t now =
-                std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-            std::tm local{};
-#ifdef _WIN32
-            const bool local_time_failed = localtime_s(&local, &now) != 0;
-#else
-            const bool local_time_failed = localtime_r(&now, &local) == nullptr;
-#endif
-            if (local_time_failed)
-                throw std::runtime_error("Cannot determine local date and time.");
-            std::ostringstream out{};
-            out << std::put_time(&local, "%Y-%m-%d %H:%M:%S");
-            (*text_).replace_selection(out.str());
+            const std::string timestamp = current_date_time();
+            (*text_).replace_selection(timestamp);
         } else if (id == "newline-lf" || id == "newline-crlf") {
             const std::string ending = id == "newline-lf" ? "\n" : "\r\n";
             const std::string converted = swiftedit::normalize_newlines((*text_).text(), ending);
