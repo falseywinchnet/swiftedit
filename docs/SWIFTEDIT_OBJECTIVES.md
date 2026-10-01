@@ -78,8 +78,8 @@ precedence. The previous DECISIONS.md is historical implementation evidence.
 an explicit whitespace-run policy, shared by GUI and CLI. It does not mutate
 content, selection, revision or history. Language-specific segmentation remains
 outside this initial policy. Paged whole-document counting is available through
-the incremental command protocol; terminal-screen and large GUI integration
-remain pending.
+the incremental command protocol and terminal F6; large GUI integration remains
+pending.
 
 The shared count now uses a constant-space streaming UTF-8 accumulator. Words
 and partial scalars survive chunk boundaries; malformed, overlong, surrogate,
@@ -88,7 +88,8 @@ Tests cover every split of representative Unicode text, single-byte chunks and
 failed/finished counter states. A document-stamped task reads at most 64 KiB per
 step, rejects stale documents and supports immediate cancellation between steps.
 The command protocol exposes start/next/cancel, tested with an actual 16 MiB
-read-only file. This does not yet provide the terminal-screen or large GUI UI.
+read-only file. Terminal F6 uses the same task in the cooperative input loop;
+any key cancels pending counting. Large GUI counting remains pending.
 
 1. Migrate GUI to the session command model with source/display position mapping;
    preserve toolkit ownership and negotiate virtual/paged text rendering.

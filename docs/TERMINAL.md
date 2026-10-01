@@ -11,6 +11,7 @@ buffer when it exits normally or unwinds an exception.
 | Ctrl+Home/End | Beginning/end of document |
 | Page Up/Down | Move by the visible row count (visual rows when wrapped) |
 | F2 | Toggle no-wrap / wrap-to-window for editable documents |
+| F6 | Count document words, including paged read-only files; any key cancels pending counting |
 | Shift plus navigation | Extend selection |
 | Typing, Enter, Tab | Replace selection or insert text |
 | Backspace/Delete | Delete one complete grapheme or selection |
@@ -53,6 +54,15 @@ F5 shares the GUI's formatter and inserts `YYYY-MM-DD HH:MM:SS` using local
 calendar time. The timestamp is ordinary source text, with no retained clock
 link or automatic updates. Insertion is one undoable edit and is refused in
 read-only documents through the normal editing guard.
+
+F6 counts nonempty runs separated by Unicode whitespace without changing source,
+selection or history. The event loop reads at most 64 KiB per counting step and
+checks input between steps. Escape cancels; other keys cancel and then perform
+their normal action. No repeated wake is scheduled after completion/cancellation.
+Words and UTF-8 scalars may cross page boundaries; malformed source fails without
+showing a partial count. This bounds byte work per step, not filesystem latency.
+The owned-console smoke includes completed counting and read-only cancellation;
+it runs only under the opt-in native-test configuration, including Windows CI.
 
 Wrap is visual only: source spaces, tabs and line endings remain exact. Space/tab
 boundaries are preferred, with whole-grapheme breaks for longer words. Up/Down

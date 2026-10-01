@@ -134,6 +134,10 @@ if(NOTEPAD_BUILD_UI)
   if(NOTEPAD_NATIVE_TESTS)
     add_test(NAME native COMMAND notepad-native-tests)
     set_tests_properties(native PROPERTIES TIMEOUT 30)
+    if(WIN32)
+      add_test(NAME terminal-native COMMAND swiftedit-terminal-smoke)
+      set_tests_properties(terminal-native PROPERTIES TIMEOUT 30)
+    endif()
     if(APPLE)
       # std::clock measures process CPU on this POSIX host. This reports
       # diagnostics; completing the probe is not an idle-performance pass.

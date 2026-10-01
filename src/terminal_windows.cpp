@@ -4,6 +4,7 @@
 #include "terminal_search.hpp"
 #include "terminal_query.hpp"
 #include "date_time.hpp"
+#include "session_word_count.hpp"
 #include <algorithm>
 #include <iostream>
 #ifdef SWIFTEDIT_TERMINAL_SMOKE
@@ -164,6 +165,9 @@ public:
     bool wraps() const { return wrap_; }
     std::size_t wrap_cancellations() const { return wrap_cancellations_; }
     std::size_t text_copy_saves() const { return text_copy_saves_; }
+    std::size_t completed_counts() const { return completed_counts_; }
+    std::uint64_t last_word_count() const { return last_word_count_; }
+    std::size_t cancelled_counts() const { return cancelled_counts_; }
     bool document_dirty() const { return buffer_.session().dirty(); }
     bool wildcard_enabled() const {
         const swiftedit::SearchPattern pattern = query_.pattern();
@@ -173,6 +177,7 @@ public:
     void open(const std::filesystem::path &path) {
         search_.cancel();
         replacement_.cancel();
+        counting_.reset();
         buffer_.open(path);
         pager_.reset(buffer_.session());
         top_ = 0;
@@ -207,6 +212,23 @@ public:
                 redraw = false;
             }
             try {
+                if (counting_) {
+                    if ((*counting_).state() == swiftedit::WordCountState::running)
+                        (*counting_).step(buffer_.session(), swiftedit::maximum_page);
+                    if ((*counting_).state() == swiftedit::WordCountState::complete) {
+                        const std::uint64_t words = (*counting_).result();
+#ifdef SWIFTEDIT_TERMINAL_SMOKE
+                        ++completed_counts_;
+                        last_word_count_ = words;
+#endif
+                        status_ = "Document: " + std::to_string(words) + " words";
+                        counting_.reset();
+                        redraw = true;
+                        continue;
+                    }
+                    if (!console_.input_ready())
+                        continue;
+                }
                 if (replacement_.state() == swiftedit::TerminalReplaceState::pending) {
                     const swiftedit::TerminalReplaceState state = replacement_.step(buffer_);
                     if (state != swiftedit::TerminalReplaceState::pending) {
@@ -240,6 +262,7 @@ public:
             } catch (const std::exception &failure) {
                 search_.cancel();
                 replacement_.cancel();
+                counting_.reset();
                 status_ = failure.what();
                 redraw = true;
                 continue;
@@ -372,11 +395,13 @@ private:
                 width_);
         if (buffer_.session().read_only())
             status_line(screen, height - 1,
-                        "Read-only: Up/Down Row  PgUp/PgDn Page  Ctrl+Home First  ^X Exit", width_);
-        else
-            status_line(screen, height - 1,
-                        "^C Copy  ^K Cut  ^U Paste  ^T Text Copy  F2 Wrap  Shift+arrows Select",
+                        "F6 Words  Read-only: Up/Down Row  PgUp/PgDn Page  Ctrl+Home First",
                         width_);
+        else
+            status_line(
+                screen, height - 1,
+                "F6 Words  ^C Copy  ^K Cut  ^U Paste  ^T Text Copy  F2 Wrap  Shift+arrows Select",
+                width_);
         if (prompt_ == Prompt::none && cursor_column) {
             position(screen, cursor_row, *cursor_column);
             screen += "\x1b[?25h";
@@ -451,6 +476,16 @@ private:
             wrap_suspended_ = false;
         if (key != 0 && event.uChar.UnicodeChar < 32)
             high_surrogate_ = 0;
+        if (counting_) {
+            (*counting_).cancel();
+            counting_.reset();
+#ifdef SWIFTEDIT_TERMINAL_SMOKE
+            ++cancelled_counts_;
+#endif
+            status_ = "Word count cancelled";
+            if (key == VK_ESCAPE)
+                return;
+        }
         if (replacement_.state() == swiftedit::TerminalReplaceState::pending) {
             replacement_.cancel();
             status_ = "Replacement cancelled";
@@ -660,6 +695,10 @@ private:
             buffer_.insert(timestamp);
             break;
         }
+        case VK_F6:
+            counting_ = std::make_unique<swiftedit::SessionWordCount>(buffer_.session());
+            status_ = "Counting document words... Any key cancels";
+            break;
         case VK_F3: {
             swiftedit::SearchPattern pattern = query_.pattern();
             search_.begin(buffer_, std::move(pattern));
@@ -680,6 +719,8 @@ private:
     std::size_t search_hits_{};
     std::size_t wrap_cancellations_{};
     std::size_t text_copy_saves_{};
+    std::size_t completed_counts_{}, cancelled_counts_{};
+    std::uint64_t last_word_count_{};
 #endif
     Console console_{};
     swiftedit::TerminalBuffer buffer_{};
@@ -689,6 +730,7 @@ private:
     swiftedit::TerminalPager pager_{};
     swiftedit::TerminalSearch search_{};
     swiftedit::TerminalReplace replacement_{};
+    std::unique_ptr<swiftedit::SessionWordCount> counting_{};
     bool replace_query_{};
     swiftedit::TerminalQuery query_{};
     Prompt prompt_{Prompt::none};
@@ -706,7 +748,7 @@ int wmain(int argc, wchar_t **argv) {
             std::cout << "SwiftEdit interactive terminal\nUsage: swiftedit-terminal [file]\n"
                          "Ctrl+S Save, Ctrl+R Open, Ctrl+X Exit, Shift+arrows Select, "
                          "Ctrl+Z/Y Undo/Redo, Ctrl+K Cut, Ctrl+U Paste, Ctrl+T Save Text Copy, "
-                         "F2 Wrap to window, F5 Insert Date and Time.\n";
+                         "F2 Wrap to window, F5 Insert Date and Time, F6 Word Count.\n";
             return argc > 2 ? 1 : 0;
         }
         Terminal terminal{};
@@ -811,6 +853,7 @@ int wmain() {
         enqueue(console.input, 'X', 0, LEFT_CTRL_PRESSED);
         enqueue(console.input, VK_ESCAPE);
         enqueue(console.input, 'Z', 0, LEFT_CTRL_PRESSED);
+        enqueue(console.input, VK_F6);
         enqueue(console.input, 'X', 0, LEFT_CTRL_PRESSED);
         {
             Terminal terminal{};
@@ -822,6 +865,8 @@ int wmain() {
             if (terminal.search_hits() != 1 || !terminal.wildcard_enabled())
                 throw std::runtime_error(
                     "Terminal wildcard Find did not publish the expected match.");
+            if (terminal.completed_counts() != 1 || terminal.last_word_count() != 2)
+                throw std::runtime_error("F6 did not count the saved document.");
         }
         DWORD restored = 0;
         if (!GetConsoleMode(console.input, &restored) || restored != mode)
@@ -931,11 +976,14 @@ int wmain() {
         enqueue(console.input, VK_NEXT);
         enqueue(console.input, VK_PRIOR);
         enqueue(console.input, VK_HOME, 0, LEFT_CTRL_PRESSED);
+        enqueue(console.input, VK_F6);
+        enqueue(console.input, VK_ESCAPE);
         enqueue(console.input, 'S', 0, LEFT_CTRL_PRESSED);
         enqueue(console.input, 'X', 0, LEFT_CTRL_PRESSED);
         {
             Terminal terminal{};
-            if (terminal.run(large_path) != 0)
+            if (terminal.run(large_path) != 0 || terminal.cancelled_counts() != 1 ||
+                terminal.completed_counts() != 0)
                 throw std::runtime_error("Read-only terminal run failed.");
         }
         if (std::filesystem::last_write_time(large_path) != original_time ||
