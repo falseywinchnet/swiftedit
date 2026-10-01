@@ -567,3 +567,10 @@ then checks retained pasted text and editing after parent GUI shutdown. This
 does not assume an X11 clipboard manager or test clipboard persistence after
 source shutdown. Local native-fixture compilation and 101-file style audit pass;
 no local GUI launched. Provider2d04310 native36886549919 remains running.
+
+ASCII native clipboard transfer a011391 passed all three native jobs in
+36887223711; raw logs under .build/new-window-a011391. Next fixture selects
+UTF-8 bytes8..15 (accented e, space, emoji), checks exact cross-process paste and
+retained text after parent GUI shutdown, and records one command-return timing
+observation separately from child startup. Local compile/style pass; native
+results pending. Provider2d04310 jobs still live, not restarted or repinned.

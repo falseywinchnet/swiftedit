@@ -7,6 +7,8 @@
 #include <thread>
 
 namespace gf = gui_forms;
+constexpr std::string_view parent_text = "unsaved \xc3\xa9 \xf0\x9f\x98\x80 parent document";
+constexpr std::string_view copied_text = "\xc3\xa9 \xf0\x9f\x98\x80";
 void require(const bool good, const char *message) {
     if (!good)
         throw std::runtime_error(message);
@@ -105,19 +107,23 @@ private:
             require(++ticks_ < 200, "Independent native lifecycle timed out");
             gf::TextBox &text = *(*editor_).text_control();
             if (parent_ && ticks_ == 1) {
-                text.replace_selection("unsaved parent document");
-                text.select(gf::Utf8Offset(2), gf::Utf8Offset(7));
+                text.replace_selection(parent_text);
+                text.select(gf::Utf8Offset(8), gf::Utf8Offset(15));
                 const gf::TextSelection selection = text.selection();
                 (*editor_).execute("copy");
+                const std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now();
                 (*editor_).execute("new-window");
+                const std::chrono::duration<double, std::milli> launch_time =
+                    std::chrono::steady_clock::now() - started;
+                std::cout << "new-window-command|return_ms=" << launch_time.count() << '\n';
                 require(!failure_, "Native child launch accepted");
-                require(text.text() == "unsaved parent document" && text.selection() == selection &&
+                require(text.text() == parent_text && text.selection() == selection &&
                             (*editor_).document().dirty(text.text()), "Parent document preserved");
             }
             require(!std::filesystem::exists("child.failed"), "Child reported native failure");
             if (!parent_ && !pasted_) {
                 (*editor_).execute("paste");
-                require(text.text() == "saved", "Native clipboard crosses independent processes");
+                require(text.text() == copied_text, "Native Unicode clipboard crosses independent processes");
                 pasted_ = true;
                 receipt("child.pasted");
             }
@@ -126,7 +132,7 @@ private:
             if (!ready_to_close)
                 return;
             if (!parent_) {
-                require(text.text() == "saved", "Child source remains independent after parent closes");
+                require(text.text() == copied_text, "Child source remains independent after parent closes");
                 text.select_all();
                 text.replace_selection("child still editable");
                 require(text.text() == "child still editable", "Child still accepts edits");
