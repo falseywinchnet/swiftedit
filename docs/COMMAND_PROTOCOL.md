@@ -18,9 +18,11 @@ returns `ok<TAB>quit`. Requests exceeding 32 MiB of transport text are rejected.
 |---|---|
 | `info` | Emits revision, byte size, dirty 0/1, read-only 0/1, path |
 | `word-count` | Emits `word-count, count` for valid UTF-8 editable text; observes working text without changing revision/history; paged files are refused |
-| `open`, path | Opens an existing file and emits first 4096 bytes; dirty session requires save or explicit discard first |
+| `open`, path | Opens an existing file and emits stamped context for first 4096 bytes; dirty session requires save or explicit discard first |
 | `discard` | Explicitly drops the current document and starts empty |
 | `page`, offset, byte-budget | 1–65536 bytes; emits `page, offset, next, total, bytes` |
+| `context`, byte-budget | Restarts sequential stamped context at byte zero; 1–65536 source bytes |
+| `context-next`, byte-budget | Continues that bounded read; edits, save, open or discard require a fresh context read |
 | `find`, exact-text | Up to 100 matches in editable document, each with bounded context; no automatic wrap or mutation |
 | `preview`, before, old, after, replacement | Matches exact concatenated context; emits all bounded candidate previews |
 | `commit`, token, revision | Applies one explicitly chosen current preview; subsequent attempts with stale/used tokens fail |
@@ -74,8 +76,29 @@ CSV uses comma delimiters, doubled quotes and CRLF/LF/CR row endings. Local
 edits retain all unrelated source spelling, quotes and endings. Missing cells
 in ragged rows are errors; clearing never manufactures or shifts cells. Math
 supports strict decimal literals, parentheses, arithmetic, rectangular ranges,
-comma lists and the function subset in SWIFTEDIT_OBJECTIVES.md. Formula cells
-are text operands, so references to them fail instead of forming recalc chains.
+comma lists and the function subset in SWIFTEDIT_OBJECTIVES.md. Stored formula cells evaluate recursively with cycle, depth and work limits;
+references observe current source values.
 Example `ROUND(SUM(A1:B2)/3,2)` explicitly authorizes rounding. `10/3` alone
 fails. Error messages name invalid referenced cells. The reference list can
 later drive native hover highlighting.
+
+
+## Blank-line context metadata
+
+`open`, `context` and `context-next` emit a `context, document-identity, revision`
+row, one ordinary `page, offset, next, total, bytes` row, then zero or more
+`blank, source-byte-offset, logical-line-number, escaped-marker` rows. The marker
+is exactly CR CR L<number> CR CR before transport escaping. The source field is
+always separate and escaped, including literal CRCR already in an opened file.
+Never concatenate marker fields into a document edit. Mutation payloads containing
+the reserved marker delimiter are refused intact.
+
+Only terminated, truly empty logical lines receive markers. Spaces or tabs make
+a line nonempty. CRLF counts as one ending even when split between pages; bare
+CR and LF each end a line. No synthetic trailing line is added at EOF. Line
+numbers are one-based observations of that exact document identity/revision,
+not persistent edit addresses. Changing the source invalidates the traversal;
+use `context` to restart. Exact context plus preview/commit remains the edit
+addressing mechanism. Large read-only files use the same bounded reader without
+loading or pre-indexing the whole file. `page` and `find` retain their original
+raw-byte context response; they do not guess line numbers for arbitrary offsets.

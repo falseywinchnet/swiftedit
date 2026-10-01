@@ -1,4 +1,5 @@
 #include "csv.hpp"
+#include "context.hpp"
 #include "session.hpp"
 #include <charconv>
 #include <iostream>
@@ -24,6 +25,17 @@ void page(const swiftedit::Page &p) {
     std::cout << "page\t" << p.offset << '\t' << p.next << '\t' << p.size;
     field(p.bytes);
     std::cout << '\n';
+}
+void context_page(const swiftedit::ContextPage &context) {
+    std::cout << "context\t" << context.stamp.identity.value << '\t' << context.stamp.revision.value
+              << '\n';
+    page(context.content);
+    for (const swiftedit::BlankAnchor &anchor : context.blanks) {
+        std::cout << "blank\t" << anchor.offset << '\t' << anchor.line;
+        const std::string marker = swiftedit::blank_marker(anchor);
+        field(marker);
+        std::cout << '\n';
+    }
 }
 std::filesystem::path path(const std::string &s) {
     const std::u8string utf8(reinterpret_cast<const char8_t *>(s.data()), s.size());
@@ -68,6 +80,7 @@ int main(int argc, char **argv) {
         return 0;
     }
     swiftedit::Session session{};
+    swiftedit::ContextCursor context{};
     std::string line{};
     std::cout << "ready\tSwiftEdit\t1\n" << std::flush;
     while (true) {
@@ -117,8 +130,9 @@ int main(int argc, char **argv) {
                     throw std::runtime_error("Unsaved edits: save or explicitly discard first.");
                 const std::filesystem::path source = path(f[1]);
                 session.open(source);
-                const swiftedit::Page first_page = session.page();
-                page(first_page);
+                context.reset(session);
+                const swiftedit::ContextPage first_page = context.next(session);
+                context_page(first_page);
             } else if (cmd == "discard") {
                 require_field_count(f, 1);
                 session.reset();
@@ -131,6 +145,17 @@ int main(int argc, char **argv) {
                 const swiftedit::Page requested_page =
                     session.page(offset, static_cast<std::size_t>(n));
                 page(requested_page);
+            } else if (cmd == "context" || cmd == "context-next") {
+                require_field_count(f, 2);
+                const std::uint64_t budget = number(f[1]);
+                if (budget == 0 || budget > swiftedit::maximum_page)
+                    throw std::runtime_error(
+                        "Context page budget must be between 1 and 65536 bytes.");
+                if (cmd == "context")
+                    context.reset(session);
+                const swiftedit::ContextPage requested =
+                    context.next(session, static_cast<std::size_t>(budget));
+                context_page(requested);
             } else if (cmd == "find") {
                 require_field_count(f, 2);
                 const std::vector<std::size_t> matches = session.find(f[1]);

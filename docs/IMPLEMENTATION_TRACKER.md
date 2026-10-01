@@ -15,11 +15,11 @@ a measured lag/bug scan. This file tracks work; unchecked items are not complete
 - [ ] Source/display provider contract and coherent SDK integration.
 - [ ] GUI shared session migration, invalid/control-byte editing and paged viewing.
 - [ ] Discontiguous selection and flagged wildcard GUI/terminal controls.
-- [ ] Mixed-ending save choice and full external-conflict/copy workflow.
-  - Mixed-ending Save As-Is / Convert to Document Default / Cancel is implemented
-    as an owned pending-save dialog. Destination races refuse intact. Full
-    two-stage conflict filename/metadata and versioned-copy workflow is next.
-- [ ] Conventional terminal screen and separate blank-line marker metadata.
+- [x] Mixed-ending save choice and full external-conflict/copy workflow.
+  - Owned mixed-ending and two-stage conflict dialogs, editable save metadata,
+    versioned new copy, explicit reviewed overwrite; races refuse intact.
+- [ ] Conventional terminal screen.
+- [x] Separate revision-bound blank-line metadata in bounded AI context reads.
 - [ ] Native Markdown rendering, inert links, source toggle and rendered ruler.
 - [ ] Native print, Markdown layout preview, multiple independent windows.
 - [ ] Character/control inspector and insertion tools.

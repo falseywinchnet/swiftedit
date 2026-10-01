@@ -56,6 +56,24 @@ try {
     $response = Send-Request -Process $process -Fields @('open',$target)
     Assert ($response[-1].StartsWith("error`tUnsaved")) 'Open cannot silently discard'
     $response = Send-Request -Process $process -Fields @('discard')
+    $blankFile = Join-Path $fixture 'blank.txt'
+    [IO.File]::WriteAllText($blankFile,"a`r`n`r`n `n`n")
+    $response = Send-Request -Process $process -Fields @('open',$blankFile.Replace('\','\\'))
+    Assert ($response[0].StartsWith("context`t")) 'Open emits stamped context'
+    Assert ($response -contains "blank`t3`t2`t\x0d\x0dL2\x0d\x0d") 'True blank has escaped marker metadata'
+    Assert ($response -contains "blank`t7`t4`t\x0d\x0dL4\x0d\x0d") 'Whitespace-only line does not get marker'
+    $response = Send-Request -Process $process -Fields @('context','2')
+    Assert ($response[1] -eq "page`t0`t2`t8`ta\x0d") 'Bounded context restart'
+    $response = Send-Request -Process $process -Fields @('context-next','2')
+    Assert ($response -contains "blank`t3`t2`t\x0d\x0dL2\x0d\x0d") 'Split CRLF preserves line metadata'
+    $response = Send-Request -Process $process -Fields @('preview','','a','','\r\rL2\r\r')
+    Assert ($response[-1].StartsWith("error`t")) 'Metadata echoed into replacement is refused'
+    $response = Send-Request -Process $process -Fields @('preview','','a','','b')
+    $blankPreview = $response[0].Split("`t")
+    $response = Send-Request -Process $process -Fields @('commit',$blankPreview[1],$blankPreview[2])
+    $response = Send-Request -Process $process -Fields @('context-next','2')
+    Assert ($response[-1].StartsWith("error`tContext changed")) 'Context traversal rejects stale revision'
+    $response = Send-Request -Process $process -Fields @('discard')
     $csv = Join-Path $fixture 'table.csv'
     [IO.File]::WriteAllText($csv,"0.1,0.2`n4,text")
     $response = Send-Request -Process $process -Fields @('open',$csv.Replace('\','\\'))

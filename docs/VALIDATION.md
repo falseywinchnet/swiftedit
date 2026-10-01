@@ -358,3 +358,17 @@ Binary SHA-256: `F302F7274B9492ACECB7DF21CBF08B88791E0F6E7BEC37B9D383D6B216353B7
 Log: `.build/swiftedit-resumed/native-20261001-020127.stdout.txt`.
 No physical keyboard, screen-reader, visual-layout or final latency claim follows
 from this callback-driven smoke. Current SDK remains unchanged.
+
+## Bounded blank-line context metadata - 2026-10-01
+
+Eleven headless suites passed in 2.19 s after adding ContextCursor and CLI
+context/context-next. Unit tests traverse mixed endings with every budget from
+one byte through the fixture length, including CRLF splits, whitespace-only
+lines, repeated EOF, reserved marker mutation refusal, stale revision and foreign
+identity. A 16 MiB read-only fixture verifies bounded context and literal
+marker-like source preservation. Process integration verifies open/context rows,
+continuation and stale-read errors. C++ spelling audit has zero findings across
+44 authored files; cursor lifetime, bounded allocation, progress publication and
+source/metadata separation were reviewed separately. No native desktop run was
+needed for this command/core change; no latency conclusion is drawn from suite
+runtime.

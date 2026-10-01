@@ -58,3 +58,9 @@ versioned, filename/encoding/endings editable; final Save binds reviewed snapsho
 and document stamp, refuses changed fields/races. CLI remains strict. Continue
 shared byte-faithful GUI/provider integration, terminal UX/metadata, print,
 independent windows and measured lag scan. Active owner goal remains unfinished.
+
+2026-10-01 context checkpoint: src/context.hpp/cpp implements bounded sequential
+ContextCursor stamped by document identity/revision. CLI open emits context/page/
+blank records, context restarts and context-next continues. Exact CRCR L<number>
+CRCR markers are escaped separate metadata, never source. Eleven headless suites
+pass; full terminal screen is still outstanding. Source CRCR stays byte-faithful.
