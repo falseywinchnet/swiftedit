@@ -524,3 +524,12 @@ Provider coordinator has exact remaining measurements and stack sample path.
 File-link opening still pending separately from directory navigation. Active
 full-feature goal remains unfinished, including GUI Session migration, larger
 GUI files, visible controls/multiselection, printing and independent windows.
+
+Selection policy checkpoint: SelectionSet owns editable-session ranges/stamp,
+validates grapheme boundaries and equal-character rewrite rules, and copies
+separate original-byte parts. Source mutation is atomic through Session; stale
+or foreign documents and unequal rewrite are refused before mutation. Full
+metadata construction is synchronous and GUI gestures/paged metadata are not
+implemented. All 20 local headless suites passed in 4.29 seconds; 97-file style
+spelling audit and diff check passed. No local native launch. Cross-platform
+checks for this new change are pending at this checkpoint.

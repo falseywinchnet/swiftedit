@@ -22,7 +22,7 @@ precedence. The previous DECISIONS.md is historical implementation evidence.
 | Line metadata | Blank lines alone get `CR CR L<number> CR CR`; markers never become content | Stamped sequential context emits separate escaped blank markers; source CRCR stays source and echoed mutation markers are refused |
 | Binary bytes, later correction | Open as text; don't hide/collapse; save blocked while illegal bytes remain; Save Text Copy replaces each illegal byte with space | Byte-faithful command session and explicit copy implemented; GUI invalid-byte glyph/mapping view pending |
 | Controls, later correction | Existing Unicode controls remain real editable content, shown visibly and inert | Session preserves controls; terminal displays inert labels; GUI inspector/pickers implemented, document-wide visible glyph view pending |
-| Selection | Ctrl/Cmd+drag discontiguous selection; equal lengths parallel edits, unequal lengths copy-only | Provider only has one anchor/caret pair; pending provider contract |
+| Selection | Ctrl/Cmd+drag discontiguous selection; equal lengths parallel edits, unequal lengths copy-only | Shared editable-session selection policy implemented; provider only has one anchor/caret pair, so GUI gestures remain pending |
 | Search | Flagged single-character wildcard slot; literal punctuation remains literal; no regex | Native flagged query field/right-click, grapheme Find/Replace and wrapping; normalized Ctrl+? tested, native host mapping and interruptible orchestration pending |
 | Status | Grapheme character count, selection length; separate word-count tool | GUI count, selection length and column use graphemes; line lookup uses cached line starts; Document > Word Count reports document/selection; CLI shares counting core |
 | Navigation | Paged navigation, draggable scrollbar; no jump-byte/jump-line product UI | Low-level CLI byte page cursor implemented; GUI scrollbar/virtualization pending |
@@ -124,3 +124,13 @@ slice permits at most eight uncached formulas and checks a two-millisecond budge
 between formulas. One formula is still synchronous under the existing expression,
 dependency-depth and reference-work bounds; this is not full parser preemption.
 See performance/2026-10-01-csv-cooperative for measurements and test scope.
+
+Interactive SelectionSet now validates up to 1000 ordered, disjoint source
+ranges against one document identity/revision. Equal source grapheme counts
+permit a single atomic parallel rewrite; unequal counts remain copy-only.
+Copy returns separate byte-faithful parts without inventing a join separator.
+UTF-8 sequences, combining clusters and CRLF cannot be split. Illegal bytes
+each count as one inert unit without changing source. Undo invalidates old
+selection stamps. Generic automated range replacement retains its separate
+semantics. Construction synchronously copies/indexes editable source metadata;
+paged selection metadata, clipboard joining and GUI gestures remain pending.
