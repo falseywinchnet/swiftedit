@@ -104,6 +104,13 @@ int main(int argc, char **argv) {
                 const std::u8string p = session.path().u8string();
                 field(std::string(reinterpret_cast<const char *>(p.data()), p.size()));
                 std::cout << '\n';
+            } else if (cmd == "word-count") {
+                require_field_count(f, 1);
+                if (session.read_only())
+                    throw std::runtime_error(
+                        "Whole-document word count is unavailable for paged files.");
+                const std::size_t words = notepad::word_count(session.text());
+                std::cout << "word-count\t" << words << '\n';
             } else if (cmd == "open") {
                 require_field_count(f, 2);
                 if (session.dirty())

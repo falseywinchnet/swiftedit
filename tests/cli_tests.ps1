@@ -42,6 +42,8 @@ try {
     Assert ($response[-1].StartsWith("error`tStale")) 'Stale commit refused'
     $response = Send-Request -Process $process -Fields @('page','0','4096')
     Assert ($response[0] -eq "page`t0`t11`t11`thello\x0aworld") 'Exact escaped page'
+    $response = Send-Request -Process $process -Fields @('word-count')
+    Assert ($response[0] -eq "word-count`t2") 'Shared word count observes working text'
     $target = (Join-Path $fixture 'new.txt').Replace('\','\\')
     $response = Send-Request -Process $process -Fields @('save-as',$target)
     Assert ($response[-1].StartsWith("ok`tsave-as")) 'Save creates new file'

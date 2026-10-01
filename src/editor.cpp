@@ -164,7 +164,7 @@ void Editor::initialize_control_tree() {
          {"document",
           "&Document",
           {item("restore-opened", "Restore As &Opened..."),
-           item("date-time", "Insert &Date and Time", "F5"),
+           item("date-time", "Insert &Date and Time", "F5"), item("word-count", "&Word Count..."),
            item("newline-lf", "Convert Line Endings to &LF"),
            item("newline-crlf", "Convert Line Endings to &CRLF")}},
          {"format", "F&ormat", {item("wrap", "&Word Wrap"), item("font", "&Font...")}},
@@ -386,6 +386,17 @@ void Editor::execute(const std::string &id) {
                 (*text_).select_all();
                 (*text_).replace_selection(document_.opened_text);
             }
+        } else if (id == "word-count") {
+            const std::size_t words = word_count((*text_).text());
+            std::string report = "Document: " + std::to_string(words) + " words";
+            if (!(*text_).selection().empty()) {
+                const std::string selected = (*text_).selected_text();
+                const std::size_t selected_words = word_count(selected);
+                report += "\nSelection: " + std::to_string(selected_words) + " words";
+            }
+            report += "\n\nWords are runs separated by whitespace. Punctuation stays with its "
+                      "word; languages without spaces are not segmented.";
+            message("Word Count", report);
         } else if (id == "date-time") {
             const std::time_t now =
                 std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());

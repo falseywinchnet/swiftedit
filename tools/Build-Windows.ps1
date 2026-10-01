@@ -1,7 +1,7 @@
 param(
     [string]$Toolchain = 'C:/Users/Shadow/plan-paint/build-deps/msys64/mingw64/bin',
-    [string]$GuiSdk = 'C:/Users/Shadow/file_manager/.build/sdk-checkpoints/dbe3766/windows-x64/gui-forms-sdk',
-    [string]$PickerSdk = 'C:/Users/Shadow/file_manager/.build/sdk-checkpoints/dbe3766/windows-x64/picker-sdk',
+    [string]$GuiSdk = 'C:/Users/Shadow/file_manager/.build/sdk-checkpoints/house-style-final/windows-x64/gui-forms-sdk',
+    [string]$PickerSdk = 'C:/Users/Shadow/file_manager/.build/sdk-checkpoints/house-style-final/windows-x64/picker-sdk',
     [string]$BuildDirectory = '',
     [string]$StageDirectory = '',
     [switch]$NativeTests

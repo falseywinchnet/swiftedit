@@ -17,6 +17,7 @@ returns `ok<TAB>quit`. Requests exceeding 32 MiB of transport text are rejected.
 | Request fields | Behavior |
 |---|---|
 | `info` | Emits revision, byte size, dirty 0/1, read-only 0/1, path |
+| `word-count` | Emits `word-count, count` for valid UTF-8 editable text; observes working text without changing revision/history; paged files are refused |
 | `open`, path | Opens an existing file and emits first 4096 bytes; dirty session requires save or explicit discard first |
 | `discard` | Explicitly drops the current document and starts empty |
 | `page`, offset, byte-budget | 1–65536 bytes; emits `page, offset, next, total, bytes` |
@@ -47,6 +48,12 @@ Files >=16 MiB are read-only via a retained file handle and bounded reads.
 Search/edit/sanitize are currently restricted to smaller files. There is no
 asynchronous whole-file count yet. Read-only paging follows the opened file
 handle if its directory entry is replaced. It does not silently follow a new file.
+
+Word count uses nonempty runs separated by Unicode whitespace, including NBSP
+and ideographic space. Apostrophes, hyphens and punctuation do not split a run.
+Zero-width space is not a separator. This deliberately documented first policy
+does not provide language-specific segmentation for scripts without spaces.
+Malformed UTF-8 is refused, without sanitizing or changing the document.
 
 Example (the separators below are actual tabs):
 

@@ -18,5 +18,7 @@ without checking the destination. Record measured test evidence honestly.
 
 All authored source, tests and tooling must follow docs/PROGRAMMING_HOUSE_STYLE.md.
 Read that exact owner-supplied style before edits. Audit semantic ownership, failure,
-allocation and callback rules as well as spelling. No feature expansion during
-the house-style correction; preserve frozen SDKs and previous published stages.
+allocation and callback rules as well as spelling. The house-style correction
+is complete; the owner's 2026-10-01 direction resumes unfinished implementation
+and assigns this chat ownership of the repository. Preserve frozen SDKs and
+previous published stages.

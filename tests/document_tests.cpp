@@ -16,6 +16,35 @@ void raw(const std::filesystem::path &path, std::string_view text) {
 }
 int main() {
     try {
+        struct WordFixture {
+            std::string text{};
+            std::size_t expected{};
+        };
+        const WordFixture word_fixtures[] = {{"", 0},
+                                             {" \r\n\t", 0},
+                                             {"one\r\ntwo\rthree\nfour", 4},
+                                             {"don't re-enter a,b", 3},
+                                             {"e\xcc\x81 \xf0\x9f\x98\x80", 2},
+                                             {"a\xc2\xa0"
+                                              "b\xe2\x80\xaf"
+                                              "c\xe3\x80\x80"
+                                              "d",
+                                              4},
+                                             {"a\xe2\x80\x8b"
+                                              "b",
+                                              1},
+                                             {"\xe4\xb8\xad\xe6\x96\x87", 1}};
+        for (const WordFixture &fixture : word_fixtures) {
+            const std::size_t words = word_count(fixture.text);
+            require(words == fixture.expected, "Whitespace word-count policy");
+        }
+        bool malformed_count_refused = false;
+        try {
+            static_cast<void>(word_count("\xff"));
+        } catch (const std::runtime_error &) {
+            malformed_count_refused = true;
+        }
+        require(malformed_count_refused, "Word count refuses malformed UTF-8");
         for (const Encoding e :
              {Encoding::utf8, Encoding::utf8_bom, Encoding::utf16_le, Encoding::utf16_be}) {
             for (const std::string text :

@@ -17,6 +17,9 @@ struct Decoded {
 [[nodiscard]] std::string encoding_name(Encoding encoding);
 [[nodiscard]] std::string newline_name(std::string_view text);
 [[nodiscard]] std::string preferred_newline(std::string_view text);
+// Count nonempty runs separated by Unicode whitespace. Punctuation stays in
+// its run; this is not language-specific segmentation. Invalid UTF-8 is refused.
+[[nodiscard]] std::size_t word_count(std::string_view text);
 [[nodiscard]] std::optional<std::size_t> find_literal(std::string_view text, std::string_view query,
                                                       std::size_t start, bool match_case);
 struct Replacement {

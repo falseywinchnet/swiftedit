@@ -19,6 +19,7 @@ public:
     std::deque<gf::HostDialogChoice> choices{};
     std::string clipboard{};
     int dialogs{};
+    std::string last_message{};
 
 protected:
     gf::HostMonitorResult query_monitors_impl() override { return {}; }
@@ -37,6 +38,9 @@ protected:
     }
     gf::HostDialogResult show_dialog_impl(const gf::HostDialogRequest &request) override {
         ++dialogs;
+        const gf::HostMessageDialogRequest &message =
+            std::get<gf::HostMessageDialogRequest>(request.payload);
+        last_message = message.message;
         const gf::HostDialogChoice choice =
             choices.empty() ? gf::HostDialogChoice::ok : choices.front();
         if (!choices.empty())
@@ -123,6 +127,15 @@ int main() {
         (*editor).execute("select-all");
         const std::string selected = (*text).selected_text();
         check(selected == "first\r\nsecond", "Select all");
+        const gf::TextSelection count_selection = (*text).selection();
+        const bool count_dirty = (*editor).document().dirty((*text).text());
+        (*editor).execute("word-count");
+        check(services.last_message.starts_with("Document: 2 words\nSelection: 2 words"),
+              "Word Count reports document and selected text");
+        check((*text).text() == selected && (*text).selection() == count_selection,
+              "Word Count preserves text and selection");
+        check((*editor).document().dirty((*text).text()) == count_dirty,
+              "Word Count preserves save state");
         (*text).replace_selection("replacement");
         (*editor).execute("undo");
         check((*text).text() == "first\r\nsecond", "Menu undo");

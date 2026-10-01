@@ -4,6 +4,47 @@
 #include <stdexcept>
 
 namespace notepad {
+std::size_t word_count(std::string_view text) {
+    const gui_forms::Utf8ValidationResult valid = gui_forms::validate_utf8(text);
+    if (!valid.valid())
+        throw std::runtime_error("Word count requires valid UTF-8 text.");
+    std::size_t words = 0;
+    bool in_word = false;
+    std::size_t offset = 0;
+    while (offset < text.size()) {
+        const unsigned char first = static_cast<unsigned char>(text[offset]);
+        ++offset;
+        char32_t scalar = first;
+        std::size_t remaining = 0;
+        if (first >= 0xf0) {
+            scalar = first & 7;
+            remaining = 3;
+        } else if (first >= 0xe0) {
+            scalar = first & 15;
+            remaining = 2;
+        } else if (first >= 0xc0) {
+            scalar = first & 31;
+            remaining = 1;
+        }
+        for (std::size_t index = 0; index < remaining; ++index) {
+            const unsigned char next = static_cast<unsigned char>(text[offset]);
+            scalar = (scalar << 6) | (next & 63);
+            ++offset;
+        }
+        const bool whitespace = (scalar >= 0x09 && scalar <= 0x0d) || scalar == 0x20 ||
+                                scalar == 0x85 || scalar == 0xa0 || scalar == 0x1680 ||
+                                (scalar >= 0x2000 && scalar <= 0x200a) || scalar == 0x2028 ||
+                                scalar == 0x2029 || scalar == 0x202f || scalar == 0x205f ||
+                                scalar == 0x3000;
+        if (whitespace) {
+            in_word = false;
+        } else if (!in_word) {
+            ++words;
+            in_word = true;
+        }
+    }
+    return words;
+}
 namespace {
 void check_text(std::string_view text) {
     if (text.size() > maximum_bytes)

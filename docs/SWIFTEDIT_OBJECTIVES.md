@@ -24,7 +24,7 @@ precedence. The previous DECISIONS.md is historical implementation evidence.
 | Controls, later correction | Existing Unicode controls remain real editable content, shown visibly and inert | Session preserves valid UTF-8 controls; terminal transport escapes all controls; GUI glyphs/inspector/pickers pending |
 | Selection | Ctrl/Cmd+drag discontiguous selection; equal lengths parallel edits, unequal lengths copy-only | Provider only has one anchor/caret pair; pending provider contract |
 | Search | Flagged single-character wildcard slot; literal punctuation remains literal; no regex | Literal GUI/CLI search; wildcard slot UI/model pending |
-| Status | Grapheme character count, selection length; separate word-count tool | GUI counts graphemes; column still scalar-based; word count pending |
+| Status | Grapheme character count, selection length; separate word-count tool | GUI counts graphemes; column still scalar-based; Document > Word Count reports document/selection; CLI shares counting core |
 | Navigation | Paged navigation, draggable scrollbar; no jump-byte/jump-line product UI | Low-level CLI byte page cursor implemented; GUI scrollbar/virtualization pending |
 | Wrap, 02:32 | No wrap / wrap to window; intelligent breaks at spaces by default, visual only | Existing provider space/tab wrap with grapheme fallback; no separate preference yet |
 | Insert, 02:32 | Date and time as plain text | Document menu + F5, local ISO-style timestamp |
@@ -69,6 +69,11 @@ precedence. The previous DECISIONS.md is historical implementation evidence.
   were not adopted as confirmed owner requirements.
 
 ## Next development order
+
+2026-10-01 resumed checkpoint: the separate Word Count tool is implemented with
+an explicit whitespace-run policy, shared by GUI and CLI. It does not mutate
+content, selection, revision or history. Language-specific segmentation remains
+outside this initial policy; paged whole-document counts remain pending.
 
 1. Migrate GUI to the session command model with source/display position mapping;
    preserve toolkit ownership and negotiate virtual/paged text rendering.

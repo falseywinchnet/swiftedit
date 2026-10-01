@@ -121,3 +121,26 @@ screen readers, complete IME/bidi caret behavior, large/slow filesystem latency,
 power-loss recovery, broad metadata/ACL behavior and other operating systems
 remain unverified. See KNOWN_GAPS.md and DECISIONS.md for precise restrictions
 and the future product interview entrypoint.
+
+## 2026-10-01 resumed implementation
+
+Repository ownership resumed on explicit owner direction. Prior checkpoint
+`e9d2715` was clean and matched origin/master on falseywinchnet/swiftedit.
+
+Implemented Document > Word Count with document and optional selection counts,
+plus the shared CLI word-count operation. Counting uses Unicode whitespace runs;
+punctuation remains within a run. It is observational and does not change text,
+selection or save state. Invalid UTF-8 is refused. Paged whole-document counts and
+language-specific segmentation remain pending.
+
+Clean Release build: .build/swiftedit-resumed; stage: dist/SwiftEdit-resumed.
+Consumed the matching house-style-final GUI and picker SDK pair. Five headless
+suites passed: document 0.49 s, session 0.59 s, CSV 0.07 s, CLI 1.15 s, editor
+1.35 s; total 3.72 s. Native smoke executable compiled but was not run because
+desktop launches require coordination. Thus the prior final-SDK build/headless
+integration gap is closed; native desktop validation against it remains pending.
+C++ spelling audit: zero findings in 17 files. git diff --check: clean.
+
+Tests cover empty/whitespace text, CR/LF, apostrophes/hyphens, combining accents,
+emoji, Unicode whitespace, zero-width space, unsegmented CJK, malformed input,
+GUI document/selection reporting and state preservation, and the CLI response.
