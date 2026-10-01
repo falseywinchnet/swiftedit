@@ -582,3 +582,9 @@ newer than the release and still needs native evidence. Provider2d04310 Linux
 and Mac jobs failed; Linux frontend log says single-selection picker profile
 requires boundone. Sent exact evidence to provider owner, who retains source
 ownership. Keep SDK032 pin until corrected candidate fixtures/archives pass.
+
+7518073 Unicode native clipboard/lifecycle and command-return observations passed
+all three native jobs36887657481 and core36887657412. Raw logs under
+.build/new-window-7518073. One return-time sample each: Mac17.8737ms,
+Windows1.169ms, Linux2.08374ms; excludes child startup and is not a percentile
+benchmark. Product code unchanged from releasea011391; no republish required.

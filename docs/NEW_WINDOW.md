@@ -78,6 +78,14 @@ seconds). The separate core run 36886655139 also passed.
 ASCII clipboard transfer passed on all three platforms at a011391, native run
 36887223711: macOS 3.25 seconds, Windows 0.64 seconds, Linux 0.48 seconds for
 the complete two-editor lifecycle fixture. Raw logs are retained locally under
-.build/new-window-a011391. The next fixture checks an accented character and an
-emoji and records command-return timing; those additions await native execution.
+.build/new-window-a011391.
+
+The Unicode fixture passed on all three platforms at7518073, native run
+36887657481 and core36887657412. It transfers an accented character, a space
+and an emoji exactly, retains them after parent GUI shutdown and then edits the
+child. Single command-return observations were17.8737ms Mac,1.169ms Windows
+and2.08374ms Linux. These include the fixture's self-path lookup and exclude
+later child GUI startup; they are not percentile distributions or a performance
+pass threshold. Raw logs are under .build/new-window-7518073. Production launch
+and clipboard code is unchanged from the published a011391 package.
 Local compilation and the 101-file spelling audit pass.
