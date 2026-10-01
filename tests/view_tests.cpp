@@ -282,6 +282,35 @@ int main() {
         click.position = {50, 70};
         (*view).on_pointer(click);
         check(click.handled, "Rendered clicks are inert");
+        (*view).set_source("[first](file:///first)\n\nsecond\n\nthird\n\nfourth\n");
+        (*view).arrange({0, 0, 640, 90});
+        (*view).on_paint(painter, {0, 0, 640, 90});
+        gf::PointerEvent link_hover{};
+        link_hover.action = gf::PointerAction::move;
+        link_hover.position = {26, 54};
+        (*view).on_pointer(link_hover);
+        check((*view).hovered_url() == "file:///first", "Visible link exposes its inert URL");
+        std::shared_ptr<gf::VScrollBar> markdown_scroll{};
+        for (const gf::Control::Ptr &child : (*view).children()) {
+            const std::shared_ptr<gf::VScrollBar> candidate =
+                std::dynamic_pointer_cast<gf::VScrollBar>(child);
+            if (candidate)
+                markdown_scroll = candidate;
+        }
+        check(static_cast<bool>(markdown_scroll), "Markdown scrollbar exists");
+        (*markdown_scroll).set_value(32);
+        check((*view).hovered_url().empty(), "Scrolling clears the prior link tooltip");
+        link_hover.position = {26, 20}; // The old link lies behind the fixed ruler.
+        (*view).on_pointer(link_hover);
+        check((*view).hovered_url().empty(), "Ruler cannot expose a clipped link tooltip");
+        (*markdown_scroll).set_value(0);
+        link_hover.position = {26, 54};
+        (*view).on_pointer(link_hover);
+        check((*view).hovered_url() == "file:///first", "Visible link can be hovered again");
+        (*view).set_source("[replacement](file:///replacement)");
+        (*view).on_pointer(link_hover);
+        check((*view).hovered_url().empty(), "Pending layout cannot expose stale source links");
+        (*view).arrange({0, 0, 640, 480});
         (*view).set_source("# Changed\n\nAfter revision.");
         painter.drawn.clear();
         (*view).on_paint(painter, {0, 0, 640, 480});

@@ -13,6 +13,7 @@ public:
     void arrange(gf::Rect) override;
     void on_paint(gf::Painter &, gf::Rect) override;
     void on_pointer(gf::PointerEvent &) override;
+    [[nodiscard]] const std::string &hovered_url() const { return hovered_url_; }
     [[nodiscard]] std::size_t block_count() const {
         const std::size_t count = blocks_.size();
         return count;
@@ -37,6 +38,7 @@ private:
     };
     void layout(gf::Painter &, double width);
     void update_scroll_ranges();
+    void clear_hover();
     std::string source_{};
     std::vector<swiftedit::MarkdownBlock> blocks_{};
     std::vector<Run> runs_{};

@@ -630,3 +630,18 @@ Native CI 36890043148 and core 36890043097 passed for b4b6462, including the Mac
 Command-W path in the real two-editor lifetime fixture. Physical keyboard and
 warning-symbol visual inspection remain outstanding. Provider 4d24f43 native
 CI 36889995777 is still running; installed SDK remains 0322371.
+
+Markdown hover correction: URL hit testing now respects the clipped content
+viewport, excluding the ruler and scrollbar regions. Scroll/arrange clears the
+previous tooltip; pending or failed layout cannot expose old source links.
+Regression tests cover a visible inert file URL, scroll clearing, a link hidden
+behind the ruler, and source replacement before layout. All 20 local suites
+passed in 3.60 seconds; 101-file spelling audit passed. Callback ownership is
+unchanged (weak owner checked before use), and no link activation was added.
+
+CSV hover commit a0ff30f passed all three native jobs36891081079 and core36891081104.
+Provider4d24f43 Mac succeeded, but Windows failed in the later development mask
+configuration: GUI_FORMS_BUILD_TEXT_MASKS requires GUI_FORMS_ENABLE_HARFBUZZ_TEXT.
+Ordinary Windows picker model/view suites passed with no SKIP. Exact evidence
+was sent to the provider owner; SDK032 remains pinned while corrected complete
+archives and native validation are pending.

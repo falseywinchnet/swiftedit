@@ -29,8 +29,10 @@ bool MarkdownView::RunOrder::operator()(const Run &left, const Run &right) const
 }
 void MarkdownView::ScrollListener::operator()(const double &) const {
     const std::shared_ptr<MarkdownView> self = owner.lock();
-    if (self && (*self).is_alive())
+    if (self && (*self).is_alive()) {
+        (*self).clear_hover();
         (*self).invalidate(gf::Dirty::paint);
+    }
 }
 void MarkdownView::initialize_control_tree() {
     vertical_ = gf::make_control<gf::VScrollBar>(gf::StableId("markdown.vertical"));
@@ -61,12 +63,11 @@ void MarkdownView::set_source(std::string_view source) {
     source_ = std::move(retained);
     layout_dirty_ = true;
     layout_error_.clear();
-    hovered_url_.clear();
-    if (tooltip_)
-        (*tooltip_).hide();
+    clear_hover();
     invalidate(gf::Dirty::paint);
 }
 void MarkdownView::arrange(gf::Rect bounds) {
+    clear_hover();
     arrange_self(bounds);
     set_child_layout(vertical_, {std::max(0.0, bounds.width - 18), ruler_height, 18,
                                  std::max(0.0, bounds.height - ruler_height - 18)});
@@ -265,6 +266,11 @@ void MarkdownView::on_paint(gf::Painter &painter, gf::Rect) {
         painter.draw_text_utf8({tick + 3, 3}, label, ruler_font, style.disabled_text);
     }
 }
+void MarkdownView::clear_hover() {
+    hovered_url_.clear();
+    if (tooltip_)
+        (*tooltip_).hide();
+}
 void MarkdownView::on_pointer(gf::PointerEvent &event) {
     if (event.phase != gf::EventPhase::target)
         return;
@@ -283,10 +289,14 @@ void MarkdownView::on_pointer(gf::PointerEvent &event) {
     if (event.action != gf::PointerAction::move && event.action != gf::PointerAction::leave)
         return;
     const gf::Rect bounds = absolute_bounds();
+    const gf::Rect content{bounds.x, bounds.y + ruler_height,
+                           std::max(0.0, bounds.width - 18),
+                           std::max(0.0, bounds.height - ruler_height - 18)};
     const gf::Point point{event.position.x - bounds.x + (*horizontal_).value(),
                           event.position.y - bounds.y - ruler_height + (*vertical_).value()};
     std::string url{};
-    if (event.action == gf::PointerAction::move) {
+    if (event.action == gf::PointerAction::move && content.contains(event.position) &&
+        !layout_dirty_ && layout_error_.empty()) {
         Run beginning{};
         beginning.bounds.y = point.y - maximum_run_height_;
         std::vector<Run>::const_iterator run =
