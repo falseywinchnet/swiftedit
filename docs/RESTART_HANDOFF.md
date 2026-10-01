@@ -175,8 +175,8 @@ Mac bundle. Next: POSIX save/conflict semantics and installed macOS SDK packagin
 36849322565. POSIX adapter creates sibling files privately, preserves existing
 permissions/attributes, checks snapshots and metadata before publication, uses
 atomic no-overwrite link publication for new files and atomic name exchange for
-replacement. Cooperating writers are excluded by flock. A detected late replace
-race leaves displaced bytes at the reported sibling recovery path and reports
+replacement. Cooperating writers are excluded by flock. A detected race during exchange verification
+leaves displaced bytes at the reported sibling recovery path and reports
 failure; it does not claim the visible target was unchanged after an uncertain
 publication. POSIX uncooperative writers are not prevented by mandatory locks.
 Deterministic test-only publication hooks prove new-target collision refusal and
@@ -188,3 +188,10 @@ console target stays Windows-only. Fixture process IDs, permissions and cooperat
 writer ownership are portable. Windows native build + 15 suites passed (2.10s),
 69-file spelling audit clean. Full Mac GUI/SDK/bundle validation remains pending.
 The modification-time follow-up is being rechecked on macOS/Linux CI.
+
+Verified follow-up f12d33c: cross-platform run 36849715223 passed Windows, macOS
+and Linux, including fresh modification time after metadata-preserving save.
+https://github.com/falseywinchnet/swiftedit/actions/runs/36849715223
+The POSIX publication hook is compiled only into the standalone adapter test
+target; production builds have no injected callback. No native GUI Mac build or
+bundle has been validated. Provider-installed SDK archives remain outstanding.
