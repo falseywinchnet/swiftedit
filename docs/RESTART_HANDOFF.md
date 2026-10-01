@@ -81,3 +81,13 @@ source/selection/caret cell mapping and horizontal clipping. New pinned width/
 emoji sources and deterministic generator are checked in. Twelve suites pass;
 51-file spelling scan clean. Console host/input loop is still next. Do not claim
 host Unicode geometry proven; row construction still scans a full logical line.
+
+2026-10-01 console executable checkpoint: src/terminal_windows.cpp builds
+swiftedit-terminal.exe and a macro-selected opt-in owned-console smoke. Native
+smoke passed after paired press/release fixture correction; no running process
+remains. Thirteen headless suites pass. docs/TERMINAL.md lists shortcuts and
+unfinished behavior. Next terminal work: large read-only pages, visual wrap,
+search/wildcard, save review, external clipboard and responsiveness. Do not
+claim full goal completion. Provider visual-only prepared paragraph proving
+stage accepted with typed unsupported interaction; full interactive D4 remains
+required, no consumable SDK yet.

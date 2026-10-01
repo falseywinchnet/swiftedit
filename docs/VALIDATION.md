@@ -421,3 +421,35 @@ render/input integration is next. Width policy is a declared Unicode-based
 approximation requiring host validation, especially complex-script clusters and
 emoji/text variation. Current row construction scans the whole logical line;
 long-line latency and caching/yielding remain part of the unfinished lag work.
+
+## Native console host - 2026-10-01
+
+Added swiftedit-terminal.exe: private screen-buffer lifetime, UTF-16 keyboard
+assembly, source-mapped row rendering, selection/navigation, file prompts, save,
+private cut/copy/paste, undo/redo and explicit dirty-exit choice. Failures in row
+layout retain the input loop and save commands. Prompt errors remain visible.
+Key-release events do not redraw. Build-Windows stages the terminal executable
+and traverses its DLL dependencies; no old stage was replaced in this turn.
+
+Thirteen headless suites passed in 1.95 s; zero spelling findings across 52
+sources. Reviewed handle ownership/partial acquisition cleanup, console mode
+restoration, UTF-16 errors, source/output separation, prompt publication and
+native test ownership against the full house style.
+
+Initial smoke fixtures with key-down-only injection timed out and were killed
+at the external 20-second limit. Tracing found the final exit event absent from
+the consumed sequence. Adding matching key releases made the fixture reliable;
+no pass is claimed for the timed-out runs. Final private-console smoke exited 0,
+verifying supplemental Unicode input, saved bytes, dirty-exit cancel, undo and
+input-mode restoration. It always detaches and allocates its own hidden console;
+no global input injection or existing user console input is used.
+
+Final smoke SHA-256:
+`58DF7955E085799F6888B4E5BCFE246285C30550657D3F164115E36E9306E7D0`.
+Terminal executable SHA-256:
+`6BB6A0BABA98BAC90F91315A120A507B93D8109F48CFA64B24F7DDD9B3F48E9B`.
+Log: `.build/swiftedit-resumed/console-20261001-022718.stdout.txt`.
+
+This is not terminal feature completion. TERMINAL.md enumerates remaining
+large-file pages, wrap/search/wildcard/clipboard/save-review work. No native
+visual, keyboard-layout, accessibility or latency claim is made by this smoke.

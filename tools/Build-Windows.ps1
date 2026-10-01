@@ -63,6 +63,7 @@ try {
     New-Item -ItemType Directory -Path $stage -Force | Out-Null
     Copy-Item -LiteralPath "$build/SwiftEdit.exe" -Destination $stage -Force
     Copy-Item -LiteralPath "$build/swiftedit-cli.exe" -Destination $stage -Force
+    Copy-Item -LiteralPath "$build/swiftedit-terminal.exe" -Destination $stage -Force
     Copy-Item -LiteralPath "$repo/README.md" -Destination $stage -Force
     Copy-Item -LiteralPath "$repo/docs" -Destination $stage -Recurse -Force
     $licenseStage = Join-Path $stage 'licenses'
@@ -73,6 +74,7 @@ try {
     $queue = [System.Collections.Generic.Queue[string]]::new()
     $queue.Enqueue("$stage/SwiftEdit.exe")
     $queue.Enqueue("$stage/swiftedit-cli.exe")
+    $queue.Enqueue("$stage/swiftedit-terminal.exe")
     $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     while ($queue.Count) {
         $binary = $queue.Dequeue()

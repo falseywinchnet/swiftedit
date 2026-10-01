@@ -70,3 +70,7 @@ TerminalBuffer editing model now shares Session and provides grapheme selection,
 CRLF-atomic movement, preferred vertical columns, line cut, undo/redo and saves.
 The terminal screen/input loop is still unchecked; synchronous metadata rebuild
 and malformed internal cut/paste behavior need follow-through.
+
+Interactive Windows terminal host now builds and passes its owned-console input/
+save/undo/mode-restoration smoke. See TERMINAL.md. The terminal checkbox remains
+open for large-file pages, wrap, search/wildcard and further interactive work.
