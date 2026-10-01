@@ -28,7 +28,7 @@ public:
     std::size_t count() const { return count_; }
 
 private:
-    std::unique_ptr<ReplacementScan> scan_{};
+    std::unique_ptr<SessionReplacement> scan_{};
     DocumentStamp stamp_{};
     TerminalSelection selection_{};
     TerminalReplaceState state_{TerminalReplaceState::idle};

@@ -1,4 +1,5 @@
 #include "session.hpp"
+#include "session_replace.hpp"
 #include <algorithm>
 #include <atomic>
 #include <charconv>
@@ -251,6 +252,31 @@ std::vector<Preview> Session::preview(std::string_view before, std::string_view 
     previews_.swap(retained);
     next_token_ = next_token;
     return result;
+}
+std::unique_ptr<SessionReplacement> Session::prepare_replacement(SearchPattern pattern,
+                                                                 std::string replacement,
+                                                                 bool match_case) const {
+    editable();
+    // Validate only caller-inserted bytes. Existing source is retained by the
+    // engine's immutable snapshot, including legal pre-existing CRCR content.
+    payload(replacement);
+    std::unique_ptr<SessionReplacement> prepared(
+        new SessionReplacement(*this, std::move(pattern), std::move(replacement), match_case));
+    return prepared;
+}
+std::size_t Session::commit_replacement(SessionReplacement &prepared) {
+    editable();
+    if (prepared.stamp_.identity != identity_ || prepared.stamp_.revision != revision_)
+        throw std::runtime_error("Replacement belongs to an older document.");
+    if (!prepared.ready_ || prepared.consumed_)
+        throw std::runtime_error("Finish replacement preparation before its one-use commit.");
+    PatternReplacement result = (*prepared.scan_).take_result();
+    prepared.consumed_ = true;
+    prepared.scan_.reset();
+    const std::size_t count = result.count;
+    if (count)
+        change(std::move(result.text));
+    return count;
 }
 void Session::change(std::string next) {
     editable();

@@ -1,5 +1,6 @@
 #pragma once
 #include "session.hpp"
+#include "session_replace.hpp"
 #include <gui_forms/text.hpp>
 #include <optional>
 
@@ -22,7 +23,8 @@ public:
     void select_all();
     void select_range(SourceRange, DocumentStamp);
     void insert(std::string_view);
-    void replace_document(std::string_view, DocumentStamp);
+    std::unique_ptr<SessionReplacement> prepare_replacement(SearchPattern, std::string, bool);
+    std::size_t commit_replacement(SessionReplacement &);
     void enter();
     void erase(bool backward);
     std::string cut();

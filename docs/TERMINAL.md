@@ -75,6 +75,7 @@ string to delete all matches. Preparation is incremental and private; Enter star
 it, Escape or another key cancels while pending, and publication is one undoable
 Session edit. Source/selection changes revoke the prepared result. A failure
 preserves the document. The final whole-result publication remains synchronous
-and must be measured. Replacement follows Session's valid UTF-8 and reserved
-metadata payload rules, including refusal of a result containing CRCR; resolving
-that restriction for pre-existing source CRCR remains follow-through work.
+and must be measured. Replacement validates newly inserted UTF-8 and rejects inserted metadata
+markers. Session-issued one-use preparation preserves existing source CRCR
+without treating it as new metadata. Only the issuing document revision can
+commit the completed operation.

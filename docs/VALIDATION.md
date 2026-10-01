@@ -522,3 +522,25 @@ No latency, physical-keyboard or visual assertion follows from this smoke.
 Final whole-result publication is synchronous. Existing CRCR source can cause
 Session payload rejection of a whole replacement result; source remains intact,
 and this terminal/model parity limitation is not marked complete.
+
+## Source-preserving Session replacement authority - 2026-10-01
+
+Resolved the terminal CRCR limitation above. Session now issues an opaque
+SessionReplacement with private immutable source identity/revision and engine
+state. Only inserted replacement bytes pass through metadata/UTF-8 validation;
+retained source chunks remain source. Callers may advance/discard work but cannot
+forge the prepared text, source stamp or readiness. Session commit checks issuing
+identity/revision and completion, consumes authority once, then moves prepared
+text into one undoable change. This also removes the extra whole-result copy
+previously made by range replacement; no measured speedup is claimed.
+
+Full thirteen-suite regression passed in 2.84 s. Additional direct stale-plan
+and no-op/reuse tests passed the affected terminal suite in 0.35 s. Tests cover
+existing `cat CR CR cat` becoming `dog CR CR dog`, one undo restoring exact source,
+inserted marker refusal, incomplete/foreign/stale-plan refusal, and one-use
+consent even when identical replacement leaves revision unchanged. Spelling
+scan: zero findings in 60 authored files. Semantic review covered private factory
+authority, immutable snapshot ownership, commit failure and one-use consumption.
+No new desktop run was needed for this core ownership change; previous native
+smoke is historical evidence, not an assertion about the newly linked binaries.
+Snapshot setup and undo baseline allocation still require latency measurement.

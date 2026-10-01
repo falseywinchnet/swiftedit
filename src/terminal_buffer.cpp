@@ -176,10 +176,20 @@ void TerminalBuffer::insert(std::string_view source) {
     selection_ = {range.offset + source.size(), range.offset + source.size()};
     desired_column_.reset();
 }
-void TerminalBuffer::replace_document(std::string_view text, DocumentStamp observed) {
-    session_.replace_ranges({{0, session_.text().size()}}, text, observed);
-    selection_ = {};
-    desired_column_.reset();
+std::unique_ptr<SessionReplacement> TerminalBuffer::prepare_replacement(SearchPattern pattern,
+                                                                        std::string replacement,
+                                                                        bool match_case) {
+    std::unique_ptr<SessionReplacement> result =
+        session_.prepare_replacement(std::move(pattern), std::move(replacement), match_case);
+    return result;
+}
+std::size_t TerminalBuffer::commit_replacement(SessionReplacement &prepared) {
+    const std::size_t count = session_.commit_replacement(prepared);
+    if (count) {
+        selection_ = {};
+        desired_column_.reset();
+    }
+    return count;
 }
 void TerminalBuffer::enter() { insert(newline_); }
 void TerminalBuffer::erase(bool backward) {

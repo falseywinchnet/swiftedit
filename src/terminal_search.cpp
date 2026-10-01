@@ -57,9 +57,8 @@ void TerminalReplace::begin(TerminalBuffer &buffer, SearchPattern pattern, std::
     if (buffer.session().read_only())
         throw std::runtime_error("Large-file pages are read-only.");
     const TerminalSelection selection = buffer.selection();
-    std::unique_ptr<ReplacementScan> prepared =
-        std::make_unique<ReplacementScan>(buffer.session().text(), std::move(pattern),
-                                          std::move(replacement), match_case, editable_limit - 1);
+    std::unique_ptr<SessionReplacement> prepared =
+        buffer.prepare_replacement(std::move(pattern), std::move(replacement), match_case);
     scan_ = std::move(prepared);
     stamp_ = buffer.session().stamp();
     selection_ = selection;
@@ -81,12 +80,9 @@ TerminalReplaceState TerminalReplace::step(TerminalBuffer &buffer, std::size_t b
     }
     if (!(*scan_).step(budget))
         return state_;
-    PatternReplacement result = (*scan_).take_result();
-    scan_.reset();
     state_ = TerminalReplaceState::cancelled;
-    if (result.count)
-        buffer.replace_document(result.text, stamp_);
-    count_ = result.count;
+    count_ = buffer.commit_replacement(*scan_);
+    scan_.reset();
     state_ = TerminalReplaceState::complete;
     return state_;
 }

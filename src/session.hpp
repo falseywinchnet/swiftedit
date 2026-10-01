@@ -4,6 +4,8 @@
 #include <vector>
 
 namespace swiftedit {
+class SearchPattern;
+class SessionReplacement;
 constexpr std::size_t editable_limit = 16 * 1024 * 1024;
 constexpr std::size_t maximum_page = 64 * 1024;
 // Session-local identities are deliberately distinct from byte offsets and
@@ -87,6 +89,9 @@ public:
     [[nodiscard]] bool undo();
     [[nodiscard]] bool redo();
     void restore_opened();
+    [[nodiscard]] std::unique_ptr<SessionReplacement>
+    prepare_replacement(SearchPattern, std::string replacement, bool match_case = false) const;
+    std::size_t commit_replacement(SessionReplacement &);
     void save();
     void save_as(const std::filesystem::path &);              // new target only
     void save_text_copy(const std::filesystem::path &) const; // new target only

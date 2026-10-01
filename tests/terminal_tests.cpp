@@ -290,6 +290,88 @@ int main() {
         check(replacement.step(terminal) == swiftedit::TerminalReplaceState::cancelled &&
                   terminal.session().text() == "cat cat cat!",
               "Source edit revokes replacement authority");
+        const std::filesystem::path crcr_path = dir / "existing-crcr.txt";
+        {
+            std::ofstream file(crcr_path, std::ios::binary);
+            file << "cat\r\rcat";
+        }
+        terminal.reset(true);
+        terminal.open(crcr_path);
+        replacement.begin(terminal, swiftedit::SearchPattern("cat"), "dog", true);
+        while (replacement.state() == swiftedit::TerminalReplaceState::pending)
+            static_cast<void>(replacement.step(terminal, 4));
+        check(replacement.count() == 2 && terminal.session().text() == "dog\r\rdog",
+              "Session-issued replacement preserves pre-existing CRCR source bytes");
+        check(terminal.undo() && terminal.session().text() == "cat\r\rcat",
+              "CRCR replacement remains one undoable edit");
+        bool metadata_refused = false;
+        try {
+            replacement.begin(terminal, swiftedit::SearchPattern("cat"), "\r\rL9\r\r", true);
+        } catch (const std::exception &) {
+            metadata_refused = true;
+        }
+        check(metadata_refused && terminal.session().text() == "cat\r\rcat",
+              "Caller-inserted metadata stays forbidden despite source-preserving operation");
+        swiftedit::Session issued{};
+        issued.replace_ranges({{0, 0}}, "cat", issued.stamp());
+        std::unique_ptr<swiftedit::SessionReplacement> plan =
+            issued.prepare_replacement(swiftedit::SearchPattern("cat"), "dog");
+        bool early_refused = false;
+        try {
+            static_cast<void>(issued.commit_replacement(*plan));
+        } catch (const std::exception &) {
+            early_refused = true;
+        }
+        check(early_refused && issued.text() == "cat",
+              "Incomplete plan grants no commit authority");
+        while (!(*plan).step(1)) {
+        }
+        swiftedit::Session other{};
+        bool foreign_plan_refused = false;
+        try {
+            static_cast<void>(other.commit_replacement(*plan));
+        } catch (const std::exception &) {
+            foreign_plan_refused = true;
+        }
+        check(foreign_plan_refused && other.text().empty(),
+              "Plan is bound to issuing Session identity");
+        check(issued.commit_replacement(*plan) == 1 && issued.text() == "dog",
+              "Issuing Session can commit complete plan");
+        bool reuse_refused = false;
+        try {
+            static_cast<void>(issued.commit_replacement(*plan));
+        } catch (const std::exception &) {
+            reuse_refused = true;
+        }
+        check(reuse_refused, "Plan cannot publish twice");
+        std::unique_ptr<swiftedit::SessionReplacement> same =
+            issued.prepare_replacement(swiftedit::SearchPattern("dog"), "dog");
+        while (!(*same).step(16)) {
+        }
+        const swiftedit::DocumentStamp before_same = issued.stamp();
+        check(issued.commit_replacement(*same) == 1 &&
+                  issued.stamp().revision == before_same.revision,
+              "Identical result preserves revision and undo boundary");
+        bool same_reuse_refused = false;
+        try {
+            static_cast<void>(issued.commit_replacement(*same));
+        } catch (const std::exception &) {
+            same_reuse_refused = true;
+        }
+        check(same_reuse_refused, "One-use consent holds even when revision did not change");
+        std::unique_ptr<swiftedit::SessionReplacement> stale_plan =
+            issued.prepare_replacement(swiftedit::SearchPattern("dog"), "cat");
+        while (!(*stale_plan).step(16)) {
+        }
+        issued.replace_ranges({{0, 0}}, "new ", issued.stamp());
+        bool stale_plan_refused = false;
+        try {
+            static_cast<void>(issued.commit_replacement(*stale_plan));
+        } catch (const std::exception &) {
+            stale_plan_refused = true;
+        }
+        check(stale_plan_refused && issued.text() == "new dog",
+              "Completed plan cannot overwrite a later revision");
         std::cout << "Terminal navigation and shared edit tests passed.\n";
         return 0;
     } catch (const std::exception &failure) {

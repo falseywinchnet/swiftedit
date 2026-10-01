@@ -115,3 +115,12 @@ input loop/session. Thirteen suites and native console three-wildcard-replacemen
 assertion/undo passed. Whole publication latency and pre-existing CRCR source
 payload rejection remain documented limitations. Next full-goal work still wrap,
 clipboard/save parity, large-file interaction, provider integration and finalperf.
+
+2026-10-01 SessionReplacement checkpoint: existing CRCR replacement limitation
+resolved through opaque Session-issued one-use operations, not a broad bypass
+of payload validation. TerminalReplace now prepares/commits that operation.
+Session validates only inserted payload, preserves source chunks, binds issuing
+identity/revision, consumes completion once and moves output into change().
+All thirteen suites passed; extra direct stale/no-op reuse tests passed. No new
+native run in this slice. Full goal remains open, including snapshot/publication
+latency, wrapping, clipboard/save parity and provider GUI integration.
