@@ -49,3 +49,10 @@ native validation with a focus-cleared, settled 200 ms observation. That check
 requires zero new scheduled frame requests and frame deadlines after the queue
 finishes; native paint metrics are retained diagnostically. It does not measure
 focused caret CPU or substitute for the separate Mac idle investigation.
+
+The expanded fixture at source 86fb579 passed on both macOS and Windows in
+run 36881985501. Each recorded zero paint passes, frame deadlines, scheduled frame
+requests and scheduler wakes in the focus-cleared settled observation. Raw
+metrics are preserved as settled-mac-86fb579.txt and settled-windows-86fb579.txt.
+Linux validation was still installing dependencies when these observations were
+recorded; it must be checked separately rather than inferred from these results.

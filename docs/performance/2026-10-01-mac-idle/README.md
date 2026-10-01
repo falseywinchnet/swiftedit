@@ -208,3 +208,13 @@ Additional component checks against this SDK: caret status over a 266,240-byte
 fixture, 1,000 samples, p50/p95/p99/worst = 0.0023/0.0041/0.0051/0.0117 ms;
 formula viewport, 31 samples, 5.6851/6.7171/6.8363/6.8363 ms. These exclude native
 presentation and are not a complete product lag certification.
+
+## Provider experiment 4448dde: rejected comparison
+
+The macOS job for provider run 36881268179 succeeded, but its optional paint-cost
+experiment did not pass. The preserved receipt reports status `rejected`, exit
+code 1, accepted_marker false, and 10.749817833 seconds wall time. The raw log
+reports `cadence exceeded declared lateness bound`. Its ABBA header alone is not
+an accepted four-interval result. No performance attribution or optimization
+conclusion is drawn from this attempt. The coordinator received the rejection
+and raw evidence. This remains separate from the successful native build/tests.
