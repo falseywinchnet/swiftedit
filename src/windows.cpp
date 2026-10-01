@@ -116,8 +116,11 @@ Editor::application_windows(const std::filesystem::path &initial) {
     main.options.ready = WindowReady{observe(), WindowKind::main, initial};
     main.options.closing = WindowClosing{observe(), WindowKind::main};
     result.push_back(std::move(main));
-    const std::filesystem::path start =
+    const std::filesystem::path requested_start =
         initial.empty() ? std::filesystem::current_path() : initial.parent_path();
+    // System directory aliases (for example macOS /var) identify the starting
+    // directory. Grant its resolved location; do not resolve the document file.
+    const std::filesystem::path start = std::filesystem::canonical(requested_start);
     for (bool save_as : {false, true}) {
         Picker &picker = save_as ? save_picker_ : open_picker_;
         file_manager::DocumentPickerRequest request{};
@@ -227,8 +230,9 @@ void Editor::show_picker(bool save_as) {
     Picker &picker = save_as ? save_picker_ : open_picker_;
     if (!picker.window || !picker.handle.active())
         throw std::runtime_error("The shared file picker is not ready.");
-    const std::filesystem::path start =
+    const std::filesystem::path requested_start =
         document_.path.empty() ? std::filesystem::current_path() : document_.path.parent_path();
+    const std::filesystem::path start = std::filesystem::canonical(requested_start);
     (*picker.view).set_authority_valid(true);
     if (save_as)
         static_cast<void>((*picker.view)
