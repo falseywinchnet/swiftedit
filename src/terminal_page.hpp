@@ -14,6 +14,7 @@ struct TerminalPageCursor {
 };
 struct TerminalPageRun {
     std::size_t row{}, column{};
+    std::uint64_t source_offset{}, source_length{};
     std::string text{};
 };
 struct TerminalPageFrame {
@@ -35,6 +36,7 @@ public:
     void down();
     void up();
     void first();
+    [[nodiscard]] std::uint64_t source_offset() const { return cursor_.offset; }
 
 private:
     void retain(TerminalPageCursor);

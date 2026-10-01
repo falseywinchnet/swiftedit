@@ -209,11 +209,16 @@ int main() {
         const swiftedit::TerminalPageFrame first_page = pager.frame(paged_source, 4, 1);
         check(first_page.next.offset == 4 && first_page.next.after_wrap,
               "Page carries full-row wrap boundary");
+        check(first_page.runs[0].source_offset == 0 && first_page.runs[0].source_length == 1 &&
+                  first_page.runs[3].source_offset == 3 && pager.source_offset() == 0,
+              "Read-only runs expose exact source ranges for selection highlighting");
         pager.next();
         const swiftedit::TerminalPageFrame second_page = pager.frame(paged_source, 4, 1);
         check(second_page.runs.size() == 2 && second_page.runs[0].text == "E" &&
                   second_page.next.offset == 9,
               "Newline after full row does not create an extra empty screen row");
+        check(second_page.runs[0].source_offset == 6 && second_page.runs[0].source_length == 1,
+              "Selection source mapping includes skipped CRLF bytes without displaying them");
         pager.previous();
         check(pager.frame(paged_source, 4, 1).runs[0].text == "A",
               "Previous restores exact page cursor");
@@ -260,6 +265,9 @@ int main() {
         pager.next();
         check(pager.frame(paged_source, 4, 1).runs[0].text == "01B]",
               "Label continuation is exact");
+        check(pager.frame(paged_source, 4, 1).runs[0].source_offset == 0 &&
+                  pager.frame(paged_source, 4, 1).runs[0].source_length == 1,
+              "Every label fragment maps to the same atomic source control byte");
         pager.next();
         check(pager.frame(paged_source, 4, 1).runs[0].text == "Z",
               "Following content is not skipped");

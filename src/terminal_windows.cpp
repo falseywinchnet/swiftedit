@@ -5,6 +5,7 @@
 #include "terminal_query.hpp"
 #include "date_time.hpp"
 #include "session_word_count.hpp"
+#include "session_copy.hpp"
 #include <algorithm>
 #include <iostream>
 #ifdef SWIFTEDIT_TERMINAL_SMOKE
@@ -168,6 +169,9 @@ public:
     std::size_t completed_counts() const { return completed_counts_; }
     std::uint64_t last_word_count() const { return last_word_count_; }
     std::size_t cancelled_counts() const { return cancelled_counts_; }
+    std::size_t completed_copies() const { return completed_copies_; }
+    std::size_t cancelled_copies() const { return cancelled_copies_; }
+    std::string_view clipboard_bytes() const { return clipboard_.bytes(); }
     bool document_dirty() const { return buffer_.session().dirty(); }
     bool wildcard_enabled() const {
         const swiftedit::SearchPattern pattern = query_.pattern();
@@ -178,6 +182,9 @@ public:
         search_.cancel();
         replacement_.cancel();
         counting_.reset();
+        copying_.reset();
+        page_anchor_ = 0;
+        page_caret_ = 0;
         buffer_.open(path);
         pager_.reset(buffer_.session());
         top_ = 0;
@@ -212,6 +219,22 @@ public:
                 redraw = false;
             }
             try {
+                if (copying_) {
+                    if ((*copying_).state() == swiftedit::CopyState::running)
+                        (*copying_).step(buffer_.session(), swiftedit::maximum_page);
+                    if ((*copying_).state() == swiftedit::CopyState::complete) {
+                        clipboard_ = (*copying_).take();
+#ifdef SWIFTEDIT_TERMINAL_SMOKE
+                        ++completed_copies_;
+#endif
+                        status_ = "Copied " + std::to_string(clipboard_.bytes().size()) + " bytes";
+                        copying_.reset();
+                        redraw = true;
+                        continue;
+                    }
+                    if (!console_.input_ready())
+                        continue;
+                }
                 if (counting_) {
                     if ((*counting_).state() == swiftedit::WordCountState::running)
                         (*counting_).step(buffer_.session(), swiftedit::maximum_page);
@@ -263,6 +286,7 @@ public:
                 search_.cancel();
                 replacement_.cancel();
                 counting_.reset();
+                copying_.reset();
                 status_ = failure.what();
                 redraw = true;
                 continue;
@@ -323,7 +347,15 @@ private:
                 pager_.frame(buffer_.session(), width_, rows_);
             for (const swiftedit::TerminalPageRun &run : page.runs) {
                 position(screen, run.row + 1, run.column);
+                const std::uint64_t first = std::min(page_anchor_, page_caret_);
+                const std::uint64_t last = std::max(page_anchor_, page_caret_);
+                const bool selected = run.source_offset < last &&
+                    run.source_offset + run.source_length > first;
+                if (selected)
+                    screen += "\x1b[7m";
                 screen += run.text;
+                if (selected)
+                    screen += "\x1b[0m";
             }
         } else if (wrap_ && wrap_suspended_) {
             // Leave the interrupted view unpublished until the next command.
@@ -395,7 +427,7 @@ private:
                 width_);
         if (buffer_.session().read_only())
             status_line(screen, height - 1,
-                        "F6 Words  Read-only: Up/Down Row  PgUp/PgDn Page  Ctrl+Home First",
+                        "Read-only: Shift+Up/Down/Pg Select  ^A All  ^C Copy  F6 Words",
                         width_);
         else
             status_line(
@@ -476,6 +508,16 @@ private:
             wrap_suspended_ = false;
         if (key != 0 && event.uChar.UnicodeChar < 32)
             high_surrogate_ = 0;
+        if (copying_) {
+            (*copying_).cancel();
+            copying_.reset();
+#ifdef SWIFTEDIT_TERMINAL_SMOKE
+            ++cancelled_copies_;
+#endif
+            status_ = "Copy cancelled; previous clipboard retained";
+            if (key == VK_ESCAPE)
+                return;
+        }
         if (counting_) {
             (*counting_).cancel();
             counting_.reset();
@@ -570,24 +612,42 @@ private:
             return;
         }
         if (buffer_.session().read_only()) {
-            if (key == VK_DOWN) {
-                pager_.down();
+            if (ctrl && !alt && key == 'A') {
+                page_anchor_ = 0;
+                page_caret_ = buffer_.session().size();
+                status_ = "Selected entire read-only document";
                 return;
             }
-            if (key == VK_UP) {
-                pager_.up();
+            if (ctrl && !alt && key == 'C') {
+                const std::uint64_t first = std::min(page_anchor_, page_caret_);
+                const std::uint64_t last = std::max(page_anchor_, page_caret_);
+                if (first == last)
+                    throw std::runtime_error("Select rows with Shift+navigation or Ctrl+A first.");
+                copying_ = std::make_unique<swiftedit::SessionCopy>(buffer_.session(), first,
+                                                                  last - first);
+                status_ = "Copying selection... Any key cancels";
                 return;
             }
-            if (key == VK_NEXT) {
-                pager_.next();
-                return;
-            }
-            if (key == VK_PRIOR) {
-                pager_.previous();
-                return;
-            }
-            if (key == VK_HOME && ctrl) {
-                pager_.first();
+            if (key == VK_DOWN || key == VK_UP || key == VK_NEXT || key == VK_PRIOR ||
+                (key == VK_HOME && ctrl)) {
+                const std::uint64_t before = pager_.source_offset();
+                if (key == VK_DOWN)
+                    pager_.down();
+                else if (key == VK_UP)
+                    pager_.up();
+                else if (key == VK_NEXT)
+                    pager_.next();
+                else if (key == VK_PRIOR)
+                    pager_.previous();
+                else
+                    pager_.first();
+                if (!shift || page_anchor_ == page_caret_)
+                    page_anchor_ = shift ? before : pager_.source_offset();
+                page_caret_ = pager_.source_offset();
+                const std::uint64_t selected = std::max(page_anchor_, page_caret_) -
+                                               std::min(page_anchor_, page_caret_);
+                status_ = shift ? "Selected " + std::to_string(selected) + " source bytes"
+                                : "Read-only navigation";
                 return;
             }
         }
@@ -720,6 +780,7 @@ private:
     std::size_t wrap_cancellations_{};
     std::size_t text_copy_saves_{};
     std::size_t completed_counts_{}, cancelled_counts_{};
+    std::size_t completed_copies_{}, cancelled_copies_{};
     std::uint64_t last_word_count_{};
 #endif
     Console console_{};
@@ -731,6 +792,8 @@ private:
     swiftedit::TerminalSearch search_{};
     swiftedit::TerminalReplace replacement_{};
     std::unique_ptr<swiftedit::SessionWordCount> counting_{};
+    std::unique_ptr<swiftedit::SessionCopy> copying_{};
+    std::uint64_t page_anchor_{}, page_caret_{};
     bool replace_query_{};
     swiftedit::TerminalQuery query_{};
     Prompt prompt_{Prompt::none};
@@ -748,7 +811,9 @@ int wmain(int argc, wchar_t **argv) {
             std::cout << "SwiftEdit interactive terminal\nUsage: swiftedit-terminal [file]\n"
                          "Ctrl+S Save, Ctrl+R Open, Ctrl+X Exit, Shift+arrows Select, "
                          "Ctrl+Z/Y Undo/Redo, Ctrl+K Cut, Ctrl+U Paste, Ctrl+T Save Text Copy, "
-                         "F2 Wrap to window, F5 Insert Date and Time, F6 Word Count.\n";
+                         "F2 Wrap to window, F5 Insert Date and Time, F6 Word Count.\n"
+                         "Read-only pages: Shift+Up/Down or Page keys select rows; "
+                         "Ctrl+A selects all; Ctrl+C copies; any key cancels pending copy.\n";
             return argc > 2 ? 1 : 0;
         }
         Terminal terminal{};
@@ -976,6 +1041,11 @@ int wmain() {
         enqueue(console.input, VK_NEXT);
         enqueue(console.input, VK_PRIOR);
         enqueue(console.input, VK_HOME, 0, LEFT_CTRL_PRESSED);
+        enqueue(console.input, VK_DOWN, 0, SHIFT_PRESSED);
+        enqueue(console.input, 'C', 0, LEFT_CTRL_PRESSED);
+        enqueue(console.input, 'A', 0, LEFT_CTRL_PRESSED);
+        enqueue(console.input, 'C', 0, LEFT_CTRL_PRESSED);
+        enqueue(console.input, VK_ESCAPE);
         enqueue(console.input, VK_F6);
         enqueue(console.input, VK_ESCAPE);
         enqueue(console.input, 'S', 0, LEFT_CTRL_PRESSED);
@@ -983,7 +1053,8 @@ int wmain() {
         {
             Terminal terminal{};
             if (terminal.run(large_path) != 0 || terminal.cancelled_counts() != 1 ||
-                terminal.completed_counts() != 0)
+                terminal.completed_counts() != 0 || terminal.completed_copies() != 1 ||
+                terminal.cancelled_copies() != 1 || terminal.clipboard_bytes() != "read-only\r\n")
                 throw std::runtime_error("Read-only terminal run failed.");
         }
         if (std::filesystem::last_write_time(large_path) != original_time ||

@@ -109,3 +109,10 @@ whole-selection copy. Cancellation/failure preserves the previous clipboard.
 Actual 16 MiB file tests cover whole-selection copying, source-close lifetime,
 malformed/control bytes, CRLF, split Unicode and undoable byte-faithful paste.
 Terminal read-only selection controls and GUI integration remain pending.
+
+The Windows terminal now connects paged copying to Shift+row/page navigation,
+Ctrl+A whole-document selection and Ctrl+C cooperative copying. Visible runs
+carry exact source ranges for highlighting; inert label fragments map back to
+one source control byte. The owned-console regression checks successful copying
+and cancelled whole-document copying preserving the prior clipboard. Horizontal
+read-only caret/selection movement and GUI integration remain open.

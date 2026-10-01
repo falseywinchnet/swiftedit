@@ -85,6 +85,8 @@ TerminalPageFrame terminal_page(const Session &session, TerminalPageCursor curso
             TerminalPageRun run{};
             run.row = row;
             run.column = column;
+            run.source_offset = cursor.offset + offset;
+            run.source_length = length;
             run.text = glyph.label ? glyph.text.substr(consumed, take) : glyph.text;
             result.runs.push_back(std::move(run));
             consumed += take;

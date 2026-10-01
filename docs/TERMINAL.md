@@ -47,8 +47,16 @@ trying to go farther back reports the limit and offers Ctrl+Home. Cursors retain
 their source positions across resize; earlier rows reflect their original wrap
 width. Full graphemes
 are preserved across reads. Oversized graphemes that exceed the context limit
-are reported unavailable, preserving the source. Read-only range selection/copy
-still needs implementation.
+are reported unavailable, preserving the source. Shift+Up/Down and Shift+Page
+Up/Down extend a source selection between visual row/page starts; Ctrl+A selects
+the entire document. Selected visible glyphs are highlighted. Control-label
+fragments retain their original atomic source range and never become copied
+text. Ctrl+C copies exact source bytes to the private terminal clipboard using
+at most 64 KiB per cooperative step. Any key cancels pending copying; Escape is
+consumed, while other keys then act normally. Failed/cancelled copying preserves
+the previous clipboard. Clipboard capacity is reserved before reading, and
+completion transfers storage without a second full-selection copy. Individual
+horizontal caret selection in read-only pages still needs implementation.
 
 F5 shares the GUI's formatter and inserts `YYYY-MM-DD HH:MM:SS` using local
 calendar time. The timestamp is ordinary source text, with no retained clock
