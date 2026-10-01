@@ -474,3 +474,14 @@ correctly refuses untitled/non-CSV input). The 81-file spelling audit and diff
 check passed. No native physical-key or desktop test is implied by this run.
 Previous Select All portable CI 36861991883 passed; native 36861992016 remained
 in progress when last checked. Full feature and native responsiveness work remain.
+
+Date/time command routing: Insert Date and Time and F5 now commit a plain
+local timestamp to the active CSV cell. Previously they replaced the hidden
+TextBox selection, which could overwrite unrelated CSV source. Regressions
+select the entire hidden source before targeting A2, exercise menu and F5,
+check unchanged neighboring formula/cells and CRLF, and restore in one undo.
+All 17 suites passed in 2.23 s; 81-file spelling audit and diff check passed.
+Native physical-key testing remains separate. The Select All native run
+36861992016 was cancelled/superseded, not passed; its portable run passed.
+Clipboard-keyboard portable run 36862312035 passed; native run 36862312152
+was confirmed running on all three platforms before this checkpoint.

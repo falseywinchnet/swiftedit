@@ -605,7 +605,10 @@ void Editor::execute(const std::string &id) {
             message("Word Count", report);
         } else if (id == "date-time") {
             const std::string timestamp = current_date_time();
-            (*text_).replace_selection(timestamp);
+            if (csv_visible_)
+                (*csv_).commit_cell(timestamp);
+            else
+                (*text_).replace_selection(timestamp);
         } else if (id == "newline-lf" || id == "newline-crlf") {
             const std::string ending = id == "newline-lf" ? "\n" : "\r\n";
             const std::string converted = swiftedit::normalize_newlines((*text_).text(), ending);

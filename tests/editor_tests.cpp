@@ -192,6 +192,27 @@ void verify_csv_keyboard_commands() {
     copy.modifiers = gf::Modifier::control;
     check(window.dispatch_key(copy) && services.clipboard == "A1",
           "Focused cell entry keeps its own text-selection copy behavior");
+    for (const bool keyboard : {false, true}) {
+        (*text).select_all();
+        (*grid).select_cell({1, 0});
+        window.request_focus(grid);
+        if (keyboard) {
+            gf::KeyEvent insert_time{};
+            insert_time.physical_key = gf::PhysicalKey::f5;
+            check(window.dispatch_key(insert_time), "CSV F5 is handled");
+        } else
+            (*editor).execute("date-time");
+        const swiftedit::Csv updated((*text).text());
+        const std::string &timestamp = updated.cell({1, 0}).value;
+        check(timestamp.size() == 19 && timestamp[4] == '-' && timestamp[7] == '-' &&
+                  timestamp[10] == ' ' && timestamp[13] == ':' && timestamp[16] == ':',
+              "CSV date/time command stores a plain timestamp in the selected cell");
+        check(updated.cell({0, 0}).value == "2" && updated.cell({0, 1}).value == "=A1*3" &&
+                  updated.cell({1, 1}).value == "5" && (*text).text().starts_with("2,=A1*3\r\n"),
+              "Date/time insertion preserves other cells and original record endings");
+        (*editor).execute("undo");
+        check((*text).text() == "2,=A1*3\r\n4,5", "CSV date/time insertion is one undoable edit");
+    }
 }
 void verify_callback_revocation() {
     std::shared_ptr<notepad::Editor> editor =
