@@ -463,3 +463,14 @@ missing cells remains unchanged. Regression coverage includes hidden selection
 preservation, quoted multiline cells, empty input, ragged copy/clear, one-step
 undo and leaving the selection through cell/arrow navigation.
 Validation: rebuilt successfully; 17/17 headless suites passed in 4.64 s. The 81-file spelling audit and git diff check passed. No local native desktop launch was performed for this change.
+
+CSV keyboard parity: the window now supplies fallback Ctrl/Cmd+C/X/V/Z/Y/A
+and Ctrl/Cmd+Shift+Z accelerators. Public Window dispatch tries focused controls
+first, so the entry TextBox retains its own selection copy. A headless hosted
+editor opened a unique disposable .csv fixture and dispatched both modifier
+families through copy, cut, one-step undo, paste, undo and redo. All 17 suites
+passed in 2.30 s after fixing the fixture to use a real .csv path (table view
+correctly refuses untitled/non-CSV input). The 81-file spelling audit and diff
+check passed. No native physical-key or desktop test is implied by this run.
+Previous Select All portable CI 36861991883 passed; native 36861992016 remained
+in progress when last checked. Full feature and native responsiveness work remain.

@@ -122,6 +122,77 @@ void verify_conflict_fields() {
               (*(*editor).text_control()).text() == copied.text,
           "Reviewed new filename and metadata publish together while preserving original");
 }
+void verify_csv_keyboard_commands() {
+    const std::filesystem::path directory =
+        std::filesystem::temp_directory_path() /
+        ("swiftedit-csv-keys-" + std::to_string(test_process_id()));
+    check(std::filesystem::create_directory(directory), "Unique CSV keyboard fixture");
+    struct Cleanup {
+        std::filesystem::path directory{};
+        ~Cleanup() {
+            std::error_code error{};
+            std::filesystem::remove_all(directory, error);
+        }
+    } cleanup{directory};
+    const std::filesystem::path path = directory / "keys.csv";
+    {
+        std::ofstream file(path, std::ios::binary);
+        file << "2,=A1*3\r\n4,5";
+    }
+    const std::shared_ptr<notepad::Editor> editor =
+        gf::make_control<notepad::Editor>(gf::StableId("keyboard.editor"));
+    std::vector<gf::ApplicationWindow> windows = (*editor).application_windows({});
+    gf::Window &window = *windows[0].model;
+    TestServices services{};
+    gf::HostSession host(window, capabilities(), &services);
+    const gf::HostDispatchResult attached =
+        host.dispatch({1, 0, gf::HostAttachEvent{{800, 600}, 1}});
+    check(attached.accepted(), "Keyboard test host attached");
+    windows[0].options.ready(window, {});
+    const std::shared_ptr<gf::TextBox> text = (*editor).text_control();
+    const std::shared_ptr<notepad::CsvView> grid = (*editor).csv_control();
+    (*editor).open_file(path);
+    (*editor).execute("csv-view");
+    check((*grid).visible(), "Keyboard test has visible CSV grid");
+    window.perform_layout();
+    for (const gf::Modifier modifier : {gf::Modifier::control, gf::Modifier::meta}) {
+        (*grid).select_cell({0, 1});
+        window.request_focus(grid);
+        gf::KeyEvent key{};
+        key.modifiers = modifier;
+        key.physical_key = gf::PhysicalKey::c;
+        check(window.dispatch_key(key) && services.clipboard == "=A1*3",
+              "CSV Ctrl/Cmd+C copies formula source");
+        key.physical_key = gf::PhysicalKey::x;
+        check(window.dispatch_key(key) && (*text).text() == "2,\r\n4,5" &&
+                  services.clipboard == "=A1*3",
+              "CSV Ctrl/Cmd+X copies then clears the cell");
+        key.physical_key = gf::PhysicalKey::z;
+        check(window.dispatch_key(key) && (*text).text() == "2,=A1*3\r\n4,5",
+              "CSV Ctrl/Cmd+Z restores cut in one edit");
+        services.clipboard = "7";
+        key.physical_key = gf::PhysicalKey::v;
+        check(window.dispatch_key(key) && (*text).text() == "2,7\r\n4,5",
+              "CSV Ctrl/Cmd+V commits the clipboard to the active cell");
+        key.physical_key = gf::PhysicalKey::z;
+        window.dispatch_key(key);
+        key.modifiers = modifier | gf::Modifier::shift;
+        check(window.dispatch_key(key) && (*text).text() == "2,7\r\n4,5",
+              "CSV Ctrl/Cmd+Shift+Z redoes the paste");
+        key.modifiers = modifier;
+        window.dispatch_key(key);
+    }
+    const std::shared_ptr<gf::TextBox> entry =
+        std::dynamic_pointer_cast<gf::TextBox>(window.find("csv.entry"));
+    check(static_cast<bool>(entry), "CSV entry exists");
+    window.request_focus(entry);
+    (*entry).select(gf::Utf8Offset(1), gf::Utf8Offset(3));
+    gf::KeyEvent copy{};
+    copy.physical_key = gf::PhysicalKey::c;
+    copy.modifiers = gf::Modifier::control;
+    check(window.dispatch_key(copy) && services.clipboard == "A1",
+          "Focused cell entry keeps its own text-selection copy behavior");
+}
 void verify_callback_revocation() {
     std::shared_ptr<notepad::Editor> editor =
         gf::make_control<notepad::Editor>(gf::StableId("lifetime.editor"));
@@ -211,6 +282,7 @@ void verify_grapheme_status() {
 int main() {
     try {
         verify_callback_revocation();
+        verify_csv_keyboard_commands();
         verify_conflict_fields();
         verify_grapheme_status();
         namespace gf = gui_forms;

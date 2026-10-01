@@ -694,7 +694,16 @@ void Editor::ready(gf::Window &w, gf::ApplicationWindowHandle handle,
     shortcut(w, K::s, M::control | M::shift, "save-as");
     shortcut(w, K::f3, M::none, "find-next");
     shortcut(w, K::f1, M::none, "help");
-    shortcut(w, K::v, M::control, "paste");
+    const Shortcut editing_shortcuts[] = {{K::c, "copy"}, {K::x, "cut"},  {K::v, "paste"},
+                                          {K::z, "undo"}, {K::y, "redo"}, {K::a, "select-all"}};
+    // Focused text controls handle their own editing first. A grid declines
+    // these keys so the window can invoke the same commands as its menus.
+    for (const Shortcut &binding : editing_shortcuts) {
+        shortcut(w, binding.key, M::control, binding.command);
+        shortcut(w, binding.key, M::meta, binding.command);
+    }
+    shortcut(w, K::z, M::control | M::shift, "redo");
+    shortcut(w, K::z, M::meta | M::shift, "redo");
     shortcut(w, K::f5, M::none, "date-time");
     if (!initial.empty()) {
         try {
