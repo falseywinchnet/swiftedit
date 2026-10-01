@@ -28,8 +28,11 @@ import and column resizing are not implemented.
   cancel stale work; snapshot/final-publication latency still needs measurement.
   No regex, whole-word
   or selection-only modes.
-- Character Inspector reports selected/caret Unicode values; the full Unicode
-  picker and separate explanatory control insertion dialog remain unfinished.
+- Character Inspector and separate Unicode/control picker dialogs are implemented.
+  The current document TextBox still lacks the required visible-control glyph view;
+  picker previews are inert, but full document presentation needs provider integration.
+  NUL cannot be copied through the null-terminated Windows text clipboard; its
+  picker Copy action refuses intact while Insert preserves the literal byte.
 - No printing/page setup, syntax
   colors, settings persistence, recovery files, installer, file association or
   OS-default changes.

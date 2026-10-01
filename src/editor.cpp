@@ -180,6 +180,8 @@ void Editor::initialize_control_tree() {
           {item("restore-opened", "Restore As &Opened..."),
            item("date-time", "Insert &Date and Time", "F5"), item("word-count", "&Word Count..."),
            item("inspect-characters", "Inspect &Characters..."),
+           item("characters", "Insert &Unicode Character..."),
+           item("controls", "Insert &Control Character..."),
            item("newline-lf", "Convert Line Endings to &LF"),
            item("newline-crlf", "Convert Line Endings to &CRLF")}},
          {"format", "F&ormat", {item("wrap", "&Word Wrap"), item("font", "&Font...")}},
@@ -218,6 +220,17 @@ void Editor::initialize_control_tree() {
         (*text_).selection_changed().subscribe(*this, SelectionListener{observe()}));
     build_find();
     build_font();
+    characters_.root =
+        gf::make_control<CharacterPicker>(gf::StableId("swiftedit.characters"), false);
+    controls_.root = gf::make_control<CharacterPicker>(gf::StableId("swiftedit.controls"), true);
+    subscriptions_.push_back(
+        (*characters_.root).inserted().subscribe(*this, CharacterInsert{observe()}));
+    subscriptions_.push_back(
+        (*controls_.root).inserted().subscribe(*this, CharacterInsert{observe()}));
+    subscriptions_.push_back(
+        (*characters_.root).closed().subscribe(*this, CharacterClose{observe(), false}));
+    subscriptions_.push_back(
+        (*controls_.root).closed().subscribe(*this, CharacterClose{observe(), true}));
     refresh();
 }
 void Editor::arrange(gf::Rect bounds) {
@@ -492,6 +505,13 @@ void Editor::execute(const std::string &id) {
                 throw std::runtime_error("Paste exceeds this GUI's document/line limits or "
                                          "contains invalid UTF-8. No text was changed.");
             (*text_).replace_selection(clip.text_utf8);
+        } else if (id == "characters" || id == "controls") {
+            show_markdown(false);
+            show_csv(false);
+            CharacterWindow &dialog = id == "controls" ? controls_ : characters_;
+            const gf::HostServiceStatus result = dialog.handle.show();
+            if (!result.accepted())
+                throw std::runtime_error("The character dialog is not ready.");
         } else if (id == "inspect-characters") {
             const gf::TextSelection selected = (*text_).selection();
             const std::string_view content = (*text_).text();

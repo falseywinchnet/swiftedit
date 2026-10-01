@@ -268,3 +268,38 @@ inspection and unchanged source/selection. Nine suites passed in 2.09 s; final a
 character/editor tests passed in 0.34 s. Generator rerun succeeded against pinned hashes.
 Packaging/install definitions now include Unicode and MD4C licenses; no new binary
 stage or native desktop validation is claimed at this checkpoint.
+
+## 2026-10-01 separate character pickers and native lifecycle
+
+Added owned Unicode and control picker dialogs. Unicode browsing retains at most
+256 code points per page with direct code-point entry. Controls use a bounded
+catalog and explanatory labels; source controls never enter the dialog preview.
+Insert preflights document/line capacity and uses normal undoable source replacement.
+Copy uses the shared host clipboard. NUL copy is explicitly refused before clipboard
+mutation because the Windows plain-text format terminates at NUL; Insert supports it.
+The file picker hides both character dialogs and rejects insertion while it is active.
+
+Headless tests cover supplementary insertion, control insertion, exact undo,
+ordinary/control separation, copied supplementary text, NUL clipboard refusal and
+exact NUL insertion/undo. Nine-suite run passed in 2.34 s; subsequent affected
+character/editor checks passed, including the final editor run in 0.12 s. Spelling
+scan zero findings in 37 authored C++ files.
+
+Parent approved an exclusive short native desktop slot. The self-closing native
+test created the main window plus six owned dialogs, exercised save/Find/Replace/
+undo, file-picker cancel/reopen, then showed both character dialogs, inserted a
+supplementary scalar and U+200B respectively, undid each exactly, closed both and
+exited cleanly. Exit code 0. It used public control/window callbacks, no global
+keyboard/mouse automation. Only the owned process was launched; a 20-second
+process-handle timeout guard was unused. Slot released afterward.
+
+Executable: .build/swiftedit-resumed/notepad-native-tests.exe
+SHA-256: DDF8797A7F6692C6D1412CAE70350EC6E70C069E12C0BF94E4CCA596262855E4
+GUI runtime: .build/swiftedit-resumed/libgui_forms_application.dll
+SHA-256: C9E79914273562042AE38BFFDFDD296B6CA7C2BFA0F28BF4D4B2EFDA9DBB9336
+Consumed installed SDK pair: house-style-final, Windows x64.
+Local native log: .build/swiftedit-resumed/native-20261001-014002.stdout.txt
+
+This is native lifecycle/operation evidence, not screenshot-based visual QA,
+font coverage certification, physical Ctrl+? verification, or a final lag scan.
+Document-wide inert control glyphs still require the new provider document view.

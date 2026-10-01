@@ -12,6 +12,15 @@ void Editor::WindowReady::operator()(gf::Window &window, gf::ApplicationWindowHa
         editor.ready(window, handle, initial);
         return;
     }
+    if (kind == WindowKind::characters || kind == WindowKind::controls) {
+        CharacterWindow &dialog =
+            kind == WindowKind::controls ? editor.controls_ : editor.characters_;
+        dialog.window = &window;
+        dialog.handle = handle;
+        window.set_accept_button((*dialog.root).insert_button());
+        window.set_cancel_button((*dialog.root).close_button());
+        return;
+    }
     if (kind == WindowKind::open_picker || kind == WindowKind::save_picker) {
         Picker &picker =
             kind == WindowKind::save_picker ? editor.save_picker_ : editor.open_picker_;
@@ -134,7 +143,55 @@ Editor::application_windows(const std::filesystem::path &initial) {
                "Find and Replace - SwiftEdit", {510, 260});
     add_dialog(result, font_, WindowKind::font, "notepad.font-window", "Font - SwiftEdit",
                {410, 220});
+    add_character_window(result, false);
+    add_character_window(result, true);
     return result;
+}
+void Editor::add_character_window(std::vector<gf::ApplicationWindow> &windows, bool controls) {
+    CharacterWindow &dialog = controls ? controls_ : characters_;
+    gf::ApplicationWindow child{};
+    child.stable_id = controls ? "swiftedit.controls-window" : "swiftedit.characters-window";
+    child.owner_id = "notepad.main";
+    child.tool_window = true;
+    child.model = std::make_unique<gf::Window>(dialog.root, gf::Size{680, 600});
+    child.options.title =
+        controls ? "Control Characters - SwiftEdit" : "Unicode Characters - SwiftEdit";
+    child.options.initial_size = {680, 600};
+    child.options.minimum_size = {580, 460};
+    child.options.initially_visible = false;
+    child.options.hide_on_close = true;
+    const WindowKind kind = controls ? WindowKind::controls : WindowKind::characters;
+    child.options.ready = WindowReady{observe(), kind, {}};
+    child.options.closing = WindowClosing{observe(), kind};
+    windows.push_back(std::move(child));
+}
+void Editor::CharacterInsert::operator()(const std::string &text) const {
+    const std::shared_ptr<Editor> self = lock_alive(owner);
+    if (self)
+        (*self).insert_character(text);
+}
+void Editor::CharacterClose::operator()() const {
+    const std::shared_ptr<Editor> self = lock_alive(owner);
+    if (!self)
+        return;
+    CharacterWindow &dialog = controls ? (*self).controls_ : (*self).characters_;
+    static_cast<void>(dialog.handle.hide());
+    (*self).focus_text();
+}
+void Editor::insert_character(const std::string &value) {
+    if (picker_active_)
+        throw std::runtime_error("Finish the file dialog before inserting a character.");
+    const gf::TextSelection selection = (*text_).selection();
+    std::string candidate((*text_).text());
+    candidate.replace(selection.start().value(), selection.length(), value);
+    if (gf::TextBox::validate_multiline_text(candidate) != gf::TextBox::MultilineValidation::valid)
+        throw std::runtime_error("Character insertion exceeds the current document or line limit.");
+    show_markdown(false);
+    show_csv(false);
+    const bool inserted = (*text_).replace_selection(value);
+    if (!inserted)
+        throw std::runtime_error("The character was not inserted.");
+    refresh();
 }
 void Editor::show_picker(bool save_as) {
     Picker &picker = save_as ? save_picker_ : open_picker_;
@@ -154,6 +211,8 @@ void Editor::show_picker(bool save_as) {
     // Suppress every editor command during the owned selection session.
     static_cast<void>(find_.handle.hide());
     static_cast<void>(font_.handle.hide());
+    static_cast<void>(characters_.handle.hide());
+    static_cast<void>(controls_.handle.hide());
     picker_active_ = true;
     active_save_picker_ = save_as;
     set_enabled(false);

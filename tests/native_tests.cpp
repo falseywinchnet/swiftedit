@@ -48,9 +48,9 @@ public:
     std::shared_ptr<notepad::Editor> editor{};
     gf::Window *main{};
     gf::Window *find_window{};
-    std::array<gf::ApplicationWindowHandle, 5> handles{};
-    std::array<unsigned, 5> close_count{};
-    std::array<WindowHooks, 5> hooks{};
+    std::array<gf::ApplicationWindowHandle, 7> handles{};
+    std::array<unsigned, 7> close_count{};
+    std::array<WindowHooks, 7> hooks{};
     gf::ApplicationWindowHandle main_handle{};
     std::size_t ready_count{};
     bool passed{};
@@ -99,8 +99,9 @@ public:
                 // Public lifecycle only: no global input, cursor or desktop automation.
                 (*editor).execute("find");
                 require(handles[3].active(), "Owned find window active");
-                const std::shared_ptr<gf::TextBox> query = std::dynamic_pointer_cast<gf::TextBox>(
-                    find_control((*find_window).root(), "find.query"));
+                const std::shared_ptr<notepad::QueryField> query =
+                    std::dynamic_pointer_cast<notepad::QueryField>(
+                        find_control((*find_window).root(), "find.query"));
                 const std::shared_ptr<gf::TextBox> replacement =
                     std::dynamic_pointer_cast<gf::TextBox>(
                         find_control((*find_window).root(), "find.replacement"));
@@ -162,6 +163,36 @@ public:
                     return;
                 }
                 require((*editor).enabled(), "Reopened picker cancellation");
+                (*editor).execute("characters");
+                require(handles[5].active(), "Owned Unicode dialog active");
+                (*(*editor).character_picker(false)).select_codepoint(0x1f600);
+                (*(*editor).character_picker(false)).insert_selected();
+                require((*(*editor).text_control()).text().find("\xf0\x9f\x98\x80") !=
+                            std::string::npos,
+                        "Native Unicode dialog inserts a supplementary scalar");
+                (*editor).execute("undo");
+                require((*(*editor).text_control()).text() == "native saved\r\n",
+                        "Unicode insertion undo");
+                static_cast<void>(handles[5].request_close());
+                break;
+            case 6:
+                (*editor).execute("controls");
+                require(handles[6].active(), "Owned control dialog active");
+                (*(*editor).character_picker(true)).select_codepoint(0x200b);
+                (*(*editor).character_picker(true)).insert_selected();
+                require((*(*editor).text_control()).text().find("\xe2\x80\x8b") !=
+                            std::string::npos,
+                        "Native control dialog inserts literal source bytes");
+                (*editor).execute("undo");
+                require((*(*editor).text_control()).text() == "native saved\r\n",
+                        "Control insertion undo");
+                static_cast<void>(handles[6].request_close());
+                break;
+            case 7:
+                if (close_count[5] < 1 || close_count[6] < 1) {
+                    --stage;
+                    return;
+                }
                 passed = true;
                 (*timer).stop();
                 static_cast<void>(main_handle.request_close());
@@ -178,7 +209,7 @@ public:
     void run() {
         editor = gf::make_control<notepad::Editor>(gf::StableId("native.editor"));
         std::vector<gf::ApplicationWindow> windows = (*editor).application_windows(path);
-        require(windows.size() == handles.size(), "Expected five owned windows");
+        require(windows.size() == handles.size(), "Expected main and six owned dialogs");
         main = windows.front().model.get();
         find_window = windows[3].model.get();
         for (std::size_t i = 0; i < windows.size(); ++i) {

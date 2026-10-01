@@ -191,6 +191,21 @@ std::vector<CharacterInfo> character_page(char32_t first, bool controls) {
     }
     return result;
 }
+std::vector<CharacterInfo> control_characters() {
+    std::vector<CharacterInfo> result{};
+    for (const CharacterRecord &record : records) {
+        const std::string_view category(record.category);
+        if (category != "Cc" && category != "Cf" && category != "Zl" && category != "Zp")
+            continue;
+        for (char32_t scalar = record.first; scalar <= record.last; ++scalar) {
+            if (result.size() >= 1024)
+                throw std::runtime_error("Control catalog exceeds its display budget.");
+            CharacterInfo info = character_info(scalar);
+            result.push_back(std::move(info));
+        }
+    }
+    return result;
+}
 std::string inspect_characters(std::string_view text) {
     std::string result = "Unicode 17.0.0; stored UTF-8 values\n";
     std::size_t offset = 0, shown = 0;

@@ -3,6 +3,7 @@
 #include "csv_view.hpp"
 #include "markdown_view.hpp"
 #include "query_field.hpp"
+#include "character_picker.hpp"
 #include <file_manager/document_picker_view.hpp>
 #include <functional>
 #include <gui_forms/application.hpp>
@@ -49,11 +50,16 @@ public:
     std::shared_ptr<CsvView> csv_control() const { return csv_; }
     std::shared_ptr<QueryField> query_control() const { return query_; }
     std::shared_ptr<gf::TextBox> replacement_control() const { return replacement_; }
+    std::shared_ptr<CharacterPicker> character_picker(bool controls) const {
+        const std::shared_ptr<CharacterPicker> result =
+            controls ? controls_.root : characters_.root;
+        return result;
+    }
 
 private:
     struct Dialog;
     enum class Continuation { none, new_document, open_document, close_window };
-    enum class WindowKind { main, open_picker, save_picker, find, font };
+    enum class WindowKind { main, open_picker, save_picker, find, font, characters, controls };
     enum class ButtonAction {
         find_next,
         replace_one,
@@ -112,6 +118,22 @@ private:
         bool save_as{};
         void operator()(const file_manager::DocumentPickerResult &) const;
     };
+    struct CharacterInsert {
+        std::weak_ptr<Editor> owner{};
+        void operator()(const std::string &) const;
+    };
+    struct CharacterClose {
+        std::weak_ptr<Editor> owner{};
+        bool controls{};
+        void operator()() const;
+    };
+    struct CharacterWindow {
+        std::shared_ptr<CharacterPicker> root{};
+        gf::Window *window{};
+        gf::ApplicationWindowHandle handle{};
+    };
+    void insert_character(const std::string &);
+    void add_character_window(std::vector<gf::ApplicationWindow> &, bool);
     std::weak_ptr<Editor> observe();
     static std::shared_ptr<Editor> lock_alive(const std::weak_ptr<Editor> &);
     void on_dispose() noexcept override;
@@ -174,6 +196,7 @@ private:
     gf::ApplicationWindowHandle handle_{};
     Picker open_picker_{}, save_picker_{};
     Dialog find_{}, font_{};
+    CharacterWindow characters_{}, controls_{};
     std::shared_ptr<QueryField> query_{};
     std::shared_ptr<gf::TextBox> replacement_{};
     std::shared_ptr<gf::CheckBox> match_case_{};

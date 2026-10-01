@@ -359,6 +359,69 @@ int main() {
               "Inspector at caret covers the complete combining grapheme");
         check((*text).text() == "e\xcc\x81" && (*text).selection() == inspector_selection,
               "Inspector preserves source and selection");
+        const std::shared_ptr<notepad::CharacterPicker> ordinary_picker =
+            (*editor).character_picker(false);
+        (*ordinary_picker).select_codepoint(0x1f600);
+        (*ordinary_picker).insert_selected();
+        check((*text).text() == "\xf0\x9f\x98\x80"
+                                "e\xcc\x81",
+              "Unicode picker inserts the exact supplementary scalar");
+        (*editor).execute("undo");
+        check((*text).text() == "e\xcc\x81", "Character insertion is one undoable edit");
+        const std::shared_ptr<notepad::CharacterPicker> control_picker =
+            (*editor).character_picker(true);
+        (*control_picker).select_codepoint(0x202e);
+        check((*control_picker).status().find("RIGHT-TO-LEFT OVERRIDE") != std::string::npos &&
+                  (*control_picker).status().find("\xe2\x80\xae") == std::string::npos,
+              "Control dialog explains the selected scalar without executing it in its labels");
+        (*control_picker).insert_selected();
+        check((*text).text() == "\xe2\x80\xae"
+                                "e\xcc\x81",
+              "Explicit control insertion preserves literal source bytes");
+        (*editor).execute("undo");
+        check((*text).text() == "e\xcc\x81", "Control insertion can be undone exactly");
+        bool separate_dialog = false;
+        try {
+            (*ordinary_picker).select_codepoint(0x202e);
+        } catch (const std::runtime_error &) {
+            separate_dialog = true;
+        }
+        check(separate_dialog && (*text).text() == "e\xcc\x81",
+              "Ordinary picker refuses controls intact");
+        {
+            gf::Window character_window(ordinary_picker, {680, 600});
+            gf::HostSession character_host(character_window, capabilities(), &services);
+            const gf::HostDispatchResult attached_picker =
+                character_host.dispatch({1, 0, gf::HostAttachEvent{{680, 600}, 1}});
+            check(attached_picker.accepted(), "Character dialog has shared host services");
+            (*ordinary_picker).copy_selected();
+            check(services.clipboard == "\xf0\x9f\x98\x80" && (*text).text() == "e\xcc\x81",
+                  "Unicode picker copies exact scalar without mutating the document");
+            character_host.shutdown();
+        }
+        {
+            gf::Window control_window(control_picker, {680, 600});
+            gf::HostSession control_host(control_window, capabilities(), &services);
+            const gf::HostDispatchResult attached_controls =
+                control_host.dispatch({1, 0, gf::HostAttachEvent{{680, 600}, 1}});
+            check(attached_controls.accepted(), "Control dialog has shared host services");
+            (*control_picker).select_codepoint(0);
+            services.clipboard = "preserved clipboard";
+            bool nul_copy_refused = false;
+            try {
+                (*control_picker).copy_selected();
+            } catch (const std::runtime_error &) {
+                nul_copy_refused = true;
+            }
+            check(nul_copy_refused && services.clipboard == "preserved clipboard",
+                  "NUL clipboard refusal preserves the existing clipboard");
+            (*control_picker).insert_selected();
+            check((*text).text() == std::string("\0e\xcc\x81", 4),
+                  "NUL remains insertable as a literal source byte");
+            (*editor).execute("undo");
+            check((*text).text() == "e\xcc\x81", "NUL insertion undoes without loss");
+            control_host.shutdown();
+        }
         std::cout << "Editor headless tests passed: native control input routing, CRLF, menu "
                      "edit/save, undo boundary, mixed endings, oversized-line refusal.\n";
         return 0;
