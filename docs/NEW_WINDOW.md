@@ -53,3 +53,16 @@ actual executable location, and checks relative/missing/non-executable path
 refusal. No local native launch was performed. CI results for this new adapter
 are pending; this helper does not exercise two real editor windows or prove
 packaged macOS application activation behavior.
+
+The first adapter run (0af3cf5, native run 36885936459) passed the macOS helper
+in 0.07 seconds; all three native build jobs passed. The launch helper is
+still narrower than the two-window product requirement.
+
+A separate opt-in `independent-window-native` fixture now opens two actual
+Editor/Application instances in separate processes. It invokes the first
+editor's New Window command while the first document is dirty and selected,
+checks preservation, closes the first GUI, and verifies the second editor stays
+blank and accepts an edit after that shutdown. Both use the normal nine-window
+topology and stop their owned timers before closing. This fixture is built
+locally but awaits native CI execution. Packaged macOS activation/placement and
+keyboard interaction remain separate dogfood checks.

@@ -545,3 +545,17 @@ cadence exceeded the unchanged lateness bound in interval 1 after three ticks
 (131070458 ns maximum lateness). Receipt exit1, accepted_marker=false. Its first
 completed interval does not establish an accepted ABBA comparison. Owner's blank
 Mac 7% report remains unresolved.
+
+New Window adapter 0af3cf5 passed all three native jobs in 36885936459. Added
+independent-window-native fixture to open two actual editors, preserve dirty
+parent state, and edit the child after parent GUI shutdown. It is compiled but
+native execution awaits the next push. Local 20 suites passed in 3.83 seconds;
+101-file spelling audit clean. Help describes New Window/current conflict flow;
+About no longer incorrectly labels the Mac/Linux app a Windows build.
+
+The unchanged-SDK 0af3cf5 Mac idle run observed focused1.30901% versus
+focus-cleared.0325808%, nine versus zero main paints/deadlines/wakes. All eight
+hidden dialogs were quiet in both phases. This is baseline variation, not a
+rendering improvement: New Window did not change caret/host rendering.
+Provider root is pushing 2d04310 with file-alias opening support; wait for
+actual native fixtures and verified SDK archives before adopting it.

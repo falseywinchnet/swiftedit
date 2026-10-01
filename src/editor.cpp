@@ -671,15 +671,17 @@ void Editor::execute(const std::string &id) {
             message(
                 "SwiftEdit help",
                 "Use File > Open to edit a plain-text document. Ctrl+S saves. A star beside "
-                "the filename means unsaved changes.\n\nFind/Replace keeps punctuation literal. "
+                "the filename means unsaved changes. File > New Window (Ctrl/Cmd+Shift+N) "
+                "opens an independent blank document and leaves your current work open.\n\n"
+                "Find/Replace keeps punctuation literal. "
                 "Right-click a query character or press Ctrl+? to toggle a one-character "
                 "wildcard, displayed as a dot. Match case "
                 "off folds English A-Z only. Search reveals source text when a CSV table or "
                 "Markdown preview is visible. Search wraps once. Replace All is one undo "
                 "action.\n\nThis build preserves UTF-8 and BOM-marked UTF-16, including "
                 "existing line endings. Malformed or unsupported encodings are refused. Files "
-                "changed externally are never silently overwritten: use Save As or "
-                "reopen.\n\nWrap and font affect display only. Editable text is limited to 1 "
+                "changed externally require a Save Over or New Copy choice, followed by "
+                "review of the destination before saving.\n\nWrap and font affect display only. Editable text is limited to 1 "
                 "MiB of UTF-8 and 4096 UTF-8 bytes per logical line. Settings are "
                 "session-only. Save resets ordinary Undo. Document > Restore As Opened "
                 "recovers the original session text. Document also offers explicit newline "
@@ -688,9 +690,7 @@ void Editor::execute(const std::string &id) {
         else if (id == "about")
             message(
                 "About SwiftEdit",
-                "SwiftEdit 0.2\nA standalone plain-text editor using GUI.Forms and the shared File "
-                "Manager Document Picker.\n\nWindows development build; expanded objectives and "
-                "implementation status are recorded in docs/SWIFTEDIT_OBJECTIVES.md.");
+                "SwiftEdit 0.2\nA plain-text editor with Markdown and CSV views.\n\nDevelopment build.");
         refresh();
     } catch (const std::exception &e) {
         error(e.what());
