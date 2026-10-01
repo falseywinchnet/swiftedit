@@ -57,6 +57,71 @@ void check(bool value, const char *message) {
     if (!value)
         throw std::runtime_error(message);
 }
+gf::Control::Ptr find_control(const gf::Control::Ptr &root, std::string_view id) {
+    if ((*root).stable_id().value() == id)
+        return root;
+    for (const gf::Control::Ptr &child : (*root).children()) {
+        const gf::Control::Ptr found = find_control(child, id);
+        if (found)
+            return found;
+    }
+    return {};
+}
+void verify_conflict_fields() {
+    const std::filesystem::path dir =
+        std::filesystem::temp_directory_path() /
+        ("swiftedit-conflict-ui-" + std::to_string(GetCurrentProcessId()));
+    check(std::filesystem::create_directory(dir), "Unique conflict fixture");
+    struct Cleanup {
+        std::filesystem::path path{};
+        ~Cleanup() {
+            std::error_code error{};
+            std::filesystem::remove_all(path, error);
+        }
+    } cleanup{dir};
+    const std::filesystem::path path = dir / "original.txt";
+    {
+        std::ofstream file(path, std::ios::binary);
+        file << "opened";
+    }
+    const std::shared_ptr<notepad::Editor> editor =
+        gf::make_control<notepad::Editor>(gf::StableId("conflict-test.editor"));
+    std::vector<gf::ApplicationWindow> windows = (*editor).application_windows({});
+    (*editor).open_file(path);
+    (*(*editor).text_control()).set_text("mine\n");
+    {
+        std::ofstream file(path, std::ios::binary);
+        file << "external";
+    }
+    (*editor).execute("save");
+    (*editor).execute("conflict-copy");
+    const gf::Control::Ptr root = (*windows[8].model).root();
+    const std::shared_ptr<gf::TextBox> filename =
+        std::dynamic_pointer_cast<gf::TextBox>(find_control(root, "conflict.filename"));
+    const std::shared_ptr<gf::ComboBox> encoding =
+        std::dynamic_pointer_cast<gf::ComboBox>(find_control(root, "conflict.encoding"));
+    const std::shared_ptr<gf::ComboBox> endings =
+        std::dynamic_pointer_cast<gf::ComboBox>(find_control(root, "conflict.endings"));
+    check(filename && encoding && endings, "Review controls are real owned dialog children");
+    check((*filename).text() == notepad::path_utf8(dir / "original.1.txt"),
+          "New copy suggests versioned name");
+    (*encoding).set_selected_index(3);
+    (*endings).set_selected_index(2);
+    (*editor).execute("conflict-review");
+    const std::filesystem::path copy = dir / "edited-name.txt";
+    (*filename).set_text(notepad::path_utf8(copy));
+    (*editor).execute("conflict-save");
+    check((*editor).conflict_pending() && !std::filesystem::exists(copy),
+          "Changed filename requires another review");
+    (*editor).execute("conflict-review");
+    (*editor).execute("conflict-save");
+    const notepad::Decoded copied = notepad::decode(notepad::read_file(copy).bytes);
+    check(!(*editor).conflict_pending() && (*editor).document().path == copy &&
+              copied.encoding == notepad::Encoding::utf16_be && copied.text == "mine\r\n" &&
+              notepad::read_file(path).bytes == "external" &&
+              (*(*editor).text_control()).text() == copied.text,
+          "Reviewed new filename and metadata publish together while preserving original");
+}
 void verify_callback_revocation() {
     std::shared_ptr<notepad::Editor> editor =
         gf::make_control<notepad::Editor>(gf::StableId("lifetime.editor"));
@@ -106,6 +171,7 @@ void verify_callback_revocation() {
 int main() {
     try {
         verify_callback_revocation();
+        verify_conflict_fields();
         namespace gf = gui_forms;
         const std::shared_ptr<notepad::Editor> editor =
             gf::make_control<notepad::Editor>(gf::StableId("test.editor"));
@@ -226,6 +292,32 @@ int main() {
         check((*text).text() == "one\ntwo\r\nthree\r" && (*text).can_undo() &&
                   notepad::read_file(path).bytes == "external during choice",
               "Destination race refuses normalization/save without losing source or undo");
+        (*editor).execute("save");
+        check((*editor).conflict_pending() && !(*editor).enabled(),
+              "External change opens first-stage conflict choice");
+        (*editor).execute("conflict-save");
+        check(notepad::read_file(path).bytes == "external during choice",
+              "Cannot skip conflict stages");
+        (*editor).execute("conflict-over");
+        (*editor).execute("conflict-review");
+        {
+            std::ofstream external(path, std::ios::binary);
+            external << "changed after review";
+        }
+        (*editor).execute("conflict-save");
+        check((*editor).conflict_pending() && (*text).can_undo() &&
+                  notepad::read_file(path).bytes == "changed after review",
+              "Conflict review race preserves source, history and external file");
+        (*editor).execute("conflict-review");
+        (*editor).execute("conflict-save");
+        check(!(*editor).conflict_pending() && (*editor).enabled() && !(*text).can_undo() &&
+                  notepad::read_file(path).bytes == "one\ntwo\r\nthree\r",
+              "Explicit reviewed overwrite preserves mixed endings and clears history on success");
+        (*text).select_all();
+        (*text).replace_selection("new saved baseline\n");
+        (*editor).execute("save");
+        (*text).select_all();
+        (*text).replace_selection("one\ntwo\r\nthree\r");
         services.clipboard = std::string(500001, 'x');
         services.choices.push_back(gf::HostDialogChoice::no);
         (*editor).execute("paste");
@@ -249,6 +341,7 @@ int main() {
         (*editor).execute(
             "new"); // External file was replaced with long-line fixture: save must fail.
         check((*text).text() == "one\ntwo\r\nthree\r", "Failed unsaved Save cancels New");
+        (*editor).execute("cancel-save");
         services.choices.push_back(gf::HostDialogChoice::no);
         (*editor).execute("new");
         check((*text).text().empty() && (*editor).document().path.empty(),

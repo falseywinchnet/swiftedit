@@ -1,5 +1,6 @@
 #pragma once
 #include "document.hpp"
+#include "save_review.hpp"
 #include "csv_view.hpp"
 #include "markdown_view.hpp"
 #include "query_field.hpp"
@@ -50,6 +51,7 @@ public:
     std::shared_ptr<CsvView> csv_control() const { return csv_; }
     std::shared_ptr<QueryField> query_control() const { return query_; }
     std::shared_ptr<gf::TextBox> replacement_control() const { return replacement_; }
+    bool conflict_pending() const { return static_cast<bool>(conflict_review_); }
     bool save_choice_pending() const { return pending_save_.has_value(); }
     std::shared_ptr<CharacterPicker> character_picker(bool controls) const {
         const std::shared_ptr<CharacterPicker> result =
@@ -68,7 +70,8 @@ private:
         font,
         characters,
         controls,
-        save_choices
+        save_choices,
+        conflict
     };
     enum class ButtonAction {
         find_next,
@@ -79,7 +82,12 @@ private:
         close_font,
         save_as_is,
         save_normalized,
-        cancel_save
+        cancel_save,
+        conflict_over,
+        conflict_copy,
+        conflict_review,
+        conflict_save,
+        conflict_cancel
     };
     // All retained callbacks observe the editor. Invocation takes a temporary
     // strong reference; an expired owner makes queued work a no-op. Tokens own
@@ -184,6 +192,11 @@ private:
     bool request_save_to(const std::filesystem::path &, const FileSnapshot &, Continuation);
     void finish_save_choice(bool normalize, bool cancel);
     void build_save_choices();
+    void build_conflict();
+    void begin_conflict(const std::filesystem::path &, Continuation);
+    void conflict_action(ButtonAction);
+    void cancel_conflict();
+    swiftedit::DocumentStamp save_stamp() const;
     void show_picker(bool save_as);
     void picker_result(bool save_as, const file_manager::DocumentPickerResult &);
     void hide_picker(bool save_as);
@@ -212,6 +225,16 @@ private:
     gf::ApplicationWindowHandle handle_{};
     Picker open_picker_{}, save_picker_{};
     Dialog find_{}, font_{};
+    Dialog conflict_{};
+    std::unique_ptr<swiftedit::SaveReview> conflict_review_{};
+    // Allocates a unique GUI document identity until the shared Session migration.
+    swiftedit::Session save_identity_{};
+    Continuation conflict_next_{Continuation::none};
+    std::shared_ptr<gf::TextBox> conflict_path_{};
+    std::shared_ptr<gf::ComboBox> conflict_encoding_{}, conflict_endings_{};
+    std::shared_ptr<gf::Label> conflict_status_{};
+    std::shared_ptr<gf::Button> conflict_over_{}, conflict_copy_{}, conflict_check_{},
+        conflict_save_{}, conflict_cancel_{};
     Dialog save_choices_{};
     std::shared_ptr<gf::Button> save_keep_{}, save_normalize_{}, save_cancel_{};
     struct PendingSave {

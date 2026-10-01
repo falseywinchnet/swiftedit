@@ -50,3 +50,11 @@ Build: tools/Build-Windows.ps1 with house-style-final SDK pair, build directory
 .build/swiftedit-resumed. Last-stage dist/SwiftEdit-resumed predates this checkpoint;
 do not distribute it as these new binaries. No new release ZIP was made. Avoid
 launching native desktop tests without coordination. Preserve older stages/SDKs.
+
+
+2026-10-01: conflict core + owned review dialog implemented. Nine-window native
+smoke passed (VALIDATION.md records hash). Ten headless suites pass. New Copy is
+versioned, filename/encoding/endings editable; final Save binds reviewed snapshot
+and document stamp, refuses changed fields/races. CLI remains strict. Continue
+shared byte-faithful GUI/provider integration, terminal UX/metadata, print,
+independent windows and measured lag scan. Active owner goal remains unfinished.

@@ -48,9 +48,9 @@ public:
     std::shared_ptr<notepad::Editor> editor{};
     gf::Window *main{};
     gf::Window *find_window{};
-    std::array<gf::ApplicationWindowHandle, 8> handles{};
-    std::array<unsigned, 8> close_count{};
-    std::array<WindowHooks, 8> hooks{};
+    std::array<gf::ApplicationWindowHandle, 9> handles{};
+    std::array<unsigned, 9> close_count{};
+    std::array<WindowHooks, 9> hooks{};
     gf::ApplicationWindowHandle main_handle{};
     std::size_t ready_count{};
     bool passed{};
@@ -214,7 +214,24 @@ public:
                         (*(*editor).text_control()).text() == "mixed\r\nline\r\n",
                     "Native conversion uses the document CRLF default and displays saved bytes");
                 break;
-            case 9:
+            case 9: {
+                std::ofstream external(path, std::ios::binary);
+                external << "external native change";
+                external.close();
+                (*editor).execute("save");
+                require((*editor).conflict_pending() && handles[8].active(),
+                        "Native conflict choice owns an active dialog");
+                (*editor).execute("conflict-over");
+                (*editor).execute("conflict-review");
+                break;
+            }
+            case 10:
+                (*editor).execute("conflict-save");
+                require(!(*editor).conflict_pending() && (*editor).enabled() &&
+                            notepad::read_file(path).bytes == "mixed\r\nline\r\n",
+                        "Native reviewed overwrite publishes and restores owner");
+                break;
+            case 11:
                 passed = true;
                 (*timer).stop();
                 static_cast<void>(main_handle.request_close());
@@ -231,7 +248,7 @@ public:
     void run() {
         editor = gf::make_control<notepad::Editor>(gf::StableId("native.editor"));
         std::vector<gf::ApplicationWindow> windows = (*editor).application_windows(path);
-        require(windows.size() == handles.size(), "Expected main and seven owned dialogs");
+        require(windows.size() == handles.size(), "Expected main and eight owned dialogs");
         main = windows.front().model.get();
         find_window = windows[3].model.get();
         for (std::size_t i = 0; i < windows.size(); ++i) {

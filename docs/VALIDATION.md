@@ -337,3 +337,24 @@ SDK pair: unchanged house-style-final Windows x64; GUI runtime identity matches
 the preceding native receipt. This verifies lifecycle/operations, not visual
 layout or a final latency certification.
 Full external-conflict two-stage filename/metadata/copy workflow remains unfinished.
+
+
+## Conflict save review - 2026-10-01
+
+Added `save-review` suite for two-stage authority, stale document identity,
+invalid encoding revocation, destination races, versioned-copy collision refusal,
+encoding/ending publication and one-use consent. Editor tests exercise actual
+owned filename/format controls, changed fields requiring another review,
+UTF-16 BE/CRLF new-copy publication, original preservation and undo boundary.
+All ten headless suites passed in 1.49 s. C++ spelling audit: zero findings across
+41 authored files. Semantic review checked weak callback ownership, private
+preparation, consent revocation, expected snapshot publication and failure
+preservation separately.
+
+Native nine-window lifecycle smoke exited 0 using only its own public callbacks
+and disposable fixture. It exercised the new active conflict dialog, reviewed
+Save Over and restoration of the owner alongside prior dialog/save tests.
+Binary SHA-256: `F302F7274B9492ACECB7DF21CBF08B88791E0F6E7BEC37B9D383D6B216353B7C`.
+Log: `.build/swiftedit-resumed/native-20261001-020127.stdout.txt`.
+No physical keyboard, screen-reader, visual-layout or final latency claim follows
+from this callback-driven smoke. Current SDK remains unchanged.

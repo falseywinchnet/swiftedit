@@ -37,7 +37,9 @@ import and column resizing are not implemented.
   colors, settings persistence, recovery files, installer, file association or
   OS-default changes.
 - External changes are checked during saving. There is no filesystem watcher,
-  automatic reload, merge view or force-overwrite action.
+  automatic reload or merge view. A conflict opens Save Over/New Copy, then editable
+  filename/encoding/endings and a reviewed destination warning before explicit Save.
+  Any intervening destination change is refused; there is no unchecked force-save.
 - Save As may ask for overwrite twice: the picker confirms its observation;
   the writer obtains fresh byte/identity evidence and confirms that destination
   before writing. This conservative behavior avoids silently treating an old

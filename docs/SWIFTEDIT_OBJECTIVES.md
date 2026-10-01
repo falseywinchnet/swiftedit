@@ -29,8 +29,8 @@ precedence. The previous DECISIONS.md is historical implementation evidence.
 | Wrap, 02:32 | No wrap / wrap to window; intelligent breaks at spaces by default, visual only | Existing provider space/tab wrap with grapheme fallback; no separate preference yet |
 | Insert, 02:32 | Date and time as plain text | Document menu + F5, local ISO-style timestamp |
 | Filename, 02:27 | Exact nonempty bracket-only first line suggests first untitled save; named files keep names | GUI Save As suggestion with Windows filename checks; no hidden document mutations |
-| Copies | Dot version before extension, increment existing dot-number | Tested naming helper; conflict workflow integration pending |
-| External changes, 02:28–29 | Frozen views; two-stage destructive save, first over/new-copy, then editable filename/metadata + explicit warning; no compare/merge | Existing strict conflict refusal preserved; full two-stage owned UI pending; CLI never forces overwrite |
+| Copies | Dot version before extension, increment existing dot-number | Versioned filename suggestion in conflict New Copy; editable filename and collision refusal |
+| External changes, 02:28–29 | Frozen views; two-stage destructive save, first over/new-copy, then editable filename/metadata + explicit warning; no compare/merge | Owned two-stage UI implemented: over/new copy, editable filename/encoding/endings, fresh review warning and explicit Save; stale/raced confirmation refused; CLI never forces overwrite |
 | Markdown | Source/rendered toggle, common blocks/tables/tasks; no SVG/live HTML; inert links with URL tooltip; ruler only in rendered view | Pending native renderer/provider work |
 | Print | Native OS print, plain/rendered; separate Markdown layout preview without source mutation | Pending public print/preview contract |
 | CSV | `.csv` only, real quoting, flat table, rectangle selection; Delete clears cells without shifting | Native source/table toggle, bounded visible grid, rectangle clear, source entry, scrollbars and CLI; broad desktop QA pending |

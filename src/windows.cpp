@@ -21,6 +21,12 @@ void Editor::WindowReady::operator()(gf::Window &window, gf::ApplicationWindowHa
         window.set_cancel_button((*dialog.root).close_button());
         return;
     }
+    if (kind == WindowKind::conflict) {
+        editor.conflict_.window = &window;
+        editor.conflict_.handle = handle;
+        window.set_cancel_button(editor.conflict_cancel_);
+        return;
+    }
     if (kind == WindowKind::save_choices) {
         editor.save_choices_.window = &window;
         editor.save_choices_.handle = handle;
@@ -50,6 +56,10 @@ void Editor::WindowClosing::operator()(gf::HostCloseRequest &request) const {
     if (!self)
         return;
     Editor &editor = *self;
+    if (kind == WindowKind::conflict) {
+        editor.cancel_conflict();
+        return;
+    }
     if (kind == WindowKind::save_choices) {
         editor.finish_save_choice(false, true);
         return;
@@ -157,6 +167,8 @@ Editor::application_windows(const std::filesystem::path &initial) {
     add_character_window(result, true);
     add_dialog(result, save_choices_, WindowKind::save_choices, "swiftedit.save-choices-window",
                "Mixed Line Endings - SwiftEdit", {600, 180});
+    add_dialog(result, conflict_, WindowKind::conflict, "swiftedit.conflict-window",
+               "Review Save - SwiftEdit", {680, 420});
     return result;
 }
 void Editor::add_character_window(std::vector<gf::ApplicationWindow> &windows, bool controls) {
@@ -191,7 +203,7 @@ void Editor::CharacterClose::operator()() const {
     (*self).focus_text();
 }
 void Editor::insert_character(const std::string &value) {
-    if (picker_active_ || pending_save_)
+    if (picker_active_ || pending_save_ || conflict_review_)
         throw std::runtime_error("Finish the file dialog before inserting a character.");
     const gf::TextSelection selection = (*text_).selection();
     std::string candidate((*text_).text());

@@ -149,6 +149,9 @@ Decoded decode(std::string_view bytes) {
     return d;
 }
 std::string encode(std::string_view text, Encoding encoding) {
+    if (encoding != Encoding::utf8 && encoding != Encoding::utf8_bom &&
+        encoding != Encoding::utf16_le && encoding != Encoding::utf16_be)
+        throw std::runtime_error("Unsupported text encoding.");
     check_text(text);
     if (encoding == Encoding::utf8) {
         const std::string result(text);
@@ -279,12 +282,17 @@ void Document::open(const std::filesystem::path &source) {
 }
 void Document::save(const std::filesystem::path &target, std::string_view text,
                     const FileSnapshot &expected) {
-    const std::string bytes = encode(text, encoding);
+    save_encoded(target, text, expected, encoding);
+}
+void Document::save_encoded(const std::filesystem::path &target, std::string_view text,
+                            const FileSnapshot &expected, Encoding requested) {
+    const std::string bytes = encode(text, requested);
     std::filesystem::path prepared_path = target;
     std::string prepared_text(text);
     FileSnapshot written = write_file(target, bytes, expected);
     path = std::move(prepared_path);
     saved_text = std::move(prepared_text);
     snapshot = std::move(written);
+    encoding = requested;
 }
 } // namespace notepad

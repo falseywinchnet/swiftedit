@@ -52,6 +52,8 @@ struct Document {
     void open(const std::filesystem::path &source);
     void save(const std::filesystem::path &target, std::string_view text,
               const FileSnapshot &expected);
+    void save_encoded(const std::filesystem::path &target, std::string_view text,
+                      const FileSnapshot &expected, Encoding requested);
     [[nodiscard]] bool dirty(std::string_view text) const {
         const bool changed = text != saved_text;
         return changed;

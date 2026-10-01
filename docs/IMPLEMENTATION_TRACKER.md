@@ -56,3 +56,12 @@ Provider work is coordinated with the GUI.Forms owner and Orchestrator registry
 owner through the original parent. SwiftEdit owns source bytes and save policy;
 provider owns virtual text/shaping/selection/viewport and native print seams.
 Frozen SDKs and Plan Paint remain untouched.
+
+
+2026-10-01 conflict workflow checkpoint: owned two-stage Save Over/New Copy,
+editable filename/encoding/line endings, Review Destination warning and explicit
+Save implemented. New Copy suggests dot versions and refuses existing targets.
+Final publication binds to reviewed file identity/bytes and original document
+identity/revision; field changes require another review, races refuse intact.
+Ten headless suites and the nine-window native lifecycle smoke pass. This does
+not complete byte-faithful GUI migration, print, dynamic windows or final lag QA.

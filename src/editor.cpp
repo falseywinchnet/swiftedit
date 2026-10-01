@@ -23,6 +23,7 @@ Editor::~Editor() {
 void Editor::on_dispose() noexcept {
     cancel_search();
     pending_save_.reset();
+    conflict_review_.reset();
     after_save_ = Continuation::none;
     close_authorized_ = false;
     accelerators_.clear();
@@ -93,6 +94,7 @@ void Editor::continue_operation(Continuation next) {
         cancel_search();
         show_markdown(false);
         show_csv(false);
+        save_identity_.reset();
         document_ = {};
         (*text_).set_text("");
         (*text_).set_newline_sequence("\r\n");
@@ -111,6 +113,13 @@ void Editor::continue_operation(Continuation next) {
 }
 void Editor::button_action(ButtonAction action) {
     switch (action) {
+    case ButtonAction::conflict_over:
+    case ButtonAction::conflict_copy:
+    case ButtonAction::conflict_review:
+    case ButtonAction::conflict_save:
+    case ButtonAction::conflict_cancel:
+        conflict_action(action);
+        break;
     case ButtonAction::find_next:
         find_next();
         break;
@@ -231,6 +240,7 @@ void Editor::initialize_control_tree() {
     build_find();
     build_font();
     build_save_choices();
+    build_conflict();
     characters_.root =
         gf::make_control<CharacterPicker>(gf::StableId("swiftedit.characters"), false);
     controls_.root = gf::make_control<CharacterPicker>(gf::StableId("swiftedit.controls"), true);
@@ -406,7 +416,7 @@ void Editor::after_unsaved(Continuation next) {
         save(false, next);
 }
 void Editor::open_file(const std::filesystem::path &source) {
-    if (pending_save_)
+    if (pending_save_ || conflict_review_)
         throw std::runtime_error(
             "Finish or cancel the pending save before opening another document.");
     Document next{};
@@ -421,6 +431,7 @@ void Editor::open_file(const std::filesystem::path &source) {
     show_csv(false);
     (*text_).set_text(next.saved_text);
     cancel_search();
+    save_identity_.reset();
     document_ = std::move(next);
     (*text_).set_newline_sequence(preferred_newline(document_.saved_text));
     (*text_).select(gf::Utf8Offset(0), gf::Utf8Offset(0));
@@ -447,6 +458,19 @@ void Editor::save(bool save_as, Continuation continuation) {
     }
 }
 void Editor::execute(const std::string &id) {
+    if (conflict_review_) {
+        if (id == "conflict-over")
+            conflict_action(ButtonAction::conflict_over);
+        else if (id == "conflict-copy")
+            conflict_action(ButtonAction::conflict_copy);
+        else if (id == "conflict-review")
+            conflict_action(ButtonAction::conflict_review);
+        else if (id == "conflict-save")
+            conflict_action(ButtonAction::conflict_save);
+        else if (id == "cancel-save")
+            cancel_conflict();
+        return;
+    }
     if (pending_save_) {
         if (id == "save-as-is")
             finish_save_choice(false, false);
@@ -673,7 +697,7 @@ void Editor::ready(gf::Window &w, gf::ApplicationWindowHandle handle,
 void Editor::closing(gf::HostCloseRequest &request) {
     if (close_authorized_)
         return;
-    if (picker_active_ || pending_save_) {
+    if (picker_active_ || pending_save_ || conflict_review_) {
         request.cancel = true;
         return;
     }
@@ -934,8 +958,10 @@ bool Editor::request_save_to(const std::filesystem::path &path, const FileSnapsh
     // Check known conflicts before asking about line endings. The writer still
     // verifies this exact snapshot again immediately before publication.
     const FileSnapshot current = read_file(path);
-    if (current != expected)
-        throw std::runtime_error("The destination changed outside SwiftEdit. No file was written.");
+    if (current != expected) {
+        begin_conflict(path, next);
+        return false;
+    }
     if (newline_name((*text_).text()) != "Mixed (preserved)") {
         const bool saved = save_to(path, expected);
         if (saved && next != Continuation::none)
