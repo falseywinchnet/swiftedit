@@ -104,9 +104,40 @@ void verify_view() {
     }
     check(refused, "Visible row retention has an explicit upper bound");
 }
+void verify_checkpoints() {
+    swiftedit::TerminalBuffer buffer{};
+    swiftedit::TerminalWrapView view{};
+    buffer.insert(std::string(12000, 'x'));
+    const std::size_t positions[] = {4095, 4096, 4159, 4160, 8191, 8192, 12000};
+    for (const std::size_t offset : positions) {
+        buffer.move_to(offset, buffer.session().stamp());
+        view.move(buffer, swiftedit::TerminalMotion::up, false, 1, 80);
+        check(buffer.selection().caret == offset - 80,
+              "Reverse movement across sparse checkpoint boundaries preserves column");
+        view.move(buffer, swiftedit::TerminalMotion::down, false, 1, 80);
+        check(buffer.selection().caret == offset,
+              "Forward movement returns across sparse checkpoint boundaries");
+    }
+    buffer.reset(true);
+    std::string source{};
+    for (std::size_t line = 0; line < 325; ++line)
+        source += "xxxxxxxxxxxxxxxxxxxx\n";
+    buffer.insert(source);
+    for (std::size_t visit = 0; visit < 326; ++visit) {
+        const std::size_t line = visit == 325 ? 0 : visit;
+        buffer.move_to(line * 21 + 10, buffer.session().stamp());
+        view.move(buffer, swiftedit::TerminalMotion::up, false, 1, 5);
+        check(buffer.selection().caret == line * 21 + 5,
+              "Evicted logical-line indexes rebuild with correct source positions");
+    }
+    buffer.move_to(10, buffer.session().stamp());
+    view.move(buffer, swiftedit::TerminalMotion::up, false, 1, 4);
+    check(buffer.selection().caret == 6, "Resize invalidates existing sparse checkpoints");
+}
 int main() {
     try {
         verify_view();
+        verify_checkpoints();
         swiftedit::TerminalBuffer buffer{};
         verify(buffer, 0, 5, {""});
         buffer.insert("one two three");

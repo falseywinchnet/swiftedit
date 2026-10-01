@@ -14,6 +14,8 @@ void TerminalWrapView::synchronize(TerminalBuffer &buffer, std::size_t width) {
     if (!current_ || width_ != width || stamp_.identity != stamp.identity ||
         stamp_.revision != stamp.revision) {
         current_ = false;
+        entries_.clear();
+        next_eviction_ = 0;
         width_ = width;
         stamp_ = stamp;
         top_ = locate(buffer);
@@ -27,7 +29,8 @@ void TerminalWrapView::synchronize(TerminalBuffer &buffer, std::size_t width) {
 TerminalWrapView::Position TerminalWrapView::locate(TerminalBuffer &buffer) {
     const std::size_t line = buffer.line_index();
     const std::size_t caret = buffer.selection().caret;
-    Position result{line, buffer.line_range(line).offset};
+    const Entry &entry = prepare(buffer, line);
+    Position result{line, checkpoint(entry, caret, false)};
     for (;;) {
         const TerminalWrapSpan span = terminal_wrap_span(buffer, line, result.offset, width_);
         const std::size_t end = span.source.offset + span.source.length;
@@ -35,6 +38,50 @@ TerminalWrapView::Position TerminalWrapView::locate(TerminalBuffer &buffer) {
             return result;
         result.offset = end;
     }
+}
+TerminalWrapView::Entry &TerminalWrapView::prepare(TerminalBuffer &buffer, std::size_t line) {
+    for (Entry &entry : entries_) {
+        if (entry.line == line)
+            return entry;
+    }
+    const SourceRange source = buffer.line_range(line);
+    Entry prepared{};
+    prepared.line = line;
+    prepared.starts.reserve(source.length / 4096 + 1);
+    prepared.starts.push_back(source.offset);
+    std::size_t offset = source.offset;
+    for (;;) {
+        if (offset - prepared.starts.back() >= 4096)
+            prepared.starts.push_back(offset);
+        const TerminalWrapSpan span = terminal_wrap_span(buffer, line, offset, width_);
+        if (span.logical_end) {
+            prepared.last = offset;
+            break;
+        }
+        offset += span.source.length;
+    }
+    if (entries_.size() < 320) {
+        entries_.push_back(std::move(prepared));
+        return entries_.back();
+    }
+    const std::size_t replacement = next_eviction_;
+    entries_[replacement] = std::move(prepared);
+    next_eviction_ = (next_eviction_ + 1) % 320;
+    return entries_[replacement];
+}
+std::size_t TerminalWrapView::checkpoint(const Entry &entry, std::size_t offset,
+                                         bool strictly_before) {
+    std::size_t first = 0, last = entry.starts.size();
+    while (first < last) {
+        const std::size_t middle = first + (last - first) / 2;
+        const std::size_t candidate = entry.starts[middle];
+        if (candidate < offset || (!strictly_before && candidate == offset))
+            first = middle + 1;
+        else
+            last = middle;
+    }
+    const std::size_t index = first ? first - 1 : 0;
+    return entry.starts[index];
 }
 TerminalWrapView::Position TerminalWrapView::next(TerminalBuffer &buffer, Position position) {
     const TerminalWrapSpan span =
@@ -53,17 +100,12 @@ TerminalWrapView::Position TerminalWrapView::previous(TerminalBuffer &buffer, Po
         if (!position.line)
             return position;
         --position.line;
-        const SourceRange prior = buffer.line_range(position.line);
-        Position result{position.line, prior.offset};
-        for (;;) {
-            const TerminalWrapSpan span =
-                terminal_wrap_span(buffer, result.line, result.offset, width_);
-            if (span.logical_end)
-                return result;
-            result.offset += span.source.length;
-        }
+        const Entry &prior = prepare(buffer, position.line);
+        const Position result{position.line, prior.last};
+        return result;
     }
-    Position result{position.line, line.offset};
+    const Entry &entry = prepare(buffer, position.line);
+    Position result{position.line, checkpoint(entry, position.offset, true)};
     for (;;) {
         const Position following = next(buffer, result);
         if (following.offset >= position.offset)

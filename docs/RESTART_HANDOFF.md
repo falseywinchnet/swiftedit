@@ -290,3 +290,17 @@ metadata is also synchronous. Geometry reset currently reveals caret at the
 top after an edit/resize; preserve useful scroll context during subsequent
 viewport refinement. Add measured long-line and resize evidence, then expand
 the remaining owner feature set/provider integration. The goal stays active.
+
+Wrap lag follow-up: sparse per-line checkpoints now avoid repeated full-line
+scans for warm locate/previous. Entries cover at most 320 lines, with row starts
+at least 4096 source bytes apart. Identity/revision/width invalidation and
+prepare-before-publish are explicit. Added opt-in terminal-wrap-bench and raw
+before/after CSVs in performance/2026-10-01-terminal-wrap/. For a 100 KiB ASCII
+line, 31 Page Up + frame samples improved median 149.927 to 4.699 ms and worst
+228.885 to 6.486 ms. Mixed fixture median 84.775 to 2.085 ms. These exclude
+native console painting and initial Unicode indexing. Full 17-suite regression
+passed 2.54s; checkpoint boundaries, 320-entry eviction and resize invalidation
+also passed. First preparation still scans the full logical line synchronously;
+do not infer cancellation or final responsiveness completion. Viewport scroll
+context refinement after edit/resize remains open. Native run 36856797302 for
+the preceding 1bd9a22 was last observed live; portable 36856797339 succeeded.

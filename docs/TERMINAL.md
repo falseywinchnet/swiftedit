@@ -48,8 +48,11 @@ boundaries are preferred, with whole-grapheme breaks for longer words. Up/Down
 retain a desired display column across short rows; Home/End target the current
 visual row. A full-width ending uses an empty continuation for the end caret.
 Resize and edits invalidate geometry. The viewport retains at most 296 rows,
-but initial and reverse row location still scan logical lines synchronously;
-long-line performance and interruptibility need further work. F2 is session-local.
+with sparse source checkpoints for up to 320 logical lines. Warm reverse row
+location starts near the requested position. Initial line preparation remains
+synchronous; long-line cold performance and interruptibility need further work.
+See performance/2026-10-01-terminal-wrap/README.md for component measurements.
+F2 is session-local.
 
 This executable is unfinished. Persistent wrap preferences,
 Text-copy prompt, full conflict review, external
