@@ -97,3 +97,20 @@ https://github.com/falseywinchnet/swiftedit/actions/runs/36849715223
 The POSIX publication hook is compiled only into the standalone adapter test
 target; production builds have no injected callback. No native GUI Mac build or
 bundle has been validated. Provider-installed SDK archives remain outstanding.
+
+2026-10-01 SDK export gate resolved: provider commit
+6def54ad2bf2089b57c09337c0b3f82cc1178187 passed native Windows x64, macOS ARM64,
+and Linux x64 builds plus independent relocated Application/picker consumer link
+checks in run 36850852233. All three downloaded ZIP hashes and installed-content
+hashes were independently verified by tools/Verify-Sdk-Archive.py. SDK-only
+archives are mirrored into SwiftEdit's private sdk-gui-forms-6def54a release and
+pinned in ci/native-sdk-lock.json. No new prepared-text availability is asserted.
+
+The owner confirmed Apple silicon with macOS 26. Native CI now builds/tests all
+three platforms, including the owned native lifecycle fixture, and stages a Mac
+app with fonts, libraries, notices, loader verification, ad-hoc signing, and a
+bounded packaged startup check. Actual SwiftEdit native CI results are pending
+this checkpoint; do not confuse successful provider exports with an app release.
+Local existing-SDK Windows regression: 16 suites passed in 2.02 seconds, 71-file
+spelling scan clean. Semantic review covered SDK pinning, new staging ownership,
+child cleanup, inherited environment removal, and fail-before-archive ordering.

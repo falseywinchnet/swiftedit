@@ -289,7 +289,7 @@ int main() {
         NativeSmoke smoke{};
         smoke.path = path;
         smoke.run();
-        std::cout << "Native Windows smoke passed: save, Find/Replace/undo, owned dialogs, picker "
+        std::cout << "Native smoke passed: save, Find/Replace/undo, owned dialogs, picker "
                      "cancel/reopen and clean shutdown.\n";
         return 0;
     } catch (const std::exception &failure) {

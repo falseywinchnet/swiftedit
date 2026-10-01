@@ -92,6 +92,10 @@ if(NOTEPAD_BUILD_UI)
       MACOSX_BUNDLE_BUNDLE_NAME SwiftEdit
       MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
       MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION})
+    set_target_properties(notepad PROPERTIES
+      BUILD_RPATH "@executable_path/../Frameworks"
+      INSTALL_RPATH "@executable_path/../Frameworks"
+      BUILD_WITH_INSTALL_RPATH TRUE)
   else()
     add_executable(notepad WIN32 src/main.cpp)
   endif()
@@ -117,9 +121,21 @@ if(NOTEPAD_BUILD_UI)
   if(MSVC)
     target_link_options(notepad PRIVATE /ENTRY:mainCRTStartup)
   endif()
-  add_custom_command(TARGET notepad POST_BUILD
+  if(APPLE)
+    add_custom_command(TARGET notepad POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_DIR:notepad>/Contents/Frameworks"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:GUIForms::Application>"
+        "$<TARGET_BUNDLE_DIR:notepad>/Contents/Frameworks/$<TARGET_FILE_NAME:GUIForms::Application>"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:GUIForms::Application>"
+        "$<TARGET_BUNDLE_DIR:notepad>/Contents/Frameworks/$<TARGET_SONAME_FILE_NAME:GUIForms::Application>"
+      COMMAND ${CMAKE_COMMAND} -E copy_directory "${GUIForms_FONT_DIR}"
+        "$<TARGET_BUNDLE_DIR:notepad>/Contents/Resources/fonts"
+      VERBATIM)
+  else()
+    add_custom_command(TARGET notepad POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:GUIForms::Application>" "$<TARGET_FILE_DIR:notepad>"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${GUIForms_FONT_DIR}" "$<TARGET_FILE_DIR:notepad>/fonts")
+  endif()
   install(TARGETS notepad BUNDLE DESTINATION . RUNTIME DESTINATION .)
   install(FILES third_party/unicode/LICENSE.txt DESTINATION licenses RENAME Unicode.txt)
   install(FILES third_party/md4c/LICENSE.md DESTINATION licenses RENAME MD4C.md)

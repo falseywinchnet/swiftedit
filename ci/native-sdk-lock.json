@@ -1,0 +1,18 @@
+{
+  "release": "sdk-gui-forms-6def54a",
+  "provider_revision": "6def54ad2bf2089b57c09337c0b3f82cc1178187",
+  "archives": {
+    "macos-arm64": {
+      "name": "gui-forms-picker-macos-arm64-6def54ad2bf2089b57c09337c0b3f82cc1178187.zip",
+      "sha256": "8098a38a613107fe0604bcd5bbc5d0deae72d184a8598bd63e027919c641c962"
+    },
+    "windows-x64": {
+      "name": "gui-forms-picker-windows-x64-6def54ad2bf2089b57c09337c0b3f82cc1178187.zip",
+      "sha256": "1d8ae608f8365dcf18f883673a30eac14df9aad234921153c613418f779f3d67"
+    },
+    "linux-x64": {
+      "name": "gui-forms-picker-linux-x64-6def54ad2bf2089b57c09337c0b3f82cc1178187.zip",
+      "sha256": "71dbcd7e057227d2af6594c8cb0637f5a6bf12ed00b38f4c93cdfce78a4131b4"
+    }
+  }
+}
