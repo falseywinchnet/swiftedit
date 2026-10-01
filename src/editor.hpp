@@ -179,6 +179,7 @@ private:
     void ready(gf::Window &, gf::ApplicationWindowHandle, const std::filesystem::path &);
     void closing(gf::HostCloseRequest &);
     void refresh();
+    void refresh_selection();
     void apply_csv_change(const std::string &);
     void show_csv(bool);
     void show_markdown(bool);
@@ -258,6 +259,8 @@ private:
     // UI-thread-owned Unicode metadata, reused across selection-only refreshes.
     gf::TextStore counted_text_{};
     std::size_t character_count_{};
+    std::string status_format_{};
+    bool selection_metadata_current_{};
     struct FindWork {
         std::unique_ptr<swiftedit::PatternScan> scan{};
         std::unique_ptr<swiftedit::ReplacementScan> replace{};

@@ -56,7 +56,7 @@ void Editor::TextListener::operator()(const std::string &) const {
 void Editor::SelectionListener::operator()(const gf::TextSelection &) const {
     const std::shared_ptr<Editor> self = lock_alive(owner);
     if (self)
-        (*self).refresh();
+        (*self).refresh_selection();
 }
 void Editor::CsvListener::operator()(const std::string &source) const {
     const std::shared_ptr<Editor> self = lock_alive(owner);
@@ -268,6 +268,7 @@ void Editor::arrange(gf::Rect bounds) {
 void Editor::refresh() {
     if (!text_ || !status_)
         return;
+    selection_metadata_current_ = false;
     const std::string_view content = (*text_).text();
     if (csv_visible_)
         (*csv_).set_source(content);
@@ -279,11 +280,28 @@ void Editor::refresh() {
     (*commands_.at("markdown-view")).set_checked(markdown_visible_);
     (*name_).set_text((document_.dirty(content) ? "* " : "") +
                       (document_.path.empty() ? "Untitled" : path_utf8(document_.path)));
-    const std::size_t caret = std::min((*text_).selection().caret.value(), content.size());
     if (content != counted_text_.utf8()) {
         counted_text_.set_text(content);
         character_count_ = counted_text_.grapheme_count().value();
     }
+    status_format_ = encoding_name(document_.encoding) + " | " + newline_name(content);
+    selection_metadata_current_ = true;
+    refresh_selection();
+    (*commands_.at("undo")).set_enabled((*text_).can_undo());
+    (*commands_.at("redo")).set_enabled((*text_).can_redo());
+    (*commands_.at("wrap")).set_checked((*text_).word_wrap());
+    (*commands_.at("status")).set_checked(show_status_);
+}
+void Editor::refresh_selection() {
+    // The pinned TextBox publishes text changes before selection changes. A
+    // text/save refresh prepares all content metadata; caret motion borrows it.
+    // Failed preparation leaves it invalid, so later motion retries safely.
+    if (!selection_metadata_current_) {
+        refresh();
+        return;
+    }
+    const std::size_t caret =
+        std::min((*text_).selection().caret.value(), counted_text_.utf8_size().value());
     // Find the last indexed line start at or before the caret. Line starts
     // include zero even for an empty document; low is the one-based line number.
     std::size_t low = 0, high = counted_text_.line_count();
@@ -305,14 +323,9 @@ void Editor::refresh() {
     const std::size_t selected = last_character - first_character;
     (*status_).set_text("Ln " + std::to_string(line) + ", Col " + std::to_string(column) + " | " +
                         std::to_string(character_count_) + " characters | " +
-                        std::to_string(selected) + " selected | " +
-                        encoding_name(document_.encoding) + " | " + newline_name(content));
-    (*commands_.at("undo")).set_enabled((*text_).can_undo());
-    (*commands_.at("redo")).set_enabled((*text_).can_redo());
+                        std::to_string(selected) + " selected | " + status_format_);
     for (const char *id : {"cut", "copy", "delete"})
         (*commands_.at(id)).set_enabled(csv_visible_ || !(*text_).selection().empty());
-    (*commands_.at("wrap")).set_checked((*text_).word_wrap());
-    (*commands_.at("status")).set_checked(show_status_);
 }
 void Editor::focus_text() {
     if (window() && markdown_visible_)

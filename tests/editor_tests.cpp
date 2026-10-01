@@ -194,6 +194,19 @@ void verify_grapheme_status() {
     (*text).set_text("");
     check((*status).text().starts_with("Ln 1, Col 1 | 0 characters |"),
           "Empty document starts at line one column one");
+    (*text).set_text("abc");
+    (*text).select(gui_forms::Utf8Offset(0), gui_forms::Utf8Offset(3));
+    (*text).replace_selection("e\xcc\x81");
+    check((*status).text().starts_with("Ln 1, Col 2 | 1 characters |"),
+          "Same-byte-length edit refreshes grapheme metadata before selection notification");
+    (*editor).execute("undo");
+    check((*status).text().find("3 characters |") != std::string::npos,
+          "Undo refreshes cached character metadata");
+    (*text).set_text("x\n");
+    (*text).set_text("x\r");
+    (*text).select(gui_forms::Utf8Offset(0), gui_forms::Utf8Offset(0));
+    check((*status).text().starts_with("Ln 1, Col 1 |") && (*status).text().ends_with(" | CR"),
+          "Caret-only update retains the latest same-length ending change");
 }
 int main() {
     try {

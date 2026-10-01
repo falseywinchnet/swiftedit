@@ -221,3 +221,11 @@ empty lines and empty content. Local pinned-SDK build and 16 suites passed in
 2.29 s; 71-file C++ spelling scan clean. Cross-platform native CI is pending.
 The provider coordinator resumed A2; it remains a visual-only initial service,
 not the D4 editing capability required for complete GUI migration.
+
+Follow-up: deeb5fe passed native Windows/macOS/Linux run 36854075164. The next
+change splits selection refresh from full document refresh and retains cached
+format/count metadata. On a 266240-byte warm selection/status fixture, p50 fell
+from .1635 ms to .0035 ms; p95 .2006 to .0045 ms. Raw samples, source/binary hashes,
+scope and reproducible command are in performance/2026-10-01-editor-navigation/.
+This is component callback evidence only. Local 16-suite regression passed in
+2.04 s; 72-file spelling scan clean. New native CI remains pending this checkpoint.
