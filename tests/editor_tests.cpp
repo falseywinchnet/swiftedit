@@ -213,6 +213,37 @@ void verify_csv_keyboard_commands() {
         (*editor).execute("undo");
         check((*text).text() == "2,=A1*3\r\n4,5", "CSV date/time insertion is one undoable edit");
     }
+    const std::shared_ptr<notepad::QueryField> query = (*editor).query_control();
+    const std::shared_ptr<gf::TextBox> replacement = (*editor).replacement_control();
+    (*editor).execute("csv-view");
+    for (const std::string view : {"csv-view", "markdown-view"}) {
+        for (const std::string command :
+             {"find", "replace", "find-next", "replace-one", "replace-all"}) {
+            (*text).set_text("2,=A1*3\r\n4,5");
+            (*query).set_text("4");
+            (*replacement).set_text("9");
+            if (command == "replace-one")
+                (*text).select(gf::Utf8Offset(9), gf::Utf8Offset(10));
+            else
+                (*text).select(gf::Utf8Offset(0), gf::Utf8Offset(0));
+            (*editor).execute(view);
+            check(!(*text).visible(), "Search fixture starts with source hidden");
+            (*editor).execute(command);
+            check((*text).visible(), "Source search commands reveal the editable source");
+            if (command == "find-next")
+                check((*text).selected_text() == "4",
+                      "Find Next exposes the matched source selection");
+            if (command == "replace-one" || command == "replace-all") {
+                check((*text).text() == "2,=A1*3\r\n9,5",
+                      "Replacement from a presentation view changes the intended source");
+                (*editor).execute("undo");
+                check((*text).text() == "2,=A1*3\r\n4,5",
+                      "Replacement from a presentation view remains undoable");
+            } else
+                check((*text).text() == "2,=A1*3\r\n4,5",
+                      "Revealing source for search does not mutate content");
+        }
+    }
 }
 void verify_callback_revocation() {
     std::shared_ptr<notepad::Editor> editor =

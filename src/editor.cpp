@@ -496,8 +496,16 @@ void Editor::execute(const std::string &id) {
     if (picker_active_)
         return;
     try {
-        if (markdown_visible_ && (id == "paste" || id == "cut" || id == "delete" ||
-                                  id == "date-time" || id == "find" || id == "replace"))
+        const bool source_search = id == "find" || id == "replace" || id == "find-next" ||
+                                   id == "replace-one" || id == "replace-all";
+        if (source_search) {
+            if (csv_visible_)
+                show_csv(false);
+            if (markdown_visible_)
+                show_markdown(false);
+        }
+        if (markdown_visible_ &&
+            (id == "paste" || id == "cut" || id == "delete" || id == "date-time"))
             show_markdown(false);
         if (id == "new")
             after_unsaved(Continuation::new_document);
@@ -656,7 +664,8 @@ void Editor::execute(const std::string &id) {
                 "the filename means unsaved changes.\n\nFind/Replace keeps punctuation literal. "
                 "Right-click a query character or press Ctrl+? to toggle a one-character "
                 "wildcard, displayed as a dot. Match case "
-                "off folds English A-Z only. Search wraps once. Replace All is one undo "
+                "off folds English A-Z only. Search reveals source text when a CSV table or "
+                "Markdown preview is visible. Search wraps once. Replace All is one undo "
                 "action.\n\nThis build preserves UTF-8 and BOM-marked UTF-16, including "
                 "existing line endings. Malformed or unsupported encodings are refused. Files "
                 "changed externally are never silently overwritten: use Save As or "

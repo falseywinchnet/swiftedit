@@ -485,3 +485,12 @@ Native physical-key testing remains separate. The Select All native run
 36861992016 was cancelled/superseded, not passed; its portable run passed.
 Clipboard-keyboard portable run 36862312035 passed; native run 36862312152
 was confirmed running on all three platforms before this checkpoint.
+
+Search visibility: Find, Replace, Find Next, Replace One and Replace All now
+reveal source when invoked from a CSV table or Markdown preview. Previously
+Find Next could select hidden text and replacement could alter that hidden
+selection. These remain source-text searches, not searches of computed formula
+results or rendered Markdown. Ten presentation/command combinations verify
+visibility, matched selection, nonmutating search, intended replacement and
+undo. All 17 headless suites passed in 3.26 s; 81-file spelling audit and diff
+check passed. Help now states the source-view behavior. No local desktop launch.
