@@ -588,3 +588,10 @@ all three native jobs36887657481 and core36887657412. Raw logs under
 .build/new-window-7518073. One return-time sample each: Mac17.8737ms,
 Windows1.169ms, Linux2.08374ms; excludes child startup and is not a percentile
 benchmark. Product code unchanged from releasea011391; no republish required.
+
+Added compiled explicit --picker-file-links mode to notepad-editor-tests, not
+yet registered in CTest because installedSDK032does not support file aliases.
+See PICKER_FILE_LINK_ADOPTION.md. Real relative alias selected via public picker
+controls must open canonicaltarget, save editedbytes and preservealias. It does
+not skip symlinkprivilegefailures. Local20suites passed3.52s,101-file styleclean;
+newprobe executionawaitscorrectedSDK. Provider2d04310 terminalfailure unchanged.

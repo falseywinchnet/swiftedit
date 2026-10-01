@@ -377,6 +377,73 @@ void verify_callback_revocation() {
     retained_closing(expired_close);
     check(!expired_close.cancel, "Retained closing callback ignores destroyed editor");
 }
+// Explicit adoption probe: invoke with --picker-file-links after installing the
+// corrected public picker SDK. The currently pinned SDK does not support this.
+void verify_picker_file_links() {
+    const std::filesystem::path directory =
+        std::filesystem::canonical(std::filesystem::temp_directory_path()) /
+        ("swiftedit-picker-file-links-" + std::to_string(test_process_id()));
+    check(std::filesystem::create_directory(directory), "Unique file-link fixture");
+    struct Cleanup {
+        std::filesystem::path directory{};
+        ~Cleanup() {
+            std::error_code ignored{};
+            std::filesystem::remove_all(directory, ignored);
+        }
+    } cleanup{directory};
+    check(std::filesystem::create_directory(directory / "target"), "Create target directory");
+    const std::filesystem::path target = directory / "target" / "document.txt";
+    const std::filesystem::path alias = directory / "linked.txt";
+    const notepad::FileSnapshot initial = notepad::write_file(target, "linked original\n", {});
+    check(initial.exists, "Create linked document");
+    std::filesystem::create_symlink(std::filesystem::path("target") / "document.txt", alias);
+    const std::shared_ptr<notepad::Editor> editor =
+        gf::make_control<notepad::Editor>(gf::StableId("file-links.editor"));
+    std::vector<gf::ApplicationWindow> windows = (*editor).application_windows({});
+    gf::Window *picker = nullptr;
+    for (gf::ApplicationWindow &entry : windows) {
+        if (entry.stable_id == "notepad.main" || entry.stable_id == "notepad.open-picker") {
+            entry.options.ready(*entry.model, {});
+            (*entry.model).perform_layout();
+        }
+        if (entry.stable_id == "notepad.open-picker")
+            picker = entry.model.get();
+    }
+    check(picker != nullptr, "Open picker exists");
+    gf::Window &window = *picker;
+    const std::shared_ptr<gf::TextBox> path =
+        std::dynamic_pointer_cast<gf::TextBox>(window.find("file-manager.picker.path"));
+    const std::shared_ptr<gf::ObjectView> objects =
+        std::dynamic_pointer_cast<gf::ObjectView>(window.find("file-manager.picker.objects"));
+    const std::shared_ptr<gf::Button> accept =
+        std::dynamic_pointer_cast<gf::Button>(window.find("file-manager.picker.accept"));
+    check(path && objects && accept, "Open picker controls exist");
+    (*path).set_text(notepad::path_utf8(directory));
+    check(window.request_focus(path), "Focus file-link directory path");
+    window.dispatch_key({gf::KeyAction::down, gf::PhysicalKey::enter});
+    std::string id{};
+    bool enabled = false;
+    for (const gf::ObjectViewItem &item : (*objects).items()) {
+        if (item.name == "linked.txt") {
+            id = item.stable_id;
+            enabled = item.enabled;
+        }
+    }
+    check(!id.empty() && enabled, "Relative file symlink is selectable");
+    (*objects).set_selected_ids({id});
+    check((*accept).perform_click(), "Activate Open on linked file");
+    gf::TextBox &text = *(*editor).text_control();
+    check(text.text() == "linked original\n" && (*editor).document().path == target,
+          "Picker opens resolved target in SwiftEdit");
+    text.select_all();
+    text.replace_selection("linked revised\n");
+    (*editor).execute("save");
+    const notepad::FileSnapshot saved = notepad::read_file(target);
+    check(saved.bytes == "linked revised\n" && !(*editor).document().dirty(text.text()),
+          "Save updates the resolved target");
+    check(std::filesystem::is_symlink(alias) && std::filesystem::canonical(alias) == target,
+          "Save preserves original relative symlink and destination");
+}
 void verify_grapheme_status() {
     const std::shared_ptr<notepad::Editor> editor =
         gf::make_control<notepad::Editor>(gf::StableId("test.status-editor"));
@@ -429,8 +496,13 @@ struct WindowLaunchProbe {
         }
     };
 };
-int main() {
+int main(const int argc, char **const argv) {
     try {
+        if (argc == 2 && std::string_view(argv[1]) == "--picker-file-links") {
+            verify_picker_file_links();
+            std::cout << "Picker file-link open/edit/save probe passed\n";
+            return 0;
+        }
         verify_callback_revocation();
         verify_picker_home();
 #ifndef _WIN32
