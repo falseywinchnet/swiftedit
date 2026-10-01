@@ -16,6 +16,9 @@ a measured lag/bug scan. This file tracks work; unchecked items are not complete
 - [ ] GUI shared session migration, invalid/control-byte editing and paged viewing.
 - [ ] Discontiguous selection and flagged wildcard GUI/terminal controls.
 - [ ] Mixed-ending save choice and full external-conflict/copy workflow.
+  - Mixed-ending Save As-Is / Convert to Document Default / Cancel is implemented
+    as an owned pending-save dialog. Destination races refuse intact. Full
+    two-stage conflict filename/metadata and versioned-copy workflow is next.
 - [ ] Conventional terminal screen and separate blank-line marker metadata.
 - [ ] Native Markdown rendering, inert links, source toggle and rendered ruler.
 - [ ] Native print, Markdown layout preview, multiple independent windows.

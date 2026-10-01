@@ -48,9 +48,9 @@ public:
     std::shared_ptr<notepad::Editor> editor{};
     gf::Window *main{};
     gf::Window *find_window{};
-    std::array<gf::ApplicationWindowHandle, 7> handles{};
-    std::array<unsigned, 7> close_count{};
-    std::array<WindowHooks, 7> hooks{};
+    std::array<gf::ApplicationWindowHandle, 8> handles{};
+    std::array<unsigned, 8> close_count{};
+    std::array<WindowHooks, 8> hooks{};
     gf::ApplicationWindowHandle main_handle{};
     std::size_t ready_count{};
     bool passed{};
@@ -193,6 +193,28 @@ public:
                     --stage;
                     return;
                 }
+                (*(*editor).text_control()).set_text("mixed\nline\r\n");
+                (*editor).execute("save");
+                require((*editor).save_choice_pending() && handles[7].active(),
+                        "Native mixed-ending choice is active before publication");
+                (*editor).execute("cancel-save");
+                require(!(*editor).save_choice_pending() && (*editor).enabled(),
+                        "Native mixed-ending cancellation restores owner");
+                (*editor).execute("save");
+                (*editor).execute("save-as-is");
+                require(notepad::read_file(path).bytes == "mixed\nline\r\n",
+                        "Native mixed-ending Save As-Is preserves bytes");
+                break;
+            case 8:
+                (*editor).execute("save");
+                require((*editor).save_choice_pending(), "Native normalization choice reopened");
+                (*editor).execute("save-normalized");
+                require(
+                    notepad::read_file(path).bytes == "mixed\r\nline\r\n" &&
+                        (*(*editor).text_control()).text() == "mixed\r\nline\r\n",
+                    "Native conversion uses the document CRLF default and displays saved bytes");
+                break;
+            case 9:
                 passed = true;
                 (*timer).stop();
                 static_cast<void>(main_handle.request_close());
@@ -209,7 +231,7 @@ public:
     void run() {
         editor = gf::make_control<notepad::Editor>(gf::StableId("native.editor"));
         std::vector<gf::ApplicationWindow> windows = (*editor).application_windows(path);
-        require(windows.size() == handles.size(), "Expected main and six owned dialogs");
+        require(windows.size() == handles.size(), "Expected main and seven owned dialogs");
         main = windows.front().model.get();
         find_window = windows[3].model.get();
         for (std::size_t i = 0; i < windows.size(); ++i) {

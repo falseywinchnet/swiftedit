@@ -21,6 +21,12 @@ void Editor::WindowReady::operator()(gf::Window &window, gf::ApplicationWindowHa
         window.set_cancel_button((*dialog.root).close_button());
         return;
     }
+    if (kind == WindowKind::save_choices) {
+        editor.save_choices_.window = &window;
+        editor.save_choices_.handle = handle;
+        window.set_cancel_button(editor.save_cancel_);
+        return;
+    }
     if (kind == WindowKind::open_picker || kind == WindowKind::save_picker) {
         Picker &picker =
             kind == WindowKind::save_picker ? editor.save_picker_ : editor.open_picker_;
@@ -44,6 +50,10 @@ void Editor::WindowClosing::operator()(gf::HostCloseRequest &request) const {
     if (!self)
         return;
     Editor &editor = *self;
+    if (kind == WindowKind::save_choices) {
+        editor.finish_save_choice(false, true);
+        return;
+    }
     if (kind == WindowKind::main) {
         editor.closing(request);
         return;
@@ -145,6 +155,8 @@ Editor::application_windows(const std::filesystem::path &initial) {
                {410, 220});
     add_character_window(result, false);
     add_character_window(result, true);
+    add_dialog(result, save_choices_, WindowKind::save_choices, "swiftedit.save-choices-window",
+               "Mixed Line Endings - SwiftEdit", {600, 180});
     return result;
 }
 void Editor::add_character_window(std::vector<gf::ApplicationWindow> &windows, bool controls) {
@@ -179,7 +191,7 @@ void Editor::CharacterClose::operator()() const {
     (*self).focus_text();
 }
 void Editor::insert_character(const std::string &value) {
-    if (picker_active_)
+    if (picker_active_ || pending_save_)
         throw std::runtime_error("Finish the file dialog before inserting a character.");
     const gf::TextSelection selection = (*text_).selection();
     std::string candidate((*text_).text());
@@ -268,9 +280,7 @@ void Editor::picker_result(bool save_as, const file_manager::DocumentPickerResul
             }
             const Continuation next = after_save_;
             after_save_ = Continuation::none;
-            const bool saved = save_to(path, expected);
-            if (saved && next != Continuation::none)
-                continue_operation(next);
+            static_cast<void>(request_save_to(path, expected, next));
         } else
             open_file(path);
     } catch (const std::exception &e) {

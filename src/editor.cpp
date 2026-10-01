@@ -22,6 +22,7 @@ Editor::~Editor() {
 }
 void Editor::on_dispose() noexcept {
     cancel_search();
+    pending_save_.reset();
     after_save_ = Continuation::none;
     close_authorized_ = false;
     accelerators_.clear();
@@ -126,6 +127,15 @@ void Editor::button_action(ButtonAction action) {
     case ButtonAction::close_font:
         close_dialog(font_);
         break;
+    case ButtonAction::save_as_is:
+        finish_save_choice(false, false);
+        break;
+    case ButtonAction::save_normalized:
+        finish_save_choice(true, false);
+        break;
+    case ButtonAction::cancel_save:
+        finish_save_choice(false, true);
+        break;
     case ButtonAction::apply_font: {
         const gf::FontRole role =
             (*font_role_).selected_index() == 0 ? gf::FontRole::monospace : gf::FontRole::content;
@@ -220,6 +230,7 @@ void Editor::initialize_control_tree() {
         (*text_).selection_changed().subscribe(*this, SelectionListener{observe()}));
     build_find();
     build_font();
+    build_save_choices();
     characters_.root =
         gf::make_control<CharacterPicker>(gf::StableId("swiftedit.characters"), false);
     controls_.root = gf::make_control<CharacterPicker>(gf::StableId("swiftedit.controls"), true);
@@ -395,6 +406,9 @@ void Editor::after_unsaved(Continuation next) {
         save(false, next);
 }
 void Editor::open_file(const std::filesystem::path &source) {
+    if (pending_save_)
+        throw std::runtime_error(
+            "Finish or cancel the pending save before opening another document.");
     Document next{};
     next.open(source);
     const gf::TextBox::MultilineValidation supported =
@@ -429,12 +443,19 @@ void Editor::save(bool save_as, Continuation continuation) {
         after_save_ = continuation;
         show_picker(true);
     } else {
-        const bool saved = save_to(document_.path, document_.snapshot);
-        if (saved && continuation != Continuation::none)
-            continue_operation(continuation);
+        static_cast<void>(request_save_to(document_.path, document_.snapshot, continuation));
     }
 }
 void Editor::execute(const std::string &id) {
+    if (pending_save_) {
+        if (id == "save-as-is")
+            finish_save_choice(false, false);
+        else if (id == "save-normalized")
+            finish_save_choice(true, false);
+        else if (id == "cancel-save")
+            finish_save_choice(false, true);
+        return;
+    }
     if (picker_active_)
         return;
     try {
@@ -652,7 +673,7 @@ void Editor::ready(gf::Window &w, gf::ApplicationWindowHandle handle,
 void Editor::closing(gf::HostCloseRequest &request) {
     if (close_authorized_)
         return;
-    if (picker_active_) {
+    if (picker_active_ || pending_save_) {
         request.cancel = true;
         return;
     }
@@ -879,5 +900,102 @@ void Editor::build_font() {
 void Editor::close_dialog(Dialog &dialog) {
     static_cast<void>(dialog.handle.hide());
     focus_text();
+}
+void Editor::build_save_choices() {
+    save_choices_.root = gf::make_control<DialogLayout>(gf::StableId("swiftedit.save-choices"));
+    const std::shared_ptr<gf::Label> explanation = gf::make_control<gf::Label>(
+        gf::StableId("save-choices.explanation"),
+        "This document has mixed line endings. Save them exactly as they are, convert all line "
+        "endings to the document's current default, or cancel the save.");
+    (*explanation).set_text_wrapping(gf::TextWrapping::word);
+    (*save_choices_.root).place(explanation, {16, 16, 568, 94});
+    save_keep_ = gf::make_control<gf::Button>(gf::StableId("save-choices.keep"), "Save As-Is");
+    save_normalize_ = gf::make_control<gf::Button>(gf::StableId("save-choices.normalize"),
+                                                   "Convert to Document Default");
+    save_cancel_ = gf::make_control<gf::Button>(gf::StableId("save-choices.cancel"), "Cancel");
+    (*save_choices_.root).place(save_keep_, {16, 124, 140, 34});
+    (*save_choices_.root).place(save_normalize_, {168, 124, 264, 34});
+    (*save_choices_.root).place(save_cancel_, {444, 124, 140, 34});
+    subscriptions_.push_back(
+        (*save_keep_)
+            .clicked()
+            .subscribe(*this, ButtonListener{observe(), ButtonAction::save_as_is}));
+    subscriptions_.push_back(
+        (*save_normalize_)
+            .clicked()
+            .subscribe(*this, ButtonListener{observe(), ButtonAction::save_normalized}));
+    subscriptions_.push_back(
+        (*save_cancel_)
+            .clicked()
+            .subscribe(*this, ButtonListener{observe(), ButtonAction::cancel_save}));
+}
+bool Editor::request_save_to(const std::filesystem::path &path, const FileSnapshot &expected,
+                             Continuation next) {
+    // Check known conflicts before asking about line endings. The writer still
+    // verifies this exact snapshot again immediately before publication.
+    const FileSnapshot current = read_file(path);
+    if (current != expected)
+        throw std::runtime_error("The destination changed outside SwiftEdit. No file was written.");
+    if (newline_name((*text_).text()) != "Mixed (preserved)") {
+        const bool saved = save_to(path, expected);
+        if (saved && next != Continuation::none)
+            continue_operation(next);
+        return saved;
+    }
+    PendingSave pending{path, expected, counted_text_.revision(), next};
+    pending_save_ = std::move(pending);
+    cancel_search();
+    set_enabled(false);
+    static_cast<void>(find_.handle.hide());
+    static_cast<void>(font_.handle.hide());
+    static_cast<void>(characters_.handle.hide());
+    static_cast<void>(controls_.handle.hide());
+    static_cast<void>(save_choices_.handle.show());
+    return false;
+}
+void Editor::finish_save_choice(bool normalize, bool cancel) {
+    if (!pending_save_)
+        return;
+    PendingSave pending = std::move(*pending_save_);
+    pending_save_.reset();
+    static_cast<void>(save_choices_.handle.hide());
+    set_enabled(true);
+    focus_text();
+    if (cancel)
+        return;
+    bool published = false;
+    try {
+        if (pending.revision != counted_text_.revision())
+            throw std::runtime_error("The document changed while save choices were open. Save "
+                                     "again to review the current text.");
+        bool saved = false;
+        if (!normalize)
+            saved = save_to(pending.path, pending.expected);
+        else {
+            const std::string converted =
+                swiftedit::normalize_newlines((*text_).text(), (*text_).newline_sequence());
+            if (gf::TextBox::validate_multiline_text(converted) !=
+                gf::TextBox::MultilineValidation::valid)
+                throw std::runtime_error(
+                    "Converted text exceeds the current document or line limit. No changes made.");
+            document_.save(pending.path, converted, pending.expected);
+            published = true;
+            // Disk publication succeeded; display the same saved content and
+            // establish the requested save boundary only after that success.
+            (*text_).set_text(converted);
+            (*text_).clear_undo_history();
+            refresh();
+            saved = true;
+        }
+        if (saved && pending.continuation != Continuation::none)
+            continue_operation(pending.continuation);
+    } catch (const std::exception &failure) {
+        if (published)
+            error(std::string("The file was saved, but refreshing its display failed. The saved "
+                              "snapshot is retained. ") +
+                  failure.what());
+        else
+            error(failure.what());
+    }
 }
 } // namespace notepad

@@ -14,7 +14,7 @@ precedence. The previous DECISIONS.md is historical implementation evidence.
 | Identity, 02:48 | SwiftEdit, one word; dropdown menus, no ribbon; shared styling and F1 help | GUI/executable renamed; local F1 help retained |
 | Scope | Plain text first; Markdown and `.csv` views; no RTF/Office/PDF editor, IDE, regex, script execution or hierarchical spreadsheet | Plain GUI, command session, CSV core; visual Markdown/CSV views pending |
 | Paste, 00:22 | Always plain text, retain Unicode | GUI public text clipboard path; >500,000-byte confirmation and atomic preflight |
-| Preservation, 00:26 onward | Preserve existing endings and whitespace; explicit conversion; native endings for new documents | Exact existing bytes in command session; explicit LF/CRLF GUI commands; mixed-save choice pending |
+| Preservation, 00:26 onward | Preserve existing endings and whitespace; explicit conversion; native endings for new documents | Exact existing bytes in command session; explicit LF/CRLF commands; owned mixed-save preserve/default-convert/cancel choice implemented |
 | Undo, 00:32 correction | Undo only to last successful save B; separately jump to as-opened A, forgotten on close | Both GUI and command model; restore is itself undoable; save failure does not clear history |
 | Large files, 00:27 and later threshold | Paginated load, >=16 MB read-only; slow work interruptible | Command model >=16 MiB bounded read pages; GUI still 1 MiB/4096-byte-line public provider limit; async indexing/search pending |
 | Commands | GUI, conventional nano-like terminal, and AI share text operations; no semantic summaries | Preview/commit command model and stdin CLI implemented; GUI migration and terminal screen pending |

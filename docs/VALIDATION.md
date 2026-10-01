@@ -303,3 +303,37 @@ Local native log: .build/swiftedit-resumed/native-20261001-014002.stdout.txt
 This is native lifecycle/operation evidence, not screenshot-based visual QA,
 font coverage certification, physical Ctrl+? verification, or a final lag scan.
 Document-wide inert control glyphs still require the new provider document view.
+
+## 2026-10-01 mixed-ending save choice
+
+Added an owned Save As-Is / Convert to Document Default / Cancel dialog. A pending
+save retains the destination snapshot, document revision and continuation; editor
+commands and character insertion are suppressed while that choice is active.
+Cancellation restores editor authority without modifying source/history/disk.
+Save As-Is preserves exact mixed bytes. Conversion prepares/validates a replacement
+without mutating the editor, publishes against the original snapshot, then displays
+the saved content and clears undo. A post-publication display failure explicitly
+reports that disk was saved and retains the saved snapshot; it is not described as
+a failed disk write. The future shared-session GUI will simplify this boundary.
+
+Tests verify pending choices do not write, cancellation preserves undo, as-is exact
+bytes, normalized content matching disk, and destination changes during the dialog
+refusing publication while preserving source/undo. Full nine-suite run passed in
+1.72 s. Final affected editor rerun passed in 0.25 s. Spelling scan zero findings
+in 37 authored files.
+
+A newly coordinated desktop slot exercised the eight-window native build. The
+mixed-ending dialog showed, cancelled/re-enabled the editor, reopened and saved
+mixed bytes as-is, then reopened and converted to the document's CRLF default.
+The test verified both disk bytes and displayed text. Previous save/find/replace,
+character-picker and file-picker lifecycle routes also ran; clean exit code 0.
+The exact owned process had a 20-second timeout guard (unused), no global input,
+and the desktop slot was released after completion.
+
+Native smoke SHA-256:
+102A7F09DA6841A7563AC9E53126893E24F07BA1EB4A87B55F8F42CAD7CFABDE
+Log: .build/swiftedit-resumed/native-20261001-014814.stdout.txt
+SDK pair: unchanged house-style-final Windows x64; GUI runtime identity matches
+the preceding native receipt. This verifies lifecycle/operations, not visual
+layout or a final latency certification.
+Full external-conflict two-stage filename/metadata/copy workflow remains unfinished.

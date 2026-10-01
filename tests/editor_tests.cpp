@@ -197,6 +197,35 @@ int main() {
         check((*text).text() == "one\ntwo\nthree\n", "Explicit newline conversion");
         (*editor).execute("undo");
         check((*text).text() == "one\ntwo\r\nthree\r", "Newline conversion is one undo action");
+        (*editor).execute("save");
+        check((*editor).save_choice_pending() && !(*editor).enabled(),
+              "Mixed save presents an owned choice before changing text or disk");
+        check(notepad::read_file(path).bytes == "changed\n", "Pending mixed choice does not write");
+        (*editor).execute("cancel-save");
+        check(!(*editor).save_choice_pending() && (*editor).enabled() && (*text).can_undo(),
+              "Mixed save cancellation preserves history and restores editor authority");
+        (*editor).execute("save");
+        (*editor).execute("save-as-is");
+        check(notepad::read_file(path).bytes == "one\ntwo\r\nthree\r" && !(*text).can_undo(),
+              "Save As-Is preserves exact mixed bytes and establishes save boundary");
+        (*text).select(gf::Utf8Offset(0), gf::Utf8Offset(0));
+        (*text).replace_selection("prefix ");
+        (*editor).execute("save");
+        (*editor).execute("save-normalized");
+        check((*text).text() == "prefix one\ntwo\nthree\n" &&
+                  notepad::read_file(path).bytes == (*text).text() && !(*text).can_undo(),
+              "Convert to document default publishes and displays exactly the normalized text");
+        services.choices.push_back(gf::HostDialogChoice::yes);
+        (*editor).execute("restore-opened");
+        (*editor).execute("save");
+        {
+            std::ofstream changed_destination(path, std::ios::binary);
+            changed_destination << "external during choice";
+        }
+        (*editor).execute("save-normalized");
+        check((*text).text() == "one\ntwo\r\nthree\r" && (*text).can_undo() &&
+                  notepad::read_file(path).bytes == "external during choice",
+              "Destination race refuses normalization/save without losing source or undo");
         services.clipboard = std::string(500001, 'x');
         services.choices.push_back(gf::HostDialogChoice::no);
         (*editor).execute("paste");

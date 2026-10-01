@@ -50,6 +50,7 @@ public:
     std::shared_ptr<CsvView> csv_control() const { return csv_; }
     std::shared_ptr<QueryField> query_control() const { return query_; }
     std::shared_ptr<gf::TextBox> replacement_control() const { return replacement_; }
+    bool save_choice_pending() const { return pending_save_.has_value(); }
     std::shared_ptr<CharacterPicker> character_picker(bool controls) const {
         const std::shared_ptr<CharacterPicker> result =
             controls ? controls_.root : characters_.root;
@@ -59,14 +60,26 @@ public:
 private:
     struct Dialog;
     enum class Continuation { none, new_document, open_document, close_window };
-    enum class WindowKind { main, open_picker, save_picker, find, font, characters, controls };
+    enum class WindowKind {
+        main,
+        open_picker,
+        save_picker,
+        find,
+        font,
+        characters,
+        controls,
+        save_choices
+    };
     enum class ButtonAction {
         find_next,
         replace_one,
         replace_all,
         close_find,
         apply_font,
-        close_font
+        close_font,
+        save_as_is,
+        save_normalized,
+        cancel_save
     };
     // All retained callbacks observe the editor. Invocation takes a temporary
     // strong reference; an expired owner makes queued work a no-op. Tokens own
@@ -168,6 +181,9 @@ private:
     void after_unsaved(Continuation continuation);
     void save(bool save_as, Continuation continuation = Continuation::none);
     bool save_to(const std::filesystem::path &, const FileSnapshot &);
+    bool request_save_to(const std::filesystem::path &, const FileSnapshot &, Continuation);
+    void finish_save_choice(bool normalize, bool cancel);
+    void build_save_choices();
     void show_picker(bool save_as);
     void picker_result(bool save_as, const file_manager::DocumentPickerResult &);
     void hide_picker(bool save_as);
@@ -196,6 +212,15 @@ private:
     gf::ApplicationWindowHandle handle_{};
     Picker open_picker_{}, save_picker_{};
     Dialog find_{}, font_{};
+    Dialog save_choices_{};
+    std::shared_ptr<gf::Button> save_keep_{}, save_normalize_{}, save_cancel_{};
+    struct PendingSave {
+        std::filesystem::path path{};
+        FileSnapshot expected{};
+        std::uint64_t revision{};
+        Continuation continuation{Continuation::none};
+    };
+    std::optional<PendingSave> pending_save_{};
     CharacterWindow characters_{}, controls_{};
     std::shared_ptr<QueryField> query_{};
     std::shared_ptr<gf::TextBox> replacement_{};
