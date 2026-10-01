@@ -1,18 +1,33 @@
 #pragma once
 #include "terminal_wrap.hpp"
+#include <stdexcept>
 
 namespace swiftedit {
+class TerminalWrapInterrupt final : public std::runtime_error {
+public:
+    TerminalWrapInterrupt()
+        : std::runtime_error("Wrap cancelled. Ctrl+Home returns to start; next command retries.") {}
+};
+// Borrowed for synchronous calls only; must outlive the view. The probe must
+// not mutate the buffer or reenter layout. No worker or retained source borrow.
+class TerminalWrapControl {
+public:
+    virtual ~TerminalWrapControl() = default;
+    virtual bool cancel_requested() = 0;
+};
 // Editable wrapped viewport. Retains only visible rows (at most 296), never a
 // whole-document array of visual rows. Sparse source checkpoints cover up to
 // 320 logical lines, spaced at least 4096 source bytes apart. Preparation scans
 // only through the requested position; distant jumps still scan synchronously.
 class TerminalWrapView {
 public:
+    explicit TerminalWrapView(TerminalWrapControl *control = nullptr) : control_(control) {}
     const std::vector<TerminalWrappedRow> &frame(TerminalBuffer &, std::size_t width,
                                                  std::size_t height);
     void move(TerminalBuffer &, TerminalMotion, bool extend, std::size_t count, std::size_t width);
 
 private:
+    void check_cancel(std::size_t source_bytes);
     struct Position {
         std::size_t line{}, offset{};
     };
@@ -38,5 +53,7 @@ private:
     std::vector<TerminalWrappedRow> rows_{};
     std::vector<Entry> entries_{};
     std::size_t next_eviction_{};
+    TerminalWrapControl *control_{};
+    std::size_t until_poll_{};
 };
 } // namespace swiftedit

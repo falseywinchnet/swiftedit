@@ -112,6 +112,57 @@ void verify_view() {
     }
     check(refused, "Visible row retention has an explicit upper bound");
 }
+class CancelWrap final : public swiftedit::TerminalWrapControl {
+public:
+    std::size_t calls{}, stop_at{2};
+    bool cancel_requested() override {
+        ++calls;
+        const bool result = stop_at && calls >= stop_at;
+        return result;
+    }
+};
+void verify_cancellation() {
+    swiftedit::TerminalBuffer buffer{};
+    buffer.insert(std::string(100000, 'x'));
+    buffer.move(swiftedit::TerminalMotion::document_end);
+    const swiftedit::DocumentStamp stamp = buffer.session().stamp();
+    CancelWrap cancellation{};
+    swiftedit::TerminalWrapView view{&cancellation};
+    bool cancelled = false;
+    try {
+        static_cast<void>(view.frame(buffer, 80, 24));
+    } catch (const swiftedit::TerminalWrapInterrupt &) {
+        cancelled = true;
+    }
+    check(cancelled && cancellation.calls == 2,
+          "Long index preparation checks cancellation during source traversal");
+    check(buffer.selection().caret == 100000 && buffer.selection().anchor == 100000 &&
+              buffer.session().stamp().revision == stamp.revision,
+          "Cancelled layout leaves source revision and selection unchanged");
+    // Returning to the start must not first retry the cancelled end layout.
+    view.move(buffer, swiftedit::TerminalMotion::document_start, false, 1, 80);
+    check(buffer.selection().caret == 0 && cancellation.calls == 2,
+          "Document Home bypasses expensive cancelled wrap preparation");
+    cancellation.stop_at = 0;
+    const std::vector<swiftedit::TerminalWrappedRow> &resumed = view.frame(buffer, 80, 24);
+    check(resumed[0].display.caret_column == 0,
+          "A cancelled preparation can recover at a different position");
+    buffer.move(swiftedit::TerminalMotion::document_end);
+    cancellation.calls = 0;
+    cancellation.stop_at = 2;
+    cancelled = false;
+    try {
+        view.move(buffer, swiftedit::TerminalMotion::up, true, 24, 80);
+    } catch (const swiftedit::TerminalWrapInterrupt &) {
+        cancelled = true;
+    }
+    check(cancelled && buffer.selection().caret == 100000 && buffer.selection().anchor == 100000,
+          "Interrupted page movement never publishes a partial selection");
+    cancellation.stop_at = 0;
+    view.move(buffer, swiftedit::TerminalMotion::up, true, 24, 80);
+    check(buffer.selection().caret == 98080 && buffer.selection().anchor == 100000,
+          "A later page movement succeeds with intact source and anchor");
+}
 void verify_scroll() {
     swiftedit::TerminalBuffer buffer{};
     swiftedit::TerminalWrapView view{};
@@ -172,6 +223,7 @@ void verify_checkpoints() {
 int main() {
     try {
         verify_view();
+        verify_cancellation();
         verify_scroll();
         verify_checkpoints();
         swiftedit::TerminalBuffer buffer{};

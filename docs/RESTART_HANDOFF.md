@@ -337,3 +337,28 @@ Relayed independent New Window runtime/lifetime prerequisite to coordinator.
 A2 remains OFF-default draft work and not consumer SDK availability. Current
 ae3cfc5 native run 36857611197 and portable36857611148 were observed live at
 the start of this follow-up; continue checking those exact jobs.
+
+Cancellation follow-up: TerminalWrapView accepts a synchronous borrowed named
+control with typed TerminalWrapInterrupt. Polls occur at operation entry and
+roughly each4096 processed source bytes during layout/index traversal. Whole
+graphemes/rows remain indivisible; Unicode navigation metadata is not polled.
+Cancelled page movement does not publish partial selection. Document motions
+now bypass old-caret wrap lookup, allowing Ctrl+Home to recover cheaply. Windows
+Console probes only queue-head Escape (and ignored key releases), preserving
+other events. Wrap suspension leaves Save/Open/Exit and prompt Escape usable;
+next editing/navigation retries. Probe disabled while prompts are active.
+Borrowed control outlives view; no callback reentry/source mutation is allowed.
+
+All17 headless suites passed3.42s, including mid-scan cancellation/recovery and
+atomic selection. Coordinated hidden AllocConsole smoke passed exit0 around1s:
+exactly one wrap cancellation, Ctrl+Home recovery, wrapped edit/save exact bytes,
+and a separate dirty-exit Escape plus existing Unicode/undo/paging/mode tests.
+SHA256 54D2CC77983F28A6B8FFB6C3AD1C328919DA0DFF709C38F473DEBB7C562D48FE.
+Logs .build/swiftedit-sdk-6def54a/cancel-smoke-20261001-045524.stdout.txt and
+.stderr.txt. Slot released immediately. Spelling audit77 files clean.
+
+873838a native36857936261 and portable36857935904 both succeeded all platforms.
+Earlier ae3cfc5 native36857611197 was cancelled/superseded, not passed. Current
+wrap benchmarks use no console probe and do not measure poll overhead or total
+Escape latency; broader interactive p50/p95/p99/worst work remains. Also retain
+GUI/provider/full-objective gaps; cancellation here is only one owned phase.

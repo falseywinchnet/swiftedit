@@ -2,6 +2,17 @@
 #include <stdexcept>
 
 namespace swiftedit {
+void TerminalWrapView::check_cancel(std::size_t source_bytes) {
+    if (!control_)
+        return;
+    if (source_bytes < until_poll_) {
+        until_poll_ -= source_bytes;
+        return;
+    }
+    until_poll_ = 4096;
+    if ((*control_).cancel_requested())
+        throw TerminalWrapInterrupt{};
+}
 bool TerminalWrapView::same(Position left, Position right) {
     const bool result = left.line == right.line && left.offset == right.offset;
     return result;
@@ -40,6 +51,7 @@ TerminalWrapView::Position TerminalWrapView::locate(TerminalBuffer &buffer) {
     Position result{line, checkpoint(entry, caret, false)};
     for (;;) {
         const TerminalWrapSpan span = terminal_wrap_span(buffer, line, result.offset, width_);
+        check_cancel(span.source.length);
         const std::size_t end = span.source.offset + span.source.length;
         if (caret < end || span.logical_end)
             return result;
@@ -75,6 +87,7 @@ void TerminalWrapView::extend(TerminalBuffer &buffer, Entry &entry, std::size_t 
     while (!entry.complete && entry.frontier <= through) {
         const std::size_t offset = entry.frontier;
         const TerminalWrapSpan span = terminal_wrap_span(buffer, entry.line, offset, width_);
+        check_cancel(span.source.length);
         // Publish each completed row after layout succeeds. A failed extension
         // leaves a reusable valid prefix and never claims an unscanned suffix.
         if (offset - entry.starts.back() >= 4096)
@@ -101,6 +114,7 @@ std::size_t TerminalWrapView::checkpoint(const Entry &entry, std::size_t offset,
 TerminalWrapView::Position TerminalWrapView::next(TerminalBuffer &buffer, Position position) {
     const TerminalWrapSpan span =
         terminal_wrap_span(buffer, position.line, position.offset, width_);
+    check_cancel(span.source.length);
     if (!span.logical_end)
         position.offset += span.source.length;
     else if (position.line + 1 < buffer.line_count()) {
@@ -133,6 +147,7 @@ const std::vector<TerminalWrappedRow> &
 TerminalWrapView::frame(TerminalBuffer &buffer, std::size_t width, std::size_t height) {
     if (!height || height > 296)
         throw std::runtime_error("Wrapped viewport height must be 1..296 rows.");
+    check_cancel(4096);
     synchronize(buffer, width);
     const Position caret = locate(buffer);
     bool visible = false;
@@ -175,8 +190,6 @@ void TerminalWrapView::move(TerminalBuffer &buffer, TerminalMotion motion, bool 
                             std::size_t count, std::size_t width) {
     if (!count || count > 1000)
         throw std::runtime_error("Wrapped navigation count must be 1..1000 rows.");
-    synchronize(buffer, width);
-    Position position = locate(buffer);
     const bool vertical = motion == TerminalMotion::up || motion == TerminalMotion::down;
     if (!vertical && motion != TerminalMotion::home && motion != TerminalMotion::end) {
         desired_column_.reset();
@@ -184,6 +197,9 @@ void TerminalWrapView::move(TerminalBuffer &buffer, TerminalMotion motion, bool 
         expected_caret_ = buffer.selection().caret;
         return;
     }
+    check_cancel(4096);
+    synchronize(buffer, width);
+    Position position = locate(buffer);
     std::size_t column = 0;
     if (vertical) {
         if (!desired_column_) {

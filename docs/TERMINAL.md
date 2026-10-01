@@ -58,6 +58,18 @@ further work.
 See performance/2026-10-01-terminal-wrap/README.md for component measurements.
 F2 is session-local.
 
+Escape can interrupt wrapped index preparation and navigation. The input loop
+then shows a cancellation message without publishing a partial frame or moving
+the selection. Ctrl+Home returns to the start without retrying the cancelled
+end layout; subsequent editing/navigation commands retry layout. Save, Open and
+Exit remain usable while layout is suspended. The probe consumes only ignored
+key releases and Escape at the input queue head, preserving other input order;
+it is disabled for active prompts so their Escape retains its normal meaning.
+Layout checks roughly every 4096 processed source bytes plus one visual row.
+One indivisible source grapheme may be larger, and first-use Unicode metadata
+construction is still synchronous. This is not a strict wall-clock deadline or
+complete interruptibility for all document work.
+
 This executable is unfinished. Persistent wrap preferences,
 Text-copy prompt, full conflict review, external
 clipboard integration and further interactive/accessibility checks remain.

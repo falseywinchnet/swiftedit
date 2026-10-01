@@ -38,7 +38,7 @@ std::string utf8(std::wstring_view source) {
         throw std::runtime_error("Cannot decode keyboard input.");
     return result;
 }
-class Console {
+class Console final : public swiftedit::TerminalWrapControl {
 public:
     Console() = default;
     Console(const Console &) = delete;
@@ -108,6 +108,29 @@ public:
         const bool ready = result == WAIT_OBJECT_0;
         return ready;
     }
+    bool cancel_requested() override {
+        if (!wrap_cancel_enabled_)
+            return false;
+        // Consume only ignored key releases and an Escape at the queue head.
+        // Preserve all other input ordering, including resize and typed text.
+        for (std::size_t index = 0; index < 32; ++index) {
+            INPUT_RECORD event{};
+            DWORD count = 0;
+            if (!PeekConsoleInputW(input_, &event, 1, &count))
+                throw std::runtime_error("Cannot inspect terminal cancellation input.");
+            if (!count || event.EventType != KEY_EVENT)
+                return false;
+            if (event.Event.KeyEvent.bKeyDown) {
+                if (event.Event.KeyEvent.wVirtualKeyCode != VK_ESCAPE)
+                    return false;
+                static_cast<void>(read());
+                return true;
+            }
+            static_cast<void>(read());
+        }
+        return false;
+    }
+    void allow_wrap_cancel(bool enabled) { wrap_cancel_enabled_ = enabled; }
     INPUT_RECORD read() const {
         INPUT_RECORD input{};
         DWORD count = 0;
@@ -120,7 +143,7 @@ private:
     HANDLE input_{INVALID_HANDLE_VALUE}, original_{INVALID_HANDLE_VALUE},
         screen_{INVALID_HANDLE_VALUE};
     DWORD input_mode_{};
-    bool input_changed_{}, active_{};
+    bool input_changed_{}, active_{}, wrap_cancel_enabled_{true};
 };
 void position(std::string &output, std::size_t row, std::size_t column) {
     output += "\x1b[" + std::to_string(row + 1) + ";" + std::to_string(column + 1) + "H";
@@ -138,6 +161,7 @@ public:
     std::size_t replacement_count() const { return replacement_.count(); }
     std::size_t viewport_width() const { return width_; }
     bool wraps() const { return wrap_; }
+    std::size_t wrap_cancellations() const { return wrap_cancellations_; }
     bool wildcard_enabled() const {
         const swiftedit::SearchPattern pattern = query_.pattern();
         return pattern.slots()[0].wildcard;
@@ -160,6 +184,13 @@ public:
         while (!done_) {
             if (redraw) {
                 try {
+                    draw();
+                } catch (const swiftedit::TerminalWrapInterrupt &cancelled) {
+#ifdef SWIFTEDIT_TERMINAL_SMOKE
+                    ++wrap_cancellations_;
+#endif
+                    wrap_suspended_ = true;
+                    status_ = cancelled.what();
                     draw();
                 } catch (const std::exception &failure) {
                     status_ = failure.what();
@@ -223,6 +254,12 @@ public:
             for (WORD i = 0; i < repeats && !done_; ++i) {
                 try {
                     key(event);
+                } catch (const swiftedit::TerminalWrapInterrupt &cancelled) {
+#ifdef SWIFTEDIT_TERMINAL_SMOKE
+                    ++wrap_cancellations_;
+#endif
+                    wrap_suspended_ = true;
+                    status_ = cancelled.what();
                 } catch (const std::exception &failure) {
                     status_ = failure.what();
                 }
@@ -233,6 +270,7 @@ public:
 
 private:
     void draw() {
+        console_.allow_wrap_cancel(prompt_ == Prompt::none);
         const COORD size = console_.size();
         width_ = std::min<std::size_t>(static_cast<std::size_t>(std::max<SHORT>(size.X, 1)), 1000);
         const std::size_t height =
@@ -261,6 +299,9 @@ private:
                 position(screen, run.row + 1, run.column);
                 screen += run.text;
             }
+        } else if (wrap_ && wrap_suspended_) {
+            // Leave the interrupted view unpublished until the next command.
+            // Source, save/exit commands and the input loop remain live.
         } else if (wrap_) {
             const std::vector<swiftedit::TerminalWrappedRow> &wrapped =
                 wrap_view_.frame(buffer_, width_, rows_);
@@ -384,6 +425,9 @@ private:
         const bool alt = (event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED)) != 0;
         const bool shift = (event.dwControlKeyState & SHIFT_PRESSED) != 0;
         const WORD key = event.wVirtualKeyCode;
+        const bool preserving_command = ctrl && !alt && (key == 'X' || key == 'S' || key == 'R');
+        if (key != VK_ESCAPE && prompt_ == Prompt::none && !preserving_command)
+            wrap_suspended_ = false;
         if (key != 0 && event.uChar.UnicodeChar < 32)
             high_surrogate_ = 0;
         if (replacement_.state() == swiftedit::TerminalReplaceState::pending) {
@@ -531,7 +575,7 @@ private:
         case VK_F2:
             if (!buffer_.session().read_only()) {
                 wrap_ = !wrap_;
-                wrap_view_ = swiftedit::TerminalWrapView{};
+                wrap_view_ = swiftedit::TerminalWrapView{&console_};
                 status_ = wrap_ ? "Wrap to window" : "No wrap";
             }
             break;
@@ -591,12 +635,13 @@ private:
     }
 #ifdef SWIFTEDIT_TERMINAL_SMOKE
     std::size_t search_hits_{};
+    std::size_t wrap_cancellations_{};
 #endif
     Console console_{};
     swiftedit::TerminalBuffer buffer_{};
     swiftedit::TerminalRowCache row_cache_{};
-    swiftedit::TerminalWrapView wrap_view_{};
-    bool wrap_{};
+    swiftedit::TerminalWrapView wrap_view_{&console_};
+    bool wrap_{}, wrap_suspended_{};
     swiftedit::TerminalPager pager_{};
     swiftedit::TerminalSearch search_{};
     swiftedit::TerminalReplace replacement_{};
@@ -767,6 +812,29 @@ int wmain() {
             throw std::runtime_error("Wrapped Down/Home/edit saved the wrong source position.");
         if (!GetConsoleMode(console.input, &restored) || restored != mode)
             throw std::runtime_error("Wrapped terminal did not restore input mode.");
+        FlushConsoleInputBuffer(console.input);
+        enqueue(console.input, VK_F2);
+        enqueue(console.input, VK_END, 0, LEFT_CTRL_PRESSED);
+        enqueue(console.input, VK_ESCAPE);
+        enqueue(console.input, VK_HOME, 0, LEFT_CTRL_PRESSED);
+        enqueue(console.input, VK_DOWN);
+        enqueue(console.input, VK_HOME);
+        enqueue(console.input, 'Y', L'Y');
+        enqueue(console.input, 'X', 0, LEFT_CTRL_PRESSED);
+        enqueue(console.input, VK_ESCAPE);
+        enqueue(console.input, 'S', 0, LEFT_CTRL_PRESSED);
+        enqueue(console.input, 'X', 0, LEFT_CTRL_PRESSED);
+        {
+            Terminal terminal{};
+            if (terminal.run(wrap_path) != 0 || terminal.wrap_cancellations() != 1)
+                throw std::runtime_error(
+                    "Wrap cancellation/recovery did not execute exactly once.");
+        }
+        wrap_expected.insert(wrap_width, "Y");
+        if (notepad::read_file(wrap_path).bytes != wrap_expected)
+            throw std::runtime_error("Wrap cancellation/recovery or exit cancel changed source.");
+        if (!GetConsoleMode(console.input, &restored) || restored != mode)
+            throw std::runtime_error("Cancelled wrapped terminal did not restore input mode.");
         const std::filesystem::path large_path = dir / "large.txt";
         {
             std::ofstream file(large_path, std::ios::binary);
