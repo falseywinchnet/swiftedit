@@ -280,6 +280,57 @@ void verify_picker_home() {
         check(checked == 2, "Both picker profiles checked");
     }
 }
+void verify_picker_directory_links() {
+    // The owner's Mac regression must execute real links, never skip them.
+    const std::filesystem::path directory =
+        std::filesystem::canonical(std::filesystem::temp_directory_path()) /
+        ("swiftedit-picker-links-" + std::to_string(test_process_id()));
+    check(std::filesystem::create_directory(directory), "Unique picker link fixture");
+    struct Cleanup {
+        std::filesystem::path directory{};
+        ~Cleanup() {
+            std::error_code ignored{};
+            std::filesystem::remove_all(directory, ignored);
+        }
+    } cleanup{directory};
+    const std::filesystem::path target = directory / "target";
+    const std::filesystem::path alias = directory / "alias";
+    check(std::filesystem::create_directory(target), "Create picker target directory");
+    std::filesystem::create_directory_symlink(target, alias);
+    const std::u8string alias_utf8 = alias.u8string();
+    const std::u8string target_utf8 = target.u8string();
+    const std::u8string home_utf8 = notepad::user_home_directory().u8string();
+    const std::string alias_text(reinterpret_cast<const char *>(alias_utf8.data()),
+                                 alias_utf8.size());
+    const std::string expected(reinterpret_cast<const char *>(target_utf8.data()),
+                               target_utf8.size());
+    const std::string expected_home(reinterpret_cast<const char *>(home_utf8.data()),
+                                    home_utf8.size());
+    const std::shared_ptr<notepad::Editor> editor =
+        gf::make_control<notepad::Editor>(gf::StableId("links.editor"));
+    std::vector<gf::ApplicationWindow> windows = (*editor).application_windows({});
+    std::size_t checked = 0;
+    for (gf::ApplicationWindow &entry : windows) {
+        if (entry.stable_id != "notepad.open-picker" && entry.stable_id != "notepad.save-picker")
+            continue;
+        gf::Window &window = *entry.model;
+        entry.options.ready(window, {});
+        window.perform_layout();
+        const std::shared_ptr<gf::TextBox> path =
+            std::dynamic_pointer_cast<gf::TextBox>(window.find("file-manager.picker.path"));
+        const std::shared_ptr<gf::Button> home =
+            std::dynamic_pointer_cast<gf::Button>(window.find("file-manager.picker.root"));
+        check(path && home, "Picker navigation controls exist");
+        (*path).set_text(alias_text);
+        check(window.request_focus(path), "Focus picker path entry");
+        window.dispatch_key({gf::KeyAction::down, gf::PhysicalKey::enter});
+        check((*path).text() == expected, "Open and Save path entry follows directory link");
+        check((*home).perform_click() && (*path).text() == expected_home,
+              "Home after link navigation still returns to the real user home");
+        ++checked;
+    }
+    check(checked == 2, "Both consumer picker profiles navigate a real directory link");
+}
 void verify_callback_revocation() {
     std::shared_ptr<notepad::Editor> editor =
         gf::make_control<notepad::Editor>(gf::StableId("lifetime.editor"));
@@ -370,6 +421,9 @@ int main() {
     try {
         verify_callback_revocation();
         verify_picker_home();
+#ifndef _WIN32
+        verify_picker_directory_links();
+#endif
         verify_csv_keyboard_commands();
         verify_conflict_fields();
         verify_grapheme_status();

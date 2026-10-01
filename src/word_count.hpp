@@ -8,11 +8,11 @@ namespace notepad {
 // counter, and finish refuses truncated input. No partial result is published.
 class WordCounter final {
 public:
-    void append(std::string_view bytes);
+    void append(const std::string_view bytes);
     [[nodiscard]] std::uint64_t finish();
 
 private:
-    void consume(char32_t scalar);
+    void consume(const char32_t scalar);
     [[noreturn]] void invalid();
     std::uint64_t words_{};
     char32_t scalar_{}, minimum_{};

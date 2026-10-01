@@ -8,7 +8,7 @@ void WordCounter::invalid() {
     throw std::runtime_error("Word count requires valid UTF-8 text.");
 }
 
-void WordCounter::consume(char32_t scalar) {
+void WordCounter::consume(const char32_t scalar) {
     const bool whitespace =
         (scalar >= 0x09 && scalar <= 0x0d) || scalar == 0x20 || scalar == 0x85 || scalar == 0xa0 ||
         scalar == 0x1680 || (scalar >= 0x2000 && scalar <= 0x200a) || scalar == 0x2028 ||
@@ -25,7 +25,7 @@ void WordCounter::consume(char32_t scalar) {
     }
 }
 
-void WordCounter::append(std::string_view bytes) {
+void WordCounter::append(const std::string_view bytes) {
     if (failed_ || finished_)
         throw std::runtime_error("Word counter is no longer accepting input.");
     for (const unsigned char byte : bytes) {

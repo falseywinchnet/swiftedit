@@ -10,7 +10,7 @@ enum class WordCountState { running, complete, cancelled, failed };
 class SessionWordCount final {
 public:
     explicit SessionWordCount(const Session &session);
-    void step(const Session &session, std::size_t budget = 4096);
+    void step(const Session &session, const std::size_t budget = 4096);
     void cancel() noexcept;
     [[nodiscard]] WordCountState state() const { return state_; }
     [[nodiscard]] std::uint64_t offset() const { return offset_; }

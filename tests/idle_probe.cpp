@@ -6,7 +6,8 @@
 
 namespace gf = gui_forms;
 
-// Diagnostic only: Application::run owns native windows synchronously. Hooks
+// CPU observations are diagnostic; hidden-dialog quietness is a regression gate.
+// Application::run owns native windows synchronously. Hooks
 // borrow this stack owner until run returns; the timer is stopped before close.
 class IdleProbe final {
 public:
@@ -93,6 +94,15 @@ private:
                           << "|metrics=" << metrics.to_json() << '\n';
             }
             std::cout.flush();
+            // Report every window before rejecting an active hidden child, so a
+            // failed run retains the complete topology for diagnosis.
+            for (std::size_t index = 1; index < observed_.size(); ++index) {
+                const ObservedWindow &window = observed_[index];
+                const gf::MetricsSnapshot metrics = (*window.model).metrics().snapshot();
+                if (!(*window.model).occluded() || metrics.paint_passes != 0 ||
+                    metrics.frame_deadlines_fired != 0)
+                    throw std::runtime_error("Hidden dialog was not idle: " + window.name);
+            }
             measuring_ = false;
             ++phase_;
             if (phase_ == 1) {

@@ -10,7 +10,7 @@ SessionWordCount::SessionWordCount(const Session &session)
     }
 }
 
-void SessionWordCount::step(const Session &session, std::size_t budget) {
+void SessionWordCount::step(const Session &session, const std::size_t budget) {
     if (state_ != WordCountState::running)
         throw std::runtime_error("Word count task is not running.");
     if (budget == 0 || budget > maximum_page)

@@ -101,3 +101,72 @@ change when main text focus is cleared, while keeping the app and hidden-dialog
 topology present. The measurement timer and sampling/reporting remain fixture
 overhead. No minimized/hidden-primary state or performance acceptance is claimed.
 Provider fixes must be compared against this same fixture and SDK provenance.
+
+## Provider visibility regression evidence (not yet integrated)
+
+Provider 579c3304b636f3cfd5fbd71f437a200529cc0c25, native run 36866574453,
+completed its Mac idle visibility test in 4.87 seconds. The six original host
+snapshots are retained in provider-579c330-visibility.txt. Initial hidden state
+was synchronized. Between stages 3 and 4, a 750 ms hidden interval, cumulative
+wakes stayed at 9, native draws at 6, damage collections at 22, and display ticks
+at 0. Native callback faults were zero. Visible caret activity and a second
+show succeeded; explicit UI timers continued while hidden as required.
+
+Mac and Linux picker model/view tests also passed with actual directory symlink
+fixtures. Their POSIX fixture helper creates links or throws; it cannot silently
+skip these assertions. File symlink acceptance is outside this directory fix.
+
+This was not an all-platform green candidate: Windows failed to compile an old
+one-argument bind_owner call in its canvas test. The Mac job was cancelled after
+its test evidence and SDK artifacts had uploaded when the corrected provider
+commit 5cba35103b9a9ccc98dfc034a0b08882ccc4fa16 started run 36867942532.
+No SwiftEdit SDK adoption or consumer CPU improvement is proved by these logs.
+The consumer idle probe now has a prepared regression gate requiring all hidden
+children to be occluded with zero paints and frame deadlines in each interval;
+its native validation must accompany the corrected SDK adoption.
+
+The 5cba351 Windows job compiled successfully, then failed both picker link
+tests: `trusted directory link enters canonical target` and `picker Open enters
+selected folder link through canonical navigation`. This CI runner executed the
+link fixtures that local Windows skipped. Each original assertion combined the
+operation result with the expected path comparison, so the log did not establish
+which part failed. Provider 10fa6642c3a86afa6d5ea1566845999d75a66878 adds operation,
+path, canonical-path and last-error diagnostics without relaxing either check;
+its native run is 36869160214. SDK adoption remains pending.
+
+The diagnostic Windows job 110392608199 established actual refusal: `entered=0`,
+with `canonical_alias` still ending in `folder-link` rather than `Folder` and
+`last_error=requested location traverses a symbolic link`. The view selected and
+activated the row successfully but reached the same refusal. The installed
+Windows toolchain's canonical-path call did not resolve this fixture's directory
+link. This is not merely a comparison of different path spellings. The exact
+diagnostics were delivered to the provider coordinator for correction. Linux
+passed in this run; Mac was still running when the Windows evidence arrived.
+
+Candidate 9ecea5305d1e3365525da63ef154c04920042f22 adds native-handle Windows
+directory resolution and the separate caret-damage change. Run 36872407186
+passed Mac and Linux; both exported SDKs passed exact revision/platform,
+archive-checksum and internal content-hash verification. Mac idle visibility
+and Mac/Linux picker model/view tests passed with executed link fixtures.
+Windows picker view now passed, but its model test failed with `picker fixture
+directory already exists`. The fixture uses a PID-only directory name in two
+successive scopes; cleanup/collision diagnosis remains provider-owned. This
+candidate was not adopted because the Windows job was not green.
+
+## Accepted provider candidate 0322371
+
+Provider revision `032237152148ff76ca125eb382f43d589d3baeb9`, native run
+`36874360894`, completed successfully on macOS ARM64, Windows x64 and Linux
+x64. The Windows directory-link model and view cases executed without a skip;
+the owned fixture cleanup and PID-root reuse check also passed. The macOS
+visibility fixture passed. All three SDK archive receipts and internal installed
+content hashes were verified before updating the consumer lock.
+
+This candidate combines initial hidden-window occlusion, validated narrow caret
+blink damage, and directory symlink navigation. SwiftEdit now gates the Mac idle
+probe on all eight hidden dialogs remaining occluded with zero paints and zero
+frame deadlines in both observation phases. Consumer Open and Save tests follow
+an actual directory symlink and then return Home on macOS and Linux. These
+consumer measurements must pass before claiming that the packaged app fixes the
+reported idle work. The provider packaging receipt does not assert prepared-text
+availability. File symlink opening remains a separate limitation.
