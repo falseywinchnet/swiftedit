@@ -79,6 +79,7 @@ void CsvView::set_source(std::string_view source) {
     caret_.row = std::min(caret_.row, (*table_).rows().size() - 1);
     caret_.column = std::min(caret_.column, (*table_).rows()[caret_.row].size() - 1);
     anchor_ = caret_;
+    all_selected_ = false;
     update_scrollbars();
     update_field();
     prepare_view();
@@ -205,8 +206,17 @@ void CsvView::select_cell(swiftedit::CellAddress address) {
     static_cast<void>((*table_).cell(address));
     caret_ = address;
     anchor_ = address;
+    all_selected_ = false;
     reveal_caret();
     update_field();
+    invalidate(gf::Dirty::paint);
+}
+void CsvView::select_all() {
+    if (!table_)
+        return;
+    // Keep a valid active cell even when rows have different lengths. The
+    // selection covers existing fields; it never synthesizes trailing cells.
+    all_selected_ = true;
     invalidate(gf::Dirty::paint);
 }
 void CsvView::publish(std::string source) { changed_.emit(source); }
@@ -242,7 +252,11 @@ void CsvView::clear_cells() {
                                            std::min(anchor_.column, caret_.column)};
         const swiftedit::CellAddress last{std::max(anchor_.row, caret_.row),
                                           std::max(anchor_.column, caret_.column)};
-        std::string source = (*table_).clear(first, last);
+        std::string source{};
+        if (all_selected_)
+            source = (*table_).clear_all();
+        else
+            source = (*table_).clear(first, last);
         publish(std::move(source));
         status_ = "Cell contents cleared; rows and columns remain in place.";
     } catch (const std::exception &failure) {
@@ -254,14 +268,20 @@ std::string CsvView::copy_cells() const {
     std::string result{};
     if (!table_)
         return result;
-    const swiftedit::CellAddress first{std::min(anchor_.row, caret_.row),
-                                       std::min(anchor_.column, caret_.column)};
-    const swiftedit::CellAddress last{std::max(anchor_.row, caret_.row),
-                                      std::max(anchor_.column, caret_.column)};
+    swiftedit::CellAddress first{std::min(anchor_.row, caret_.row),
+                                 std::min(anchor_.column, caret_.column)};
+    swiftedit::CellAddress last{std::max(anchor_.row, caret_.row),
+                                std::max(anchor_.column, caret_.column)};
+    if (all_selected_) {
+        first = {0, 0};
+        last.row = (*table_).rows().size() - 1;
+    }
     for (std::size_t row = first.row; row <= last.row; ++row) {
         if (row != first.row)
             result += "\r\n";
-        for (std::size_t column = first.column; column <= last.column; ++column) {
+        const std::size_t end_column =
+            all_selected_ ? (*table_).rows()[row].size() - 1 : last.column;
+        for (std::size_t column = first.column; column <= end_column; ++column) {
             if (column != first.column)
                 result += '\t';
             const swiftedit::Cell &cell = (*table_).cell({row, column});
@@ -348,7 +368,11 @@ void CsvView::on_pointer(gf::PointerEvent &event) {
 void CsvView::on_key(gf::KeyEvent &event) {
     if (event.phase != gf::EventPhase::target || event.action != gf::KeyAction::down || !table_)
         return;
-    if (event.physical_key == gf::PhysicalKey::delete_forward) {
+    if (event.physical_key == gf::PhysicalKey::a &&
+        (event.modifiers == gf::Modifier::control || event.modifiers == gf::Modifier::meta)) {
+        select_all();
+        event.handled = true;
+    } else if (event.physical_key == gf::PhysicalKey::delete_forward) {
         clear_cells();
         event.handled = true;
     } else if (event.physical_key == gf::PhysicalKey::enter && window()) {
@@ -371,6 +395,7 @@ void CsvView::on_key(gf::KeyEvent &event) {
             return;
         next.column = std::min(next.column, (*table_).rows()[next.row].size() - 1);
         caret_ = next;
+        all_selected_ = false;
         if (!gf::has_modifier(event.modifiers, gf::Modifier::shift))
             anchor_ = next;
         reveal_caret();
@@ -398,10 +423,10 @@ void CsvView::on_paint(gf::Painter &painter, gf::Rect) {
         const gf::Rect rect{header_width + static_cast<double>(column - left_) * column_width,
                             grid_top + static_cast<double>(row - top_) * row_height, column_width,
                             row_height};
-        const bool selected = row >= std::min(anchor_.row, caret_.row) &&
-                              row <= std::max(anchor_.row, caret_.row) &&
-                              column >= std::min(anchor_.column, caret_.column) &&
-                              column <= std::max(anchor_.column, caret_.column);
+        const bool selected = all_selected_ || (row >= std::min(anchor_.row, caret_.row) &&
+                                                row <= std::max(anchor_.row, caret_.row) &&
+                                                column >= std::min(anchor_.column, caret_.column) &&
+                                                column <= std::max(anchor_.column, caret_.column));
         if (selected)
             painter.fill_rect(rect, style.accent_light);
         else if (entry.second.code_background)

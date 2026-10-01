@@ -437,6 +437,29 @@ int main() {
               "Grid exposes formula conversion error");
         (*editor).execute("csv-clear");
         check((*text).text() == "2,\r\n4,5", "Grid Delete clears contents without shifting");
+        const gf::TextSelection hidden_selection = (*text).selection();
+        (*editor).execute("select-all");
+        check((*text).selection() == hidden_selection,
+              "CSV Select All does not change the hidden source selection");
+        (*editor).execute("copy");
+        check(services.clipboard == "2\t\r\n4\t5", "CSV Select All copies every cell");
+        (*editor).execute("delete");
+        check((*text).text() == ",\r\n,", "CSV Select All Delete preserves table structure");
+        (*editor).execute("undo");
+        check((*text).text() == "2,\r\n4,5", "Clearing the table is one undoable edit");
+        (*text).set_text("a,b,c\r\nd\ne,f");
+        (*editor).execute("select-all");
+        (*editor).execute("copy");
+        check(services.clipboard == "a\tb\tc\r\nd\r\ne\tf",
+              "Select All copies ragged rows without inventing trailing fields");
+        (*editor).execute("delete");
+        check((*text).text() == ",,\r\n\n,", "Select All clears all existing ragged cells");
+        (*editor).execute("undo");
+        check((*text).text() == "a,b,c\r\nd\ne,f", "Ragged clear restores with one undo");
+        (*editor).execute("select-all");
+        (*grid).select_cell({2, 1});
+        (*editor).execute("copy");
+        check(services.clipboard == "f", "Selecting a cell leaves whole-table selection");
         (*editor).execute("csv-view");
         check((*text).visible(), "Source toggle restores plain text view");
         const std::string before_render((*text).text());

@@ -14,6 +14,7 @@ public:
     void set_source(std::string_view);
     void set_context_command(const std::shared_ptr<gf::Command> &);
     void select_cell(swiftedit::CellAddress);
+    void select_all();
     void commit_cell(std::string_view);
     void convert_to_value();
     void clear_cells();
@@ -68,6 +69,7 @@ private:
     std::size_t cached_rows_{}, cached_columns_{};
     bool cells_dirty_{true};
     bool dragging_{};
+    bool all_selected_{};
     std::string status_{"Enter edits the selected cell. Delete clears the selected rectangle."};
 };
 } // namespace notepad

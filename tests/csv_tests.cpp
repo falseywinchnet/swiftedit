@@ -60,6 +60,11 @@ int main() {
         const std::string empty_clear = quoted_rectangle.clear({2, 1}, {2, 1});
         check(empty_clear == quoted_source, "Clearing an empty field preserves source bytes");
         const Csv ragged("a,b,c\r\nd\ne,f,g");
+        check(ragged.clear_all() == ",,\r\n\n,,",
+              "Clear all retains ragged row lengths and mixed endings");
+        check(csv.clear_all() == ",,\r\n,,\n,,",
+              "Clear all removes quoted multiline contents, retaining record separators");
+        check(Csv("").clear_all().empty(), "Clear all accepts an empty table");
         bool ragged_refused = false;
         try {
             static_cast<void>(ragged.clear({0, 1}, {2, 2}));

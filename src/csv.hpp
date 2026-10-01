@@ -25,6 +25,7 @@ public:
     const std::vector<std::vector<Cell>> &rows() const { return rows_; }
     [[nodiscard]] std::string set(CellAddress, std::string_view) const;
     [[nodiscard]] std::string clear(CellAddress first, CellAddress last) const;
+    [[nodiscard]] std::string clear_all() const;
 
 private:
     std::string source_{};

@@ -73,6 +73,21 @@ int main() {
         (*grid).on_pointer(fitting_wheel);
         check(vertical && (*vertical).value() == 0,
               "Wheel input cannot scroll fitting rows into a disabled placeholder range");
+        (*grid).set_source("a,b,c\r\nd\ne,f");
+        for (const gf::Modifier modifier : {gf::Modifier::control, gf::Modifier::meta}) {
+            (*grid).select_cell({0, 0});
+            gf::KeyEvent select_all{};
+            select_all.physical_key = gf::PhysicalKey::a;
+            select_all.modifiers = modifier;
+            grid_window.request_focus(grid);
+            grid_window.dispatch_key(select_all);
+            check((*grid).copy_cells() == "a\tb\tc\r\nd\r\ne\tf",
+                  "Ctrl/Cmd+A selects existing cells across ragged rows");
+            gf::KeyEvent right{};
+            right.physical_key = gf::PhysicalKey::right;
+            grid_window.dispatch_key(right);
+            check((*grid).copy_cells() == "b", "Arrow navigation leaves whole-table selection");
+        }
         const std::shared_ptr<notepad::QueryField> query =
             gf::make_control<notepad::QueryField>(gf::StableId("test.query"));
         gf::Window query_window(query, {300, 32});

@@ -145,6 +145,19 @@ std::string Csv::clear(CellAddress first, CellAddress last) const {
     result.append(source_, copied_through, source_.size() - copied_through);
     return result;
 }
+std::string Csv::clear_all() const {
+    std::string result{};
+    result.reserve(source_.size());
+    std::size_t copied_through = 0;
+    for (const std::vector<Cell> &row : rows_) {
+        for (const Cell &selected : row) {
+            result.append(source_, copied_through, selected.begin - copied_through);
+            copied_through = selected.end;
+        }
+    }
+    result.append(source_, copied_through, source_.size() - copied_through);
+    return result;
+}
 namespace {
 using Integer = std::int64_t;
 constexpr Integer limit = std::numeric_limits<Integer>::max() / 10;

@@ -620,9 +620,12 @@ void Editor::execute(const std::string &id) {
                 (*csv_).clear_cells();
             else
                 (*text_).delete_selection();
-        } else if (id == "select-all")
-            (*text_).select_all();
-        else if (id == "replace-all")
+        } else if (id == "select-all") {
+            if (csv_visible_)
+                (*csv_).select_all();
+            else
+                (*text_).select_all();
+        } else if (id == "replace-all")
             replace_every();
         else if (id == "replace-one")
             replace_one();

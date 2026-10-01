@@ -446,9 +446,20 @@ delivery was compiled but not exercised in a new desktop smoke. Previous
 cf71f5d native run 36860466943 and portable 36860466924 both succeeded; the
 gh watch process exited successfully. No local process remains.
 
-Coordinator explicitly reports shared GUI work remains paused in its own chat
-after the new shutdown notice, requiring direct owner resume there. Consumer
-work continues under this chat's repeated goal continuations, but do not claim
+Coordinator subsequently relayed the owner's direct withdrawal of the shutdown
+hold. Shared-provider coordination may resume; this does not establish public
 A2/W1/print availability or alter provider source ownership. Full objective
 still requires GUI session migration, visible controls/multiselection, large
 GUI documents, document windows/print and comprehensive native responsiveness.
+
+CSV command-routing correction: Edit > Select All now selects the visible grid
+instead of its hidden source TextBox. Ctrl/Cmd+A is handled by the grid and tested
+through Window key dispatch. Whole-table selection covers only existing fields
+of ragged rows; copy emits their tab-separated values without trailing invented
+fields. Clear traverses field spans once, retaining delimiters and exact record
+endings, and publishes one undoable replacement. Pointer selection, navigation
+and source replacement leave whole-table selection. Rectangle-clear refusal for
+missing cells remains unchanged. Regression coverage includes hidden selection
+preservation, quoted multiline cells, empty input, ragged copy/clear, one-step
+undo and leaving the selection through cell/arrow navigation.
+Validation: rebuilt successfully; 17/17 headless suites passed in 4.64 s. The 81-file spelling audit and git diff check passed. No local native desktop launch was performed for this change.
