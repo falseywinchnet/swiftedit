@@ -372,7 +372,7 @@ private:
                 width_);
         if (buffer_.session().read_only())
             status_line(screen, height - 1,
-                        "Read-only: PgDn Next  PgUp Previous  Ctrl+Home First  ^X Exit", width_);
+                        "Read-only: Up/Down Row  PgUp/PgDn Page  Ctrl+Home First  ^X Exit", width_);
         else
             status_line(screen, height - 1,
                         "^C Copy  ^K Cut  ^U Paste  ^T Text Copy  F2 Wrap  Shift+arrows Select",
@@ -535,11 +535,19 @@ private:
             return;
         }
         if (buffer_.session().read_only()) {
-            if (key == VK_NEXT || key == VK_DOWN) {
+            if (key == VK_DOWN) {
+                pager_.down();
+                return;
+            }
+            if (key == VK_UP) {
+                pager_.up();
+                return;
+            }
+            if (key == VK_NEXT) {
                 pager_.next();
                 return;
             }
-            if (key == VK_PRIOR || key == VK_UP) {
+            if (key == VK_PRIOR) {
                 pager_.previous();
                 return;
             }

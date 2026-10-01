@@ -218,6 +218,31 @@ int main() {
         check(pager.frame(paged_source, 4, 1).runs[0].text == "A",
               "Previous restores exact page cursor");
         pager.first();
+        const swiftedit::TerminalPageFrame row_frame = pager.frame(paged_source, 4, 3);
+        check(row_frame.row_starts.size() == 3, "Pager records visual row source starts");
+        pager.down();
+        check(pager.frame(paged_source, 4, 3).runs[0].text == "E",
+              "Down scrolls one row instead of a page, skipping no newline after exact wrap");
+        pager.down();
+        check(pager.frame(paged_source, 4, 3).runs[0].text == "G",
+              "Down can reveal the last row even when the frame already reaches EOF");
+        pager.down();
+        check(pager.frame(paged_source, 4, 3).runs[0].text == "G",
+              "Down at the last row does not scroll into empty space");
+        pager.up();
+        check(pager.frame(paged_source, 4, 3).runs[0].text == "E",
+              "Up restores exactly one prior visual row");
+        pager.first();
+        static_cast<void>(pager.frame(paged_source, 4, 2));
+        pager.next();
+        check(pager.frame(paged_source, 4, 2).runs[0].text == "G",
+              "Page Down continues to advance by a complete frame");
+        pager.up();
+        check(pager.frame(paged_source, 4, 2).runs[0].text == "E",
+              "Up after Page Down returns one row, not the entire previous page");
+        pager.previous();
+        check(pager.frame(paged_source, 4, 2).runs[0].text == "A",
+              "Page Up after row navigation restores the earlier page start");
         paged_source.replace_ranges({{0, paged_source.text().size()}}, "\x1bZ",
                                     paged_source.stamp());
         bool old_page_refused = false;
@@ -238,6 +263,14 @@ int main() {
         pager.next();
         check(pager.frame(paged_source, 4, 1).runs[0].text == "Z",
               "Following content is not skipped");
+        pager.first();
+        static_cast<void>(pager.frame(paged_source, 4, 3));
+        pager.down();
+        check(pager.frame(paged_source, 4, 3).runs[0].text == "01B]",
+              "Row scrolling retains the exact inert label continuation");
+        pager.up();
+        check(pager.frame(paged_source, 4, 3).runs[0].text == "[U+0",
+              "Reverse row scrolling restores the first label fragment");
         const std::filesystem::path large_path = dir / "large.txt";
         {
             std::ofstream file(large_path, std::ios::binary);
@@ -254,6 +287,15 @@ int main() {
         const swiftedit::TerminalPageFrame large_first = large_pager.frame(large, 1000, 300);
         check(large_first.next.offset == swiftedit::maximum_page - 2,
               "Incomplete trailing scalar and its preceding grapheme are deferred together");
+        const swiftedit::DocumentStamp large_stamp = large.stamp();
+        large_pager.down();
+        check(large_pager.frame(large, 1000, 300).row_starts[0].offset == 1000,
+              "Actual read-only file scrolls one visual row with bounded reads");
+        large_pager.up();
+        check(large_pager.frame(large, 1000, 300).row_starts[0].offset == 0 &&
+                  large.stamp().identity == large_stamp.identity &&
+                  large.stamp().revision == large_stamp.revision && !large.dirty(),
+              "Read-only row navigation preserves document identity, revision and cleanliness");
         large_pager.next();
         const swiftedit::TerminalPageFrame &large_second = large_pager.frame(large, 1000, 300);
         check(large_second.runs[0].text == "e\xcc\x81",

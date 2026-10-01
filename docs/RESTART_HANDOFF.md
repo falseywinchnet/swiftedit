@@ -494,3 +494,10 @@ results or rendered Markdown. Ten presentation/command combinations verify
 visibility, matched selection, nonmutating search, intended replacement and
 undo. All 17 headless suites passed in 3.26 s; 81-file spelling audit and diff
 check passed. Help now states the source-view behavior. No local desktop launch.
+
+Read-only terminal row navigation: Up/Down now use bounded retained visual-row
+cursors, distinct from Page Up/Down. Tracks exact wrap and inert-label offsets,
+with 32768 row cursors /1024 page starts maximum. Tests cover CRLF after exact
+wrap, EOF, mixed page/row movement, split control labels, and an actual16MiB
+read-only file with unchanged stamp/dirty state.17/17suites passed4.48s;81-file
+style spelling audit/diff check clean. Native physical-key smoke not rerun.

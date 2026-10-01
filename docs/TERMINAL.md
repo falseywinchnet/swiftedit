@@ -37,13 +37,17 @@ bidi controls are inert labels, not terminal commands. Printable Unicode uses
 the declared Unicode 17 cell-width policy; compatibility with individual fonts
 and terminal hosts still needs visual QA. Filenames/status are escaped metadata.
 
-Files at or above 16 MiB use bounded read-only pages. Page Down/Down advances,
-Page Up/Up returns to the previous page, and Ctrl+Home returns to the first page.
-Each frame reads at most 64 KiB. The most recent 1024 page starts are retained;
-trying to go farther back reports the limit and offers Ctrl+Home. Full graphemes
+Files at or above 16 MiB use bounded read-only pages. Down scrolls one visual
+row and Up returns one retained row. Page Down advances a frame; Page Up returns
+to the preceding retained page start (or up to a screen of row history when no
+page jump precedes it). Ctrl+Home returns to the first page. Each frame reads at
+most 64 KiB. History retains at most 32768 row cursors and 1024 page starts;
+trying to go farther back reports the limit and offers Ctrl+Home. Cursors retain
+their source positions across resize; earlier rows reflect their original wrap
+width. Full graphemes
 are preserved across reads. Oversized graphemes that exceed the context limit
 are reported unavailable, preserving the source. Read-only range selection/copy
-and more granular line navigation still need implementation.
+still needs implementation.
 
 F5 shares the GUI's formatter and inserts `YYYY-MM-DD HH:MM:SS` using local
 calendar time. The timestamp is ordinary source text, with no retained clock

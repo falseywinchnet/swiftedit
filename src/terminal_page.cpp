@@ -40,6 +40,7 @@ TerminalPageFrame terminal_page(const Session &session, TerminalPageCursor curso
     TerminalPageFrame result{};
     result.runs.reserve(std::min<std::size_t>(metadata.size(), width * rows));
     result.next = cursor;
+    result.row_starts.push_back(cursor);
     std::size_t row = 0;
     std::size_t column = 0;
     bool after_wrap = cursor.after_wrap;
@@ -56,6 +57,8 @@ TerminalPageFrame terminal_page(const Session &session, TerminalPageCursor curso
             after_wrap = false;
             column = 0;
             result.next = {cursor.offset + offset + length, 0, false};
+            if (row > result.row_starts.size() - 1)
+                result.row_starts.push_back(result.next);
             continue;
         }
         after_wrap = false;
@@ -69,6 +72,7 @@ TerminalPageFrame terminal_page(const Session &session, TerminalPageCursor curso
         if (!glyph.label && column + glyph.cells > width) {
             ++row;
             column = 0;
+            result.row_starts.push_back({cursor.offset + offset, 0, false});
             if (row == rows)
                 break;
             // Tab stops depend on the row column after wrapping.
@@ -94,6 +98,7 @@ TerminalPageFrame terminal_page(const Session &session, TerminalPageCursor curso
                 column = 0;
                 after_wrap = true;
                 result.next.after_wrap = true;
+                result.row_starts.push_back(result.next);
             }
         }
     }
@@ -104,6 +109,7 @@ void TerminalPager::reset(const Session &session) {
     stamp_ = session.stamp();
     cursor_ = {};
     history_.clear();
+    page_history_.clear();
     frame_ = {};
     ready_ = false;
 }
@@ -124,9 +130,12 @@ const TerminalPageFrame &TerminalPager::frame(const Session &session, std::size_
 void TerminalPager::next() {
     if (!ready_ || !frame_.more || frame_.next == cursor_)
         return;
-    history_.push_back(cursor_);
-    if (history_.size() > 1024)
-        history_.pop_front();
+    page_history_.push_back(cursor_);
+    if (page_history_.size() > 1024)
+        page_history_.pop_front();
+    for (const TerminalPageCursor start : frame_.row_starts)
+        if (!(start == frame_.next))
+            retain(start);
     cursor_ = frame_.next;
     ready_ = false;
 }
@@ -137,13 +146,63 @@ void TerminalPager::previous() {
                 "Earlier page history is no longer retained. Ctrl+Home returns to the first page.");
         return;
     }
+    std::size_t count = std::min(rows_, history_.size());
+    if (!page_history_.empty()) {
+        const TerminalPageCursor target = page_history_.back();
+        count = 0;
+        bool found = false;
+        for (std::size_t index = history_.size(); index > 0; --index) {
+            ++count;
+            if (history_[index - 1] == target) {
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            throw std::runtime_error(
+                "Earlier page history is no longer retained. Ctrl+Home returns to the first page.");
+        page_history_.pop_back();
+    }
+    for (std::size_t row = 0; row < count; ++row) {
+        cursor_ = history_.back();
+        history_.pop_back();
+    }
+    ready_ = false;
+}
+void TerminalPager::retain(TerminalPageCursor cursor) {
+    history_.push_back(cursor);
+    // Bound history by row cursors, independent of window height.
+    if (history_.size() > 32768)
+        history_.pop_front();
+}
+void TerminalPager::down() {
+    if (!ready_ || frame_.row_starts.size() < 2)
+        return;
+    const TerminalPageCursor next = frame_.row_starts[1];
+    // An EOF boundary is not another visual row to scroll into.
+    if (!frame_.more && next == frame_.next)
+        return;
+    retain(cursor_);
+    cursor_ = next;
+    ready_ = false;
+}
+void TerminalPager::up() {
+    if (history_.empty()) {
+        if (cursor_.offset || cursor_.label_cell)
+            throw std::runtime_error(
+                "Earlier row history is no longer retained. Ctrl+Home returns to the first page.");
+        return;
+    }
     cursor_ = history_.back();
     history_.pop_back();
+    if (!page_history_.empty() && cursor_ == page_history_.back())
+        page_history_.pop_back();
     ready_ = false;
 }
 void TerminalPager::first() {
     cursor_ = {};
     history_.clear();
+    page_history_.clear();
     ready_ = false;
 }
 } // namespace swiftedit

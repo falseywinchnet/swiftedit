@@ -18,6 +18,7 @@ struct TerminalPageRun {
 };
 struct TerminalPageFrame {
     std::vector<TerminalPageRun> runs{};
+    std::vector<TerminalPageCursor> row_starts{};
     TerminalPageCursor next{};
     bool more{};
 };
@@ -31,12 +32,16 @@ public:
     const TerminalPageFrame &frame(const Session &, std::size_t width, std::size_t rows);
     void next();
     void previous();
+    void down();
+    void up();
     void first();
 
 private:
+    void retain(TerminalPageCursor);
     DocumentStamp stamp_{};
     TerminalPageCursor cursor_{};
     std::deque<TerminalPageCursor> history_{};
+    std::deque<TerminalPageCursor> page_history_{};
     TerminalPageFrame frame_{};
     std::size_t width_{}, rows_{};
     bool ready_{};
