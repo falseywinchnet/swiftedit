@@ -50,6 +50,25 @@ int main() {
               "localized serialization preserves unaffected source");
         const std::string cleared = Csv("1,2,3\r\n4,5,6\n").clear({0, 1}, {1, 2});
         check(cleared == "1,,\r\n4,,\n", "clear preserves delimiters rows and line endings");
+        const std::string quoted_source =
+            "\"keep,one\",\"multi\r\nline\",tail\r\n"
+            "keep,\"escaped \"\"quote\"\"\",tail\nlast,,\"keep,three\"";
+        const Csv quoted_rectangle(quoted_source);
+        const std::string quoted_clear = quoted_rectangle.clear({0, 1}, {1, 1});
+        check(quoted_clear == "\"keep,one\",,tail\r\nkeep,,tail\nlast,,\"keep,three\"",
+              "Clear preserves untouched quoting and mixed record endings exactly");
+        const std::string empty_clear = quoted_rectangle.clear({2, 1}, {2, 1});
+        check(empty_clear == quoted_source, "Clearing an empty field preserves source bytes");
+        const Csv ragged("a,b,c\r\nd\ne,f,g");
+        bool ragged_refused = false;
+        try {
+            static_cast<void>(ragged.clear({0, 1}, {2, 2}));
+        } catch (const std::runtime_error &) {
+            ragged_refused = true;
+        }
+        check(ragged_refused && ragged.cell({0, 1}).value == "b" &&
+                  ragged.cell({2, 2}).value == "g",
+              "Rectangle containing nonexistent cells refuses atomically without inventing fields");
         const Csv trailing_empty("a,b,");
         check(trailing_empty.rows()[0].size() == 3, "trailing empty field");
         const Csv empty_document("");

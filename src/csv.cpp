@@ -130,15 +130,19 @@ std::string Csv::clear(CellAddress first, CellAddress last) const {
     for (std::size_t r = first.row; r <= last.row; ++r)
         for (std::size_t c = first.column; c <= last.column; ++c)
             static_cast<void>(cell({r, c}));
-    std::string result = source_;
-    // Descending source offsets remain valid as later fields are erased.
-    for (std::size_t row = last.row + 1; row > first.row; --row) {
-        for (std::size_t column = last.column + 1; column > first.column; --column) {
-            const Cell &selected = rows_[row - 1][column - 1];
-            const std::size_t count = selected.end - selected.begin;
-            result.erase(selected.begin, count);
+    std::string result{};
+    result.reserve(source_.size());
+    std::size_t copied_through = 0;
+    // Retain the gaps between selected fields in source order. Repeated erase
+    // would shift an ever-growing suffix once per cell (quadratic copy work).
+    for (std::size_t row = first.row; row <= last.row; ++row) {
+        for (std::size_t column = first.column; column <= last.column; ++column) {
+            const Cell &selected = rows_[row][column];
+            result.append(source_, copied_through, selected.begin - copied_through);
+            copied_through = selected.end;
         }
     }
+    result.append(source_, copied_through, source_.size() - copied_through);
     return result;
 }
 namespace {

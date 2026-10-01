@@ -425,3 +425,14 @@ smaller source and fitting-row wheel input. All17 suites passed1.75s;78-file
 spelling audit clean. No local native desktop launch. Continued under the latest
 goal continuation after the prior verified remote checkpoint; full feature and
 native responsiveness completion remain open.
+
+CSV rectangle Clear lag improvement: replaced repeated reverse erase (quadratic
+suffix copying) with validated forward source-gap assembly. Source/delimiters/
+record endings unchanged outside selected fields; missing cells in ragged
+rectangles remain an atomic refusal. Added quoted/multiline/mixed-ending/empty/
+ragged regressions.17-suite pass2.48s;79-file spelling audit clean. Opt-in
+csv-clear benchmark at100000cells/899999bytes,3warmups+31samples: median85.4735
+to0.3082ms; worst87.4842 to0.3371ms. Raw before/after, source/binary identities and
+scope in performance/2026-10-01-csv-clear/. This excludes parsing, editor undo/
+publication and nativepainting. No local desktop launch. Prior4e15c30 native
+36860154826 last observedlive; portable36860154953 passed. Full goal still open.
