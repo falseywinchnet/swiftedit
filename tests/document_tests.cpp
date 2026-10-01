@@ -1,4 +1,5 @@
 #include "document.hpp"
+#include "word_count.hpp"
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -33,11 +34,67 @@ int main() {
                                              {"a\xe2\x80\x8b"
                                               "b",
                                               1},
-                                             {"\xe4\xb8\xad\xe6\x96\x87", 1}};
+                                             {"\xe4\xb8\xad\xe6\x96\x87", 1},
+                                             {std::string("a\0b c", 5), 2},
+                                             {"\xf4\x8f\xbf\xbf", 1}};
         for (const WordFixture &fixture : word_fixtures) {
             const std::size_t words = word_count(fixture.text);
             require(words == fixture.expected, "Whitespace word-count policy");
+            for (std::size_t split = 0; split <= fixture.text.size(); ++split) {
+                WordCounter counter{};
+                const std::string_view text = fixture.text;
+                counter.append(text.substr(0, split));
+                counter.append(text.substr(split));
+                require(counter.finish() == fixture.expected,
+                        "Word and UTF-8 boundaries survive every two-chunk split");
+            }
+            WordCounter single_bytes{};
+            for (std::size_t index = 0; index < fixture.text.size(); ++index)
+                single_bytes.append(std::string_view(fixture.text).substr(index, 1));
+            require(single_bytes.finish() == fixture.expected,
+                    "Word count survives single-byte input chunks");
         }
+        const std::string invalid_words[] = {"\x80",
+                                             "\xc0\xaf",
+                                             "\xe0\x80\x80",
+                                             "\xed\xa0\x80",
+                                             "\xf4\x90\x80\x80",
+                                             "\xf5\x80\x80\x80",
+                                             "\xf0\x9f",
+                                             "\xc2x"};
+        for (const std::string &bytes : invalid_words) {
+            for (std::size_t split = 0; split <= bytes.size(); ++split) {
+                WordCounter counter{};
+                const std::string_view text = bytes;
+                bool refused = false;
+                try {
+                    counter.append("two words ");
+                    counter.append(text.substr(0, split));
+                    counter.append(text.substr(split));
+                    static_cast<void>(counter.finish());
+                } catch (const std::runtime_error &) {
+                    refused = true;
+                }
+                require(refused, "Malformed streamed UTF-8 is refused at every split");
+                refused = false;
+                try {
+                    static_cast<void>(counter.finish());
+                } catch (const std::runtime_error &) {
+                    refused = true;
+                }
+                require(refused, "Failed counter never publishes a partial count");
+            }
+        }
+        WordCounter finished{};
+        finished.append("one");
+        require(finished.finish() == 1 && finished.finish() == 1, "Finished count is stable");
+        bool late_append_refused = false;
+        try {
+            finished.append(" two");
+        } catch (const std::runtime_error &) {
+            late_append_refused = true;
+        }
+        require(late_append_refused, "Finished counter refuses additional input");
         bool malformed_count_refused = false;
         try {
             static_cast<void>(word_count("\xff"));

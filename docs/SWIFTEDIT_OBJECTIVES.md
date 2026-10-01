@@ -79,6 +79,13 @@ an explicit whitespace-run policy, shared by GUI and CLI. It does not mutate
 content, selection, revision or history. Language-specific segmentation remains
 outside this initial policy; paged whole-document counts remain pending.
 
+The shared count now uses a constant-space streaming UTF-8 accumulator. Words
+and partial scalars survive chunk boundaries; malformed, overlong, surrogate,
+out-of-range and truncated sequences fail without publishing a partial count.
+Tests cover every split of representative Unicode text, single-byte chunks and
+failed/finished counter states. This is the counting core only: a cancellable,
+document-stamped paged task and its command/UI integration remain unfinished.
+
 1. Migrate GUI to the session command model with source/display position mapping;
    preserve toolkit ownership and negotiate virtual/paged text rendering.
 2. Native multi-selection, visible controls, scrolling, wildcard slots and the
