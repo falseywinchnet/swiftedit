@@ -180,8 +180,9 @@ int main() {
         }
         set_test_read_only(path, false);
         const std::filesystem::path hard = dir / "hard.txt";
-        const BOOL hardlink_created = CreateHardLinkW(hard.c_str(), path.c_str(), nullptr);
-        require(hardlink_created != FALSE, "Create hardlink fixture");
+        std::error_code hardlink_error{};
+        std::filesystem::create_hard_link(path, hard, hardlink_error);
+        require(!hardlink_error, "Create hardlink fixture");
         {
             bool refused = false;
             try {
