@@ -595,3 +595,9 @@ See PICKER_FILE_LINK_ADOPTION.md. Real relative alias selected via public picker
 controls must open canonicaltarget, save editedbytes and preservealias. It does
 not skip symlinkprivilegefailures. Local20suites passed3.52s,101-file styleclean;
 newprobe executionawaitscorrectedSDK. Provider2d04310 terminalfailure unchanged.
+
+CSV interview detail completed in paint code: warning triangle/exclamation
+beside #ERROR, using existing public Painter primitives and themed text color.
+No source/calculation/tooltip changes. Existing cycle/recovery tests and all20
+local suites passed3.67s;101-file spelling audit clean. Native visual inspection
+pending; no local desktop launched.

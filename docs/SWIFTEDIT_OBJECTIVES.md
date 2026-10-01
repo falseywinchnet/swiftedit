@@ -125,6 +125,12 @@ between formulas. One formula is still synchronous under the existing expression
 dependency-depth and reference-work bounds; this is not full parser preemption.
 See performance/2026-10-01-csv-cooperative for measurements and test scope.
 
+CSV formula failures now display the requested warning triangle with an
+exclamation mark beside #ERROR. The indicator uses native drawing primitives
+and the theme's text color, so it does not require a warning glyph in the font.
+Existing hover error detail and unchanged formula source remain intact. Native
+visual inspection of the indicator is still pending.
+
 Interactive SelectionSet now validates up to 1000 ordered, disjoint source
 ranges against one document identity/revision. Equal source grapheme counts
 permit a single atomic parallel rewrite; unequal counts remain copy-only.

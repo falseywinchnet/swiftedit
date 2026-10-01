@@ -517,7 +517,19 @@ void CsvView::on_paint(gf::Painter &painter, gf::Rect) {
             painter.stroke_rect(rect, style.accent, 2);
         painter.save();
         painter.clip_rect(rect);
-        painter.draw_text_utf8({rect.x + 5, rect.y + 6}, entry.second.text, font, style.text);
+        double text_x = rect.x + 5;
+        if (entry.second.error) {
+            // Draw the warning independently of font glyph coverage. Theme text
+            // keeps it legible on ordinary, selected and high-contrast cells.
+            const double x = rect.x + 5, y = rect.y + 5;
+            painter.draw_line({x + 7, y}, {x + 14, y + 15}, style.text, 1.5);
+            painter.draw_line({x + 14, y + 15}, {x, y + 15}, style.text, 1.5);
+            painter.draw_line({x, y + 15}, {x + 7, y}, style.text, 1.5);
+            painter.fill_rect({x + 6.25, y + 5, 1.5, 5}, style.text);
+            painter.fill_rect({x + 6.25, y + 12, 1.5, 1.5}, style.text);
+            text_x += 20;
+        }
+        painter.draw_text_utf8({text_x, rect.y + 6}, entry.second.text, font, style.text);
         if (entry.second.formula)
             for (int stripe = 0; stripe < 5; ++stripe)
                 painter.draw_line({rect.x + rect.width - 6 + stripe, rect.y + 1 + stripe},
