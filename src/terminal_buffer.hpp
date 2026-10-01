@@ -20,6 +20,7 @@ public:
     std::string selected_text();
     void move(TerminalMotion, bool extend = false, std::size_t rows = 1);
     void select_all();
+    void select_range(SourceRange, DocumentStamp);
     void insert(std::string_view);
     void enter();
     void erase(bool backward);

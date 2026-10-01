@@ -1,5 +1,7 @@
 #include "terminal_row.hpp"
 #include "terminal_page.hpp"
+#include "terminal_search.hpp"
+#include "terminal_query.hpp"
 #include <algorithm>
 #include <iostream>
 #ifdef SWIFTEDIT_TERMINAL_SMOKE
@@ -98,6 +100,13 @@ public:
             offset += written;
         }
     }
+    bool input_ready() const {
+        const DWORD result = WaitForSingleObject(input_, 0);
+        if (result == WAIT_FAILED)
+            throw std::runtime_error("Cannot poll console input.");
+        const bool ready = result == WAIT_OBJECT_0;
+        return ready;
+    }
     INPUT_RECORD read() const {
         INPUT_RECORD input{};
         DWORD count = 0;
@@ -120,10 +129,18 @@ void status_line(std::string &output, std::size_t row, std::string_view source, 
     const std::string safe = swiftedit::escape_field(source);
     output.append(safe, 0, std::min(width, safe.size()));
 }
-enum class Prompt { none, save_path, open_path, exit_choice };
+enum class Prompt { none, save_path, open_path, exit_choice, find };
 class Terminal {
 public:
+#ifdef SWIFTEDIT_TERMINAL_SMOKE
+    std::size_t search_hits() const { return search_hits_; }
+    bool wildcard_enabled() const {
+        const swiftedit::SearchPattern pattern = query_.pattern();
+        return pattern.slots()[0].wildcard;
+    }
+#endif
     void open(const std::filesystem::path &path) {
+        search_.cancel();
         buffer_.open(path);
         pager_.reset(buffer_.session());
         top_ = 0;
@@ -149,6 +166,23 @@ public:
                     console_.write(fallback);
                 }
                 redraw = false;
+            }
+            if (search_.state() == swiftedit::TerminalSearchState::pending) {
+                const swiftedit::TerminalSearchState state = search_.step(buffer_);
+                if (state != swiftedit::TerminalSearchState::pending) {
+#ifdef SWIFTEDIT_TERMINAL_SMOKE
+                    if (state == swiftedit::TerminalSearchState::found)
+                        ++search_hits_;
+#endif
+                    status_ = state == swiftedit::TerminalSearchState::found ? "Found"
+                              : state == swiftedit::TerminalSearchState::not_found
+                                  ? "Not found"
+                                  : "Search cancelled";
+                    redraw = true;
+                    continue;
+                }
+                if (!console_.input_ready())
+                    continue;
             }
             const INPUT_RECORD input = console_.read();
             if (input.EventType == WINDOW_BUFFER_SIZE_EVENT) {
@@ -244,13 +278,16 @@ private:
             message = "Save new file: " + input_ + "  [Enter / Esc]";
         if (prompt_ == Prompt::open_path)
             message = "Open file: " + input_ + "  [Enter / Esc]";
+        if (prompt_ == Prompt::find)
+            message = "Find: " + query_.display() + "  [Ctrl+? wildcard, Enter / Esc]";
         if (prompt_ == Prompt::exit_choice)
             message = "Save changes before exit? Y=Save N=Discard Esc=Cancel";
         status_line(screen, height - 3, message, width_);
         if (prompt_ != Prompt::none && !status_.empty())
             status_line(screen, height - 2, status_, width_);
         else
-            status_line(screen, height - 2, "^S Save  ^R Open  ^X Exit  ^Z Undo  ^Y Redo", width_);
+            status_line(screen, height - 2,
+                        "^S Save  ^W Find  F3 Next  ^R Open  ^X Exit  ^Z Undo  ^Y Redo", width_);
         if (buffer_.session().read_only())
             status_line(screen, height - 1,
                         "Read-only: PgDn Next  PgUp Previous  Ctrl+Home First  ^X Exit", width_);
@@ -289,9 +326,12 @@ private:
         }
         units += value;
         const std::string text = utf8(units);
-        if (prompt_ == Prompt::save_path || prompt_ == Prompt::open_path) {
-            if (input_.size() + text.size() > 32768)
-                throw std::runtime_error("Filename input exceeds 32768 UTF-8 bytes.");
+        if (prompt_ == Prompt::find) {
+            query_.insert(text);
+        } else if (prompt_ == Prompt::save_path || prompt_ == Prompt::open_path) {
+            const std::size_t limit = 32768;
+            if (input_.size() + text.size() > limit)
+                throw std::runtime_error("Prompt input exceeds its UTF-8 byte limit.");
             input_ += text;
         } else
             buffer_.insert(text);
@@ -303,6 +343,12 @@ private:
         const WORD key = event.wVirtualKeyCode;
         if (key != 0 && event.uChar.UnicodeChar < 32)
             high_surrogate_ = 0;
+        if (search_.state() == swiftedit::TerminalSearchState::pending) {
+            search_.cancel();
+            status_ = "Search cancelled";
+            if (key == VK_ESCAPE)
+                return;
+        }
         if (prompt_ != Prompt::none) {
             if (key == VK_ESCAPE) {
                 prompt_ = Prompt::none;
@@ -317,6 +363,23 @@ private:
                     exit_after_save_ = true;
                     save();
                 }
+            } else if (key == VK_RETURN && prompt_ == Prompt::find) {
+                swiftedit::SearchPattern pattern = query_.pattern();
+                search_.begin(buffer_, std::move(pattern));
+                prompt_ = Prompt::none;
+                status_ = "Searching... Escape cancels";
+            } else if (prompt_ == Prompt::find && key == VK_LEFT) {
+                query_.move(false);
+            } else if (prompt_ == Prompt::find && key == VK_RIGHT) {
+                query_.move(true);
+            } else if (prompt_ == Prompt::find && key == VK_HOME) {
+                query_.home();
+            } else if (prompt_ == Prompt::find && key == VK_END) {
+                query_.end();
+            } else if (prompt_ == Prompt::find && key == VK_OEM_2 && ctrl && shift) {
+                query_.toggle();
+            } else if (prompt_ == Prompt::find && (key == VK_BACK || key == VK_DELETE)) {
+                query_.erase(key == VK_BACK);
             } else if (key == VK_RETURN) {
                 if (input_.empty())
                     throw std::runtime_error("Enter a filename or press Escape.");
@@ -356,6 +419,11 @@ private:
         }
         if (ctrl && !alt) {
             switch (key) {
+            case 'W':
+                prompt_ = Prompt::find;
+                query_.end();
+                status_.clear();
+                return;
             case 'X':
                 if (buffer_.session().dirty())
                     prompt_ = Prompt::exit_choice;
@@ -433,6 +501,12 @@ private:
         case VK_TAB:
             buffer_.insert("\t");
             break;
+        case VK_F3: {
+            swiftedit::SearchPattern pattern = query_.pattern();
+            search_.begin(buffer_, std::move(pattern));
+            status_ = "Searching... Escape cancels";
+            break;
+        }
         case VK_F1:
             status_ = "Ctrl+S saves; Ctrl+X asks before discarding. Clipboard is private to this "
                       "terminal.";
@@ -443,9 +517,14 @@ private:
             break;
         }
     }
+#ifdef SWIFTEDIT_TERMINAL_SMOKE
+    std::size_t search_hits_{};
+#endif
     Console console_{};
     swiftedit::TerminalBuffer buffer_{};
     swiftedit::TerminalPager pager_{};
+    swiftedit::TerminalSearch search_{};
+    swiftedit::TerminalQuery query_{};
     Prompt prompt_{Prompt::none};
     std::string input_{}, clipboard_{}, status_{"F1 Help"};
     std::size_t top_{}, left_{}, width_{80}, rows_{20};
@@ -549,6 +628,12 @@ int wmain() {
         enqueue(console.input, 0, 0xd83d);
         enqueue(console.input, 0, 0xde00);
         enqueue(console.input, 'S', 0, LEFT_CTRL_PRESSED);
+        enqueue(console.input, VK_HOME, 0, LEFT_CTRL_PRESSED);
+        enqueue(console.input, 'W', 0, LEFT_CTRL_PRESSED);
+        enqueue(console.input, 'A', L'a');
+        enqueue(console.input, VK_OEM_2, 0, LEFT_CTRL_PRESSED | SHIFT_PRESSED);
+        enqueue(console.input, VK_RETURN, L'\r');
+        enqueue(console.input, VK_END, 0, LEFT_CTRL_PRESSED);
         enqueue(console.input, 'Q', L'q');
         enqueue(console.input, 'X', 0, LEFT_CTRL_PRESSED);
         enqueue(console.input, VK_ESCAPE);
@@ -558,6 +643,9 @@ int wmain() {
             Terminal terminal{};
             if (terminal.run(path) != 0)
                 throw std::runtime_error("Terminal run failed.");
+            if (terminal.search_hits() != 1 || !terminal.wildcard_enabled())
+                throw std::runtime_error(
+                    "Terminal wildcard Find did not publish the expected match.");
         }
         DWORD restored = 0;
         if (!GetConsoleMode(console.input, &restored) || restored != mode)

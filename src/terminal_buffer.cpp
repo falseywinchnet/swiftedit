@@ -152,6 +152,19 @@ void TerminalBuffer::move(TerminalMotion motion, bool extend, std::size_t rows) 
     if (!extend)
         selection_.anchor = next;
 }
+void TerminalBuffer::select_range(SourceRange range, DocumentStamp observed) {
+    const DocumentStamp current = session_.stamp();
+    if (current.identity != observed.identity || current.revision != observed.revision)
+        throw std::runtime_error("Selection refers to an older document.");
+    synchronize();
+    if (range.offset > session_.text().size() ||
+        range.length > session_.text().size() - range.offset ||
+        !(*navigation_).is_grapheme_boundary(gf::Utf8Offset(range.offset)) ||
+        !(*navigation_).is_grapheme_boundary(gf::Utf8Offset(range.offset + range.length)))
+        throw std::runtime_error("Selection must contain whole source graphemes.");
+    selection_ = {range.offset, range.offset + range.length};
+    desired_column_.reset();
+}
 void TerminalBuffer::select_all() {
     synchronize();
     selection_ = {0, session_.text().size()};

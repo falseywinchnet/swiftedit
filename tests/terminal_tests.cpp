@@ -1,6 +1,8 @@
 #include "terminal_buffer.hpp"
 #include "terminal_row.hpp"
 #include "terminal_page.hpp"
+#include "terminal_search.hpp"
+#include "terminal_query.hpp"
 #include <iostream>
 #include <fstream>
 #include <windows.h>
@@ -213,6 +215,57 @@ int main() {
         }
         check(incomplete_refused && huge_cluster.read_only(),
               "Oversized unknown grapheme is explicit unavailable, never sliced");
+        terminal.reset(true);
+        terminal.insert("one axc two abc");
+        terminal.move(swiftedit::TerminalMotion::document_start);
+        swiftedit::SearchPattern flagged("a?c");
+        flagged.toggle(1);
+        swiftedit::TerminalSearch search{};
+        search.begin(terminal, flagged, true);
+        std::size_t steps = 0;
+        while (search.state() == swiftedit::TerminalSearchState::pending && steps < 1000) {
+            static_cast<void>(search.step(terminal, 1));
+            ++steps;
+        }
+        check(steps > 1 && search.state() == swiftedit::TerminalSearchState::found &&
+                  terminal.selected_text() == "axc",
+              "Incremental terminal search selects flagged grapheme match");
+        search.begin(terminal, swiftedit::SearchPattern("one"));
+        for (std::size_t i = 0;
+             i < 100 && search.state() == swiftedit::TerminalSearchState::pending; ++i)
+            static_cast<void>(search.step(terminal, 4));
+        check(search.state() == swiftedit::TerminalSearchState::found &&
+                  terminal.selected_text() == "one",
+              "Terminal Find wraps at end of document");
+        search.begin(terminal, swiftedit::SearchPattern("missing"));
+        terminal.move(swiftedit::TerminalMotion::right);
+        check(search.step(terminal) == swiftedit::TerminalSearchState::cancelled,
+              "Moving selection revokes deferred search publication");
+        search.begin(terminal, swiftedit::SearchPattern("abc"));
+        terminal.insert("changed");
+        check(search.step(terminal) == swiftedit::TerminalSearchState::cancelled,
+              "Editing source revokes deferred search publication");
+        search.begin(terminal, swiftedit::SearchPattern("missing"));
+        search.cancel();
+        check(search.step(terminal) == swiftedit::TerminalSearchState::cancelled,
+              "Explicit cancellation cannot publish a later match");
+        swiftedit::TerminalQuery query{};
+        query.insert("a?c");
+        query.move(false);
+        query.move(false);
+        query.toggle();
+        check(query.text() == "a?c" && query.pattern().slots()[1].wildcard,
+              "Terminal wildcard flag leaves punctuation source intact");
+        query.home();
+        query.insert("X");
+        check(query.pattern().slots()[2].wildcard,
+              "Unchanged suffix retains wildcard flag after query insertion");
+        query.end();
+        query.erase(true);
+        check(query.text() == "Xa?" && query.pattern().slots()[2].wildcard,
+              "Query grapheme deletion preserves other flags");
+        query.toggle();
+        check(!query.pattern().slots()[2].wildcard, "Toggle at query end addresses last slot");
         std::cout << "Terminal navigation and shared edit tests passed.\n";
         return 0;
     } catch (const std::exception &failure) {

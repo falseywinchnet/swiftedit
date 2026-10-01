@@ -99,3 +99,11 @@ unproven grapheme, literal label continuation and exact full-row/newline state.
 Thirteen suites and extended native console smoke pass. Largefile readonly
 selection/copy and granular navigation remain; wrap/search/wildcard plus final
 latency/GUI/provider work still outstanding. docs/TERMINAL.md tracks limits.
+
+2026-10-01 terminal search checkpoint: terminal_search.* and terminal_query.*
+provide bounded Find/Next, wrapping, stamped selection publication/cancellation,
+grapheme query editing and literal-preserving wildcard flags (CtrlShiftOEM2).
+Thirteen suites and extended owned-console smoke passed. Native production host
+routes query input to TerminalQuery, not filename input. Search currently valid
+UTF8 editable-only; snapshot preparation remains synchronous. Replace controls,
+wrap, large-file selection/search, clipboard/save parity and finalperf unfinished.

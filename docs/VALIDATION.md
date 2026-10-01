@@ -476,3 +476,27 @@ save refusal, unchanged file size/mtime and restored console mode. Binary hash:
 Log: `.build/swiftedit-resumed/console-20261001-023352.stdout.txt`.
 No running test process remains. No visual geometry, physical keyboard,
 accessibility or latency guarantee follows from these correctness tests.
+
+## Terminal Find and flagged query - 2026-10-01
+
+Ctrl+W query editing/F3 Find Next now use PatternScan with bounded 4096-work
+steps and console input polling between steps. TerminalSearch validates source
+identity/revision and original selection before publication. TerminalQuery edits
+graphemes, preserves unchanged-slot flags, and toggles wildcard slots without
+changing literal query text. Query has a 4096-byte bound. Headless coverage:
+one-unit scan stepping, wrap, source/selection cancellation, explicit cancellation,
+literal punctuation flags, prefix/suffix retention and deletion.
+
+Thirteen suites passed in 2.02 s; spelling findings zero across 58 authored files.
+Semantic review covered prepared query publication, borrowed source lifetime,
+scan cancellation, immutable snapshots and stamped selection endpoints.
+
+Native private-console smoke exited 0 with an added Ctrl+W/query/Ctrl+Shift+OEM2/
+Enter sequence and explicit assertions for wildcard state and one published
+match. Smoke binary SHA-256:
+`810E0E88CAAA8D1CAFCE905E4EE7ED2C3CC528C246840F2A0C6DF6428D503DBA`.
+Log: `.build/swiftedit-resumed/console-20261001-024032.stdout.txt`.
+This verifies owned console virtual-key dispatch, not physical keyboard layouts,
+visual quality, accessibility or latency. Large-file/malformed-byte search and
+terminal replacement controls remain. Snapshot construction is synchronous and
+must be included in the final measured responsiveness audit.

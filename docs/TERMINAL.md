@@ -14,6 +14,8 @@ buffer when it exits normally or unwinds an exception.
 | Typing, Enter, Tab | Replace selection or insert text |
 | Backspace/Delete | Delete one complete grapheme or selection |
 | Ctrl+S | Save; unnamed documents prompt for a new filename |
+| Ctrl+W / F3 | Edit Find query / find next, wrapping at EOF |
+| Ctrl+? in Find | Toggle one grapheme wildcard at the query caret, or last slot at query end |
 | Ctrl+R | Open; unsaved changes must first be saved |
 | Ctrl+X | Exit, with Save/Discard/Cancel when dirty |
 | Ctrl+Z / Ctrl+Y | Undo/redo, bounded by last successful save |
@@ -40,7 +42,7 @@ are reported unavailable, preserving the source. Read-only range selection/copy
 and more granular line navigation still need implementation.
 
 This executable is unfinished. Wrap preferences,
-search/replace/wildcard controls, text-copy prompt, full conflict review, external
+Replace controls, text-copy prompt, full conflict review, external
 clipboard integration and further interactive/accessibility checks remain.
 An internal cut containing malformed UTF-8 cannot yet be pasted back through
 Session's valid-insertion rule; Undo still restores it. Long logical lines and
@@ -53,3 +55,15 @@ press/release records only into that console, and uses disposable files. Run
 only in a coordinated desktop slot with a 20-second external process deadline.
 It verifies source results and mode restoration; it does not prove pixel layout,
 physical keyboard behavior, accessibility, or responsiveness.
+
+
+Find uses the shared flagged-grapheme search engine. Punctuation is literal until
+its slot is flagged; `[wild]` in the prompt is a display label, not query syntax.
+Left/Right, Home/End and Backspace/Delete edit the query at grapheme boundaries.
+Ctrl+? means Ctrl+Shift+slash on the currently tested Windows virtual-key path.
+Enter searches, F3 searches again, Escape or another key cancels pending work.
+Search selection publication checks document identity/revision and original
+selection; stale work cannot move the caret. The scan yields after 4096 work
+units to service input. Snapshot preparation remains synchronous. Search currently
+requires editable valid UTF-8 source; large readonly/malformed-byte search remains
+unfinished. Case-insensitive matching currently folds ASCII only.
