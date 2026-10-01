@@ -251,3 +251,18 @@ DocumentStamp must invalidate retained geometry. Bound retained navigation data
 and yield/cancel slow preparation; current first-use TerminalBuffer Unicode
 metadata still rebuilds synchronously and is not made interruptible by this core.
 Then coordinate the owned-console smoke and measure wrapped navigation/resize.
+
+Verified follow-up: c993209 native run 36855505707 completed successfully on
+Windows, Linux and Apple silicon macOS, including Mac packaging.
+
+Wrapped navigation now has terminal_wrap_source for display-cell to source-caret
+mapping, and TerminalBuffer::move_to for revision/identity-checked application
+with anchor-preserving extension. Tabs, wide glyphs and labels map atomically;
+past-row cells clamp to the last caret owned by that row (soft boundaries belong
+to the next row). Tests sweep every display column in the layout fixtures and
+verify that the resulting caret is painted in the requested row, preserve
+backwards/across-anchor selections, and reject stale or split-grapheme positions.
+All 17 headless suites passed in 2.37s; the expanded column sweep passed afterward.
+The 74-file spelling audit was clean. These operations are not yet wired into
+the console viewport or keys; the integration and responsiveness work above
+remain required. No new native desktop launch was performed locally.

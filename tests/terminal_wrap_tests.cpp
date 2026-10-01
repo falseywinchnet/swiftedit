@@ -24,6 +24,20 @@ void verify(swiftedit::TerminalBuffer &buffer, std::size_t line, std::size_t wid
               "Wrapped row differs from expected word/grapheme boundary");
         check(row.span.logical_end || row.span.source.length != 0,
               "A continuing visual row must make source progress");
+        const swiftedit::TerminalSelection original_selection = buffer.selection();
+        for (std::size_t column = 0; column <= width; ++column) {
+            const std::size_t target =
+                swiftedit::terminal_wrap_source(buffer, line, offset, width, column);
+            check(target >= offset && target <= offset + row.span.source.length,
+                  "Display hit testing must stay within the source row");
+            buffer.move_to(target, stamp);
+            const swiftedit::TerminalWrappedRow mapped =
+                swiftedit::terminal_wrapped_row(buffer, line, offset, width);
+            check(mapped.display.caret_column.has_value(),
+                  "Each mapped caret must actually belong to the requested visual row");
+        }
+        buffer.move_to(original_selection.anchor, stamp);
+        buffer.move_to(original_selection.caret, stamp, true);
         for (const swiftedit::TerminalRun &run : row.display.runs) {
             check(run.column + run.cells <= width, "Rendered run exceeds viewport");
             check(run.source.offset >= offset &&
@@ -50,7 +64,38 @@ int main() {
         buffer.insert("one two three");
         verify(buffer, 0, 8, {"one two ", "three"});
         verify(buffer, 0, 6, {"one ", "two ", "three"});
+        check(swiftedit::terminal_wrap_source(buffer, 0, 0, 6, 5) == 3,
+              "Past a soft wrap stays at the last caret owned by that row");
+        check(swiftedit::terminal_wrap_source(buffer, 0, 8, 6, 100) == 13,
+              "Past the final row maps to the logical end");
+        const swiftedit::DocumentStamp navigation_stamp = buffer.session().stamp();
+        buffer.move_to(8, navigation_stamp);
+        buffer.move_to(4, navigation_stamp, true);
+        buffer.move_to(0, navigation_stamp, true);
+        check(buffer.selection().anchor == 8 && buffer.selection().caret == 0,
+              "Repeated backwards visual moves preserve the selection anchor");
+        buffer.move_to(10, navigation_stamp, true);
+        check(buffer.selection().anchor == 8 && buffer.selection().caret == 10,
+              "Visual movement can cross the original anchor");
+        buffer.move_to(13, navigation_stamp);
+        buffer.insert("!");
+        bool stale_refused = false;
+        try {
+            buffer.move_to(0, navigation_stamp, true);
+        } catch (const std::exception &) {
+            stale_refused = true;
+        }
+        check(stale_refused && buffer.selection().anchor == 14 && buffer.selection().caret == 14,
+              "Layout from before an edit cannot change selection");
+        const swiftedit::DocumentStamp old_identity = buffer.session().stamp();
         buffer.reset(true);
+        bool identity_refused = false;
+        try {
+            buffer.move_to(0, old_identity);
+        } catch (const std::exception &) {
+            identity_refused = true;
+        }
+        check(identity_refused, "Layout from a different document is refused");
         buffer.insert("abcdef");
         verify(buffer, 0, 3, {"abc", "def", ""});
         buffer.move(swiftedit::TerminalMotion::document_end);
@@ -61,10 +106,26 @@ int main() {
         buffer.reset(true);
         buffer.insert("a\tb");
         verify(buffer, 0, 4, {"a\t", "b"});
+        check(swiftedit::terminal_wrap_source(buffer, 0, 0, 4, 2) == 1,
+              "Inside a tab maps to its source start");
         buffer.reset(true);
         buffer.insert("e\xcc\x81\xe7\x95\x8c");
         verify(buffer, 0, 2, {"e\xcc\x81", "\xe7\x95\x8c", ""});
         verify(buffer, 0, 1, {"e\xcc\x81", "\xe7\x95\x8c", ""});
+        check(swiftedit::terminal_wrap_source(buffer, 0, 3, 2, 1) == 3,
+              "Inside a wide character maps to its source start");
+        check(swiftedit::terminal_wrap_source(buffer, 0, 6, 2, 50) == 6,
+              "Empty full-width continuation owns the end position");
+        const swiftedit::TerminalSelection before_invalid = buffer.selection();
+        bool invalid_move_refused = false;
+        try {
+            buffer.move_to(1, buffer.session().stamp(), true);
+        } catch (const std::exception &) {
+            invalid_move_refused = true;
+        }
+        check(invalid_move_refused && buffer.selection().anchor == before_invalid.anchor &&
+                  buffer.selection().caret == before_invalid.caret,
+              "A move inside a combining grapheme leaves selection unchanged");
         bool refused = false;
         try {
             static_cast<void>(swiftedit::terminal_wrap_span(buffer, 0, 1, 5));

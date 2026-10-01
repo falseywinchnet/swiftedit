@@ -119,6 +119,25 @@ TerminalWrappedRow terminal_wrapped_row(TerminalBuffer &buffer, std::size_t line
         result.display.caret_column.reset();
     return result;
 }
+std::size_t terminal_wrap_source(TerminalBuffer &buffer, std::size_t line, std::size_t start,
+                                 std::size_t width, std::size_t column) {
+    const TerminalWrapSpan span = terminal_wrap_span(buffer, line, start, width);
+    const std::string &source = buffer.session().text();
+    const std::size_t end = span.source.offset + span.source.length;
+    std::size_t offset = start, cells = 0, last = start;
+    while (offset < end) {
+        const SourceRange grapheme = buffer.grapheme_range(offset);
+        const std::string_view bytes(source.data() + offset, grapheme.length);
+        const TerminalGlyph glyph = terminal_glyph(bytes, cells);
+        if (column < cells + glyph.cells)
+            return offset;
+        last = offset;
+        cells += glyph.cells;
+        offset += grapheme.length;
+    }
+    const std::size_t result = span.logical_end ? end : last;
+    return result;
+}
 TerminalRow terminal_row(TerminalBuffer &buffer, std::size_t line, std::size_t first_column,
                          std::size_t width) {
     validate_view(first_column, width);

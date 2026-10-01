@@ -20,6 +20,11 @@ public:
     SourceRange selected_range();
     std::string selected_text();
     void move(TerminalMotion, bool extend = false, std::size_t rows = 1);
+    // Apply a layout-derived source position only to the observed document.
+    // Invalid/stale positions are never applied; normal lazy synchronization
+    // may first repair an existing selection after an edit. Extend retains
+    // the current anchor, including a backwards selection.
+    void move_to(std::size_t source_offset, DocumentStamp, bool extend = false);
     void select_all();
     void select_range(SourceRange, DocumentStamp);
     void insert(std::string_view);

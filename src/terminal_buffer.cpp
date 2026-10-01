@@ -153,6 +153,19 @@ void TerminalBuffer::move(TerminalMotion motion, bool extend, std::size_t rows) 
     if (!extend)
         selection_.anchor = next;
 }
+void TerminalBuffer::move_to(std::size_t source_offset, DocumentStamp observed, bool extend) {
+    const DocumentStamp current = session_.stamp();
+    if (current.identity != observed.identity || current.revision != observed.revision)
+        throw std::runtime_error("Caret position refers to an older document.");
+    synchronize();
+    if (source_offset > session_.text().size() ||
+        !(*navigation_).is_grapheme_boundary(gf::Utf8Offset(source_offset)))
+        throw std::runtime_error("Caret position must be a source grapheme boundary.");
+    selection_.caret = source_offset;
+    if (!extend)
+        selection_.anchor = source_offset;
+    desired_column_.reset();
+}
 void TerminalBuffer::select_range(SourceRange range, DocumentStamp observed) {
     const DocumentStamp current = session_.stamp();
     if (current.identity != observed.identity || current.revision != observed.revision)
