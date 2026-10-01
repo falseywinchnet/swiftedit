@@ -47,6 +47,8 @@ void Editor::WindowClosing::operator()(gf::HostCloseRequest &request) const {
         editor.after_save_ = Continuation::none;
         return;
     }
+    if (kind == WindowKind::find)
+        editor.cancel_search();
     editor.focus_text();
 }
 void Editor::PickerListener::operator()(const file_manager::DocumentPickerResult &result) const {

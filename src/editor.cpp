@@ -20,6 +20,7 @@ Editor::~Editor() {
     subscriptions_.clear();
 }
 void Editor::on_dispose() noexcept {
+    cancel_search();
     after_save_ = Continuation::none;
     close_authorized_ = false;
     accelerators_.clear();
@@ -44,8 +45,10 @@ void Editor::CommandListener::operator()(const gf::CommandInvocation &) const {
 }
 void Editor::TextListener::operator()(const std::string &) const {
     const std::shared_ptr<Editor> self = lock_alive(owner);
-    if (self)
+    if (self) {
+        (*self).cancel_search();
         (*self).refresh();
+    }
 }
 void Editor::SelectionListener::operator()(const gf::TextSelection &) const {
     const std::shared_ptr<Editor> self = lock_alive(owner);
@@ -85,6 +88,7 @@ void Editor::continue_operation(Continuation next) {
     case Continuation::none:
         break;
     case Continuation::new_document:
+        cancel_search();
         show_markdown(false);
         show_csv(false);
         document_ = {};
@@ -115,6 +119,7 @@ void Editor::button_action(ButtonAction action) {
         replace_every();
         break;
     case ButtonAction::close_find:
+        cancel_search();
         close_dialog(find_);
         break;
     case ButtonAction::close_font:
@@ -386,6 +391,7 @@ void Editor::open_file(const std::filesystem::path &source) {
     show_markdown(false);
     show_csv(false);
     (*text_).set_text(next.saved_text);
+    cancel_search();
     document_ = std::move(next);
     (*text_).set_newline_sequence(preferred_newline(document_.saved_text));
     (*text_).select(gf::Utf8Offset(0), gf::Utf8Offset(0));
@@ -655,28 +661,74 @@ void Editor::show_find() {
     if (find_.window)
         (*find_.window).request_focus(query_);
 }
+Editor::FindWork::FindWork(std::string_view source, swiftedit::SearchPattern pattern,
+                           std::size_t start, bool sensitive)
+    : scan(source, std::move(pattern), start, sensitive), match_case(sensitive) {}
+void Editor::cancel_search() {
+    search_frame_.disconnect();
+    search_.reset();
+}
+void Editor::on_frame(gf::FrameTime) {
+    if (!search_)
+        return;
+    try {
+        advance_search();
+    } catch (const std::exception &failure) {
+        cancel_search();
+        (*find_status_).set_text(failure.what());
+    }
+}
 void Editor::find_next() {
+    cancel_search();
     if ((*query_).text().empty()) {
         (*find_status_).set_text("Enter the text to find; flag unknown characters as wildcards.");
         return;
     }
     const swiftedit::SearchPattern pattern = (*query_).pattern();
-    const gf::TextStore source((*text_).text());
-    std::optional<swiftedit::SourceRange> found = swiftedit::find_pattern(
-        source, pattern, (*text_).selection().end().value(), (*match_case_).checked());
-    bool wrapped = false;
-    if (!found) {
-        found = swiftedit::find_pattern(source, pattern, 0, (*match_case_).checked());
-        wrapped = true;
-    }
-    if (!found) {
-        (*find_status_).set_text("Text not found.");
+    std::unique_ptr<FindWork> work = std::make_unique<FindWork>(
+        (*text_).text(), pattern, (*text_).selection().end().value(), (*match_case_).checked());
+    (*work).source_revision = counted_text_.revision();
+    (*work).query_revision = (*query_).revision();
+    (*work).selection = (*text_).selection();
+    search_ = std::move(work);
+    advance_search();
+}
+void Editor::advance_search() {
+    if (!search_)
+        return;
+    FindWork &work = *search_;
+    if (work.source_revision != counted_text_.revision() ||
+        work.query_revision != (*query_).revision() || work.selection != (*text_).selection() ||
+        work.match_case != (*match_case_).checked()) {
+        cancel_search();
+        (*find_status_)
+            .set_text("Search cancelled because the document, selection or query changed.");
         return;
     }
-    (*text_).select(gf::Utf8Offset((*found).offset),
-                    gf::Utf8Offset((*found).offset + (*found).length));
-    (*find_status_).set_text(wrapped ? "Found (wrapped to beginning)." : "Found.");
-    refresh();
+    swiftedit::SearchProgress progress = work.scan.step(4096);
+    if (!progress.match && progress.complete && !work.wrapped) {
+        work.scan.restart();
+        work.wrapped = true;
+        progress = work.scan.step(4096);
+    }
+    if (progress.match) {
+        const swiftedit::SourceRange found = *progress.match;
+        const bool wrapped = work.wrapped;
+        cancel_search();
+        (*text_).select(gf::Utf8Offset(found.offset), gf::Utf8Offset(found.offset + found.length));
+        (*find_status_).set_text(wrapped ? "Found (wrapped to beginning)." : "Found.");
+        refresh();
+    } else if (progress.complete) {
+        cancel_search();
+        (*find_status_).set_text("Text not found.");
+    } else if (window()) {
+        (*find_status_).set_text("Searching... Close Find or change the query to cancel.");
+        const gf::FrameTime deadline = gf::FrameClock::now() + std::chrono::milliseconds(1);
+        search_frame_ = (*window()).schedule_paint(shared_from_this(), deadline);
+    } else {
+        cancel_search();
+        (*find_status_).set_text("Search requires an attached window.");
+    }
 }
 void Editor::replace_one() {
     if ((*query_).text().empty()) {
@@ -686,8 +738,9 @@ void Editor::replace_one() {
     const std::string selected = (*text_).selected_text();
     const gf::TextStore source(selected);
     const swiftedit::SearchPattern pattern = (*query_).pattern();
-    const std::optional<swiftedit::SourceRange> match =
-        swiftedit::find_pattern(source, pattern, 0, (*match_case_).checked());
+    const swiftedit::SearchProgress progress =
+        swiftedit::search_slice(source, pattern, 0, 1, (*match_case_).checked());
+    const std::optional<swiftedit::SourceRange> match = progress.match;
     if (match && (*match).offset == 0 && selected.size() == (*match).length)
         (*text_).replace_selection((*replacement_).text());
     find_next();

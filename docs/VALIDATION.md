@@ -207,3 +207,22 @@ returns unknown for VK_OEM_2. Provider received that finding and owns normalizat
 changes for a future matched SDK. Native keyboard/focus/IME and semantic accessibility
 validation remain pending. Search scanning still runs synchronously through its
 slices; interruptible UI orchestration and final lag measurements remain required.
+
+## 2026-10-01 cooperative Find Next
+
+PatternScan owns its source/query snapshot and resumes inside a candidate or literal
+UTF-8 grapheme. Its work budget charges byte comparisons, so a long shared prefix
+cannot evade the slice bound. Find Next processes 4096 operations per slice (up to
+two slices when wrapping), then schedules a frame callback. No growing callback
+queue is created. A source edit/open/reset, query flag/text change, case change,
+caret movement, Find close or editor disposal cancels work before publishing a
+selection. Single Replace now tests only the selected candidate, avoiding a search
+through the rest of a mismatching selection.
+
+Tests cover yielding mid-candidate and mid-UTF-8 sequence, adversarial repeated
+prefixes, restart state, and cancellation via the actual Window frame scheduler
+after query/caret changes. Full eight-suite run passed in 1.72 s; after the last
+cancellation refinements, affected display/editor suites passed in 0.17 s. Spelling
+audit zero findings in 32 authored files. Snapshot preparation and final publication
+still require measured latency evidence; Replace All orchestration remains a
+separate unfinished synchronous path.

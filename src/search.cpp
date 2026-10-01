@@ -22,6 +22,11 @@ void SearchPattern::toggle(std::size_t slot) {
     slots_[slot].wildcard = !slots_[slot].wildcard;
 }
 namespace {
+std::string_view checked_source(std::string_view source) {
+    if (source.size() >= editable_limit)
+        throw std::runtime_error("Search snapshot exceeds editable document limit.");
+    return source;
+}
 unsigned char fold(unsigned char value) {
     if (value >= 'A' && value <= 'Z') {
         const unsigned char folded = static_cast<unsigned char>(value + ('a' - 'A'));
@@ -45,6 +50,71 @@ bool equal_text(std::string_view left, std::string_view right, bool match_case) 
     return true;
 }
 } // namespace
+PatternScan::PatternScan(std::string_view source, SearchPattern pattern, std::size_t byte_start,
+                         bool match_case)
+    : source_(checked_source(source)), pattern_(std::move(pattern)), match_case_(match_case) {
+    candidate_ = source_.grapheme_index(gui_forms::Utf8Offset(byte_start)).value();
+}
+void PatternScan::restart() {
+    candidate_ = 0;
+    slot_ = 0;
+    byte_ = 0;
+}
+SearchProgress PatternScan::step(std::size_t work_budget) {
+    if (!work_budget || work_budget > 65536)
+        throw std::runtime_error("Search work budget must be 1..65536 operations.");
+    const std::vector<SearchSlot> &slots = pattern_.slots();
+    const std::size_t count = source_.grapheme_count().value();
+    SearchProgress result{};
+    std::size_t work = 0;
+    while (slots.size() <= count && candidate_ <= count - slots.size() && work < work_budget) {
+        const SearchSlot &slot = slots[slot_];
+        bool mismatch = false;
+        ++work;
+        if (slot.wildcard) {
+            ++slot_;
+        } else {
+            const gui_forms::Utf8Range range =
+                source_.grapheme_range(gui_forms::GraphemeIndex(candidate_ + slot_));
+            const std::size_t length = range.end.value() - range.start.value();
+            if (length != slot.literal.size()) {
+                mismatch = true;
+            } else {
+                unsigned char actual =
+                    static_cast<unsigned char>(source_.utf8()[range.start.value() + byte_]);
+                unsigned char expected = static_cast<unsigned char>(slot.literal[byte_]);
+                if (!match_case_) {
+                    actual = fold(actual);
+                    expected = fold(expected);
+                }
+                mismatch = actual != expected;
+                ++byte_;
+                if (byte_ == length) {
+                    byte_ = 0;
+                    ++slot_;
+                }
+            }
+        }
+        if (mismatch) {
+            ++candidate_;
+            slot_ = 0;
+            byte_ = 0;
+        } else if (slot_ == slots.size()) {
+            const gui_forms::Utf8Offset first =
+                source_.utf8_offset(gui_forms::GraphemeIndex(candidate_));
+            const gui_forms::Utf8Offset end =
+                source_.utf8_offset(gui_forms::GraphemeIndex(candidate_ + slots.size()));
+            result.match = SourceRange{first.value(), end.value() - first.value()};
+            ++candidate_;
+            slot_ = 0;
+            byte_ = 0;
+            break;
+        }
+    }
+    result.next_grapheme = candidate_;
+    result.complete = slots.size() > count || candidate_ > count - slots.size();
+    return result;
+}
 SearchProgress search_slice(const gui_forms::TextStore &source, const SearchPattern &pattern,
                             std::size_t start_grapheme, std::size_t budget, bool match_case) {
     if (!budget || budget > 65536)

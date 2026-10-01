@@ -36,9 +36,11 @@ Native desktop interaction and final performance claims remain unverified.
 Wildcard follow-through remains: Windows host slash/question normalization is
 missing from the consumed SDK; Ctrl+Shift+slash is tested with normalized events
 only, and provider has the native fix request. Native focus/IME/accessibility and
-query-flag undo semantics require review. Search/Replace All orchestration still
-drains bounded search slices synchronously; cooperative cancellation/yield is
-required before the final responsiveness gate. Do not count this as complete
+query-flag undo semantics require review. Find Next now yields through the frame
+scheduler with a byte-comparison work budget and cancels stale work. Replace All
+still drains search slices synchronously; cooperative cancellation/yield there is
+required before the final responsiveness gate. Snapshot preparation also needs
+measurement. Do not count this as complete
 terminal wildcard support or a completed search latency scan.
 
 Provider work is coordinated with the GUI.Forms owner and Orchestrator registry

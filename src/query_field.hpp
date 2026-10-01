@@ -14,6 +14,7 @@ public:
     void set_text(std::string);
     std::string_view text() const;
     swiftedit::SearchPattern pattern() const;
+    std::uint64_t revision() const { return revision_; }
     void select(gf::Utf8Offset, gf::Utf8Offset);
     void toggle_slot(std::size_t);
     void on_paint(gf::Painter &, gf::Rect) override;
@@ -40,6 +41,7 @@ private:
     gf::SubscriptionToken changed_{};
     std::optional<std::size_t> hovered_{};
     double scroll_{};
+    std::uint64_t revision_{1};
     bool focused_{}, dragging_{}, layout_dirty_{true};
 };
 } // namespace notepad

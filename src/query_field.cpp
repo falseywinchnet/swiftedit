@@ -54,6 +54,7 @@ void QueryField::synchronize() {
     }
     store_ = std::move(next);
     slots_ = std::move(slots);
+    ++revision_;
     hovered_.reset();
     layout_dirty_ = true;
     invalidate(gf::Dirty::paint);
@@ -73,6 +74,7 @@ void QueryField::toggle_slot(std::size_t slot) {
     if (slot >= slots_.size())
         return;
     slots_[slot].wildcard = !slots_[slot].wildcard;
+    ++revision_;
     layout_dirty_ = true;
     invalidate(gf::Dirty::paint);
 }

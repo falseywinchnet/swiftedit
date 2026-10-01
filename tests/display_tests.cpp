@@ -118,6 +118,32 @@ int main() {
             growth_refused = true;
         }
         check(growth_refused, "Replacement refuses excess output growth");
+        std::string repeated(1024, 'a');
+        repeated += 'b';
+        std::string long_query(127, 'a');
+        long_query += 'b';
+        swiftedit::PatternScan scan(repeated, swiftedit::SearchPattern(long_query), 0, true);
+        swiftedit::SearchProgress progress = scan.step(1);
+        check(!progress.match && !progress.complete && progress.next_grapheme == 0,
+              "Work budget can yield inside a partly matched candidate");
+        std::size_t turns = 0;
+        while (!progress.match && !progress.complete && turns < 1000) {
+            progress = scan.step(256);
+            ++turns;
+        }
+        check(progress.match && (*progress.match).offset == 897 && turns > 100,
+              "Resumed adversarial search makes bounded progress without losing a candidate");
+        scan.restart();
+        const swiftedit::SearchProgress restarted = scan.step(1);
+        check(!restarted.match && restarted.next_grapheme == 0,
+              "Restart clears partial comparison state");
+        swiftedit::PatternScan unicode_scan("e\xcc\x81", swiftedit::SearchPattern("e\xcc\x81"), 0,
+                                            true);
+        check(!unicode_scan.step(1).match && !unicode_scan.step(1).match,
+              "Literal comparisons also yield inside a multibyte grapheme");
+        const swiftedit::SearchProgress unicode_finished = unicode_scan.step(1);
+        check(unicode_finished.match && (*unicode_finished.match).length == 3,
+              "Resumed literal byte comparison preserves the complete grapheme");
         std::cout << "Display mapping and atomic source-range tests passed.\n";
         return 0;
     } catch (const std::exception &failure) {

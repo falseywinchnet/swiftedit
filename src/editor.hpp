@@ -38,6 +38,8 @@ public:
     static constexpr bool initialize_tree_after_construction = true;
     void initialize_control_tree();
     void arrange(gf::Rect bounds) override;
+    void on_frame(gf::FrameTime) override;
+    bool search_pending() const { return static_cast<bool>(search_); }
     std::vector<gf::ApplicationWindow> application_windows(const std::filesystem::path &initial);
     void execute(const std::string &command);
     // Same entrypoints are used by the shell and deterministic consumer tests.
@@ -148,6 +150,8 @@ private:
     void hide_picker(bool save_as);
     void show_find();
     void find_next();
+    void advance_search();
+    void cancel_search();
     void replace_one();
     void replace_every();
     void build_find();
@@ -181,6 +185,15 @@ private:
     // UI-thread-owned Unicode metadata, reused across selection-only refreshes.
     gf::TextStore counted_text_{};
     std::size_t character_count_{};
+    struct FindWork {
+        swiftedit::PatternScan scan;
+        std::uint64_t source_revision{}, query_revision{};
+        gf::TextSelection selection{};
+        bool match_case{}, wrapped{};
+        FindWork(std::string_view, swiftedit::SearchPattern, std::size_t, bool);
+    };
+    std::unique_ptr<FindWork> search_{};
+    gf::FrameRequestToken search_frame_{};
 };
 std::string path_utf8(const std::filesystem::path &);
 } // namespace notepad

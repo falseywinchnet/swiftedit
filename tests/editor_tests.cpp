@@ -301,6 +301,24 @@ int main() {
               "GUI wildcard consumes one combining grapheme");
         (*editor).execute("find-next");
         check((*text).selected_text() == "a?c", "Wildcard skips two-character gap and wraps");
+        std::string repeated_line(4000, 'a');
+        (*text).set_text(repeated_line);
+        (*text).select(gf::Utf8Offset(0), gf::Utf8Offset(0));
+        (*query).set_text(std::string(127, 'a') + "b");
+        (*editor).execute("find-next");
+        check((*editor).search_pending(), "Adversarial Find yields with scheduled work pending");
+        (*query).toggle_slot(0);
+        static_cast<void>(
+            window.poll_frame_schedule(gf::FrameClock::now() + std::chrono::seconds(1)));
+        check(!(*editor).search_pending() && (*text).selection().empty(),
+              "Query flag change cancels pending Find without publishing stale selection");
+        (*editor).execute("find-next");
+        check((*editor).search_pending(), "Restarted search is scheduled");
+        (*text).select(gf::Utf8Offset(1), gf::Utf8Offset(1));
+        static_cast<void>(
+            window.poll_frame_schedule(gf::FrameClock::now() + std::chrono::seconds(1)));
+        check(!(*editor).search_pending() && (*text).selection().caret.value() == 1,
+              "Moving the caret cancels pending search without overriding navigation");
         std::cout << "Editor headless tests passed: native control input routing, CRLF, menu "
                      "edit/save, undo boundary, mixed endings, oversized-line refusal.\n";
         return 0;
