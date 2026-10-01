@@ -91,4 +91,42 @@ SearchProgress search_slice(const gui_forms::TextStore &source, const SearchPatt
     result.complete = result.next_grapheme > last_candidate;
     return result;
 }
+std::optional<SourceRange> find_pattern(const gui_forms::TextStore &source,
+                                        const SearchPattern &pattern, std::size_t byte_start,
+                                        bool match_case) {
+    const gui_forms::Utf8Offset start(byte_start);
+    std::size_t next = source.grapheme_index(start).value();
+    for (;;) {
+        const SearchProgress progress = search_slice(source, pattern, next, 64, match_case);
+        if (progress.match || progress.complete)
+            return progress.match;
+        next = progress.next_grapheme;
+    }
+}
+PatternReplacement replace_pattern(const gui_forms::TextStore &source, const SearchPattern &pattern,
+                                   std::string_view replacement, bool match_case,
+                                   std::size_t maximum_bytes) {
+    const gui_forms::TextStore validated(replacement);
+    static_cast<void>(validated);
+    PatternReplacement result{};
+    const std::string_view text = source.utf8();
+    std::size_t copied = 0;
+    while (copied < text.size()) {
+        const std::optional<SourceRange> match = find_pattern(source, pattern, copied, match_case);
+        if (!match)
+            break;
+        const std::size_t unchanged = (*match).offset - copied;
+        if (unchanged > maximum_bytes - result.text.size() ||
+            replacement.size() > maximum_bytes - result.text.size() - unchanged)
+            throw std::runtime_error("Replacement exceeds document byte limit.");
+        result.text.append(text.substr(copied, unchanged));
+        result.text.append(replacement);
+        copied = (*match).offset + (*match).length;
+        ++result.count;
+    }
+    if (text.size() - copied > maximum_bytes - result.text.size())
+        throw std::runtime_error("Replacement exceeds document byte limit.");
+    result.text.append(text.substr(copied));
+    return result;
+}
 } // namespace swiftedit

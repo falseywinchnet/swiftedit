@@ -7,6 +7,8 @@ a measured lag/bug scan. This file tracks work; unchecked items are not complete
 - [x] Final SDK clean build and headless integration.
 - [x] Revision-checked atomic source-range edit core and bounded display mapping.
 - [x] Flagged one-grapheme wildcard core with bounded search slices.
+- [x] Native query-field wildcard flags, right-click toggling, literal punctuation,
+  grapheme-aware Find Next/wrap and replacement integration (headless verified).
 - [x] Stored CSV formulas, dependency evaluation, exact errors and circularity checks.
 - [x] Native CSV view, cell entry, rectangular clear, draggable scrollbars.
 - [x] Menu/context Convert to Value, undo, formula hover/reference highlighting.
@@ -24,12 +26,20 @@ CSV clarification: Enter stores a formula and displays its result. Convert to
 Value appears both in the menu and cell context menu. Error conversion is refused
 without mutation; successful conversion is one undoable change.
 
-Current tests: all six headless suites pass after native CSV integration, 1.59 s.
+Current tests: all eight headless suites pass after wildcard UI integration, 1.16 s.
 The display suite covers mapping/atomic edits/wildcard slices. CSV and CLI tests
 cover dependency changes/conversion/undo/circularity. Editor tests exercise the
 native grid's source toggle, cell entry, menu conversion, right-click popup and
 shared command invocation, clipboard cell source, undo and error preservation.
 Native desktop interaction and final performance claims remain unverified.
+
+Wildcard follow-through remains: Windows host slash/question normalization is
+missing from the consumed SDK; Ctrl+Shift+slash is tested with normalized events
+only, and provider has the native fix request. Native focus/IME/accessibility and
+query-flag undo semantics require review. Search/Replace All orchestration still
+drains bounded search slices synchronously; cooperative cancellation/yield is
+required before the final responsiveness gate. Do not count this as complete
+terminal wildcard support or a completed search latency scan.
 
 Provider work is coordinated with the GUI.Forms owner and Orchestrator registry
 owner through the original parent. SwiftEdit owns source bytes and save policy;

@@ -184,3 +184,26 @@ CSV 0.05 s, display 0.07 s, Markdown 0.05 s, CLI 0.81 s, editor 0.12 s, views 0.
 total 1.58 s. Spelling audit: zero findings in 30 first-party C++ files. These are
 test timings, not the final responsiveness certification. Native desktop validation,
 remaining feature implementation and the final lag/bug scan are still pending.
+
+## 2026-10-01 wildcard query UI
+
+Added a native query field retaining literal grapheme text separately from wildcard
+flags. A flagged character draws a dot; hover outlines its slot; right-click and
+normalized Ctrl+Shift+slash toggle the current slot. The public toolkit TextBox
+supplies editing/clipboard behavior through a private child; QueryField owns visible
+painting, focus routing and hit geometry. Edited characters start literal; unchanged
+prefix/suffix positions retain flags. Find Next/wrap and single/all replacement use
+actual matched source ranges, including multibyte and combining graphemes.
+
+Focused tests cover literal punctuation, keyboard/right-click flag toggles, unchanged
+literal source, dot rendering, Unicode input and flag preservation across text edits.
+Editor tests exercise literal search, Unicode wildcard matches and wrap after rejecting
+a two-character gap. Replacement core tests verify variable byte lengths and output
+capacity refusal. Full Release build and eight suites passed in 1.16 s; C++ spelling
+audit zero findings in 32 first-party files.
+
+Native shortcut support is not yet proven: inspected active Windows provider source
+returns unknown for VK_OEM_2. Provider received that finding and owns normalization
+changes for a future matched SDK. Native keyboard/focus/IME and semantic accessibility
+validation remain pending. Search scanning still runs synchronously through its
+slices; interruptible UI orchestration and final lag measurements remain required.

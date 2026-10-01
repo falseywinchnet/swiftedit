@@ -27,4 +27,15 @@ struct SearchProgress {
 [[nodiscard]] SearchProgress search_slice(const gui_forms::TextStore &, const SearchPattern &,
                                           std::size_t start_grapheme, std::size_t budget,
                                           bool match_case);
+[[nodiscard]] std::optional<SourceRange> find_pattern(const gui_forms::TextStore &,
+                                                      const SearchPattern &, std::size_t byte_start,
+                                                      bool match_case);
+struct PatternReplacement {
+    std::string text{};
+    std::size_t count{};
+};
+[[nodiscard]] PatternReplacement replace_pattern(const gui_forms::TextStore &,
+                                                 const SearchPattern &,
+                                                 std::string_view replacement, bool match_case,
+                                                 std::size_t maximum_bytes);
 } // namespace swiftedit

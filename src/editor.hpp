@@ -2,6 +2,7 @@
 #include "document.hpp"
 #include "csv_view.hpp"
 #include "markdown_view.hpp"
+#include "query_field.hpp"
 #include <file_manager/document_picker_view.hpp>
 #include <functional>
 #include <gui_forms/application.hpp>
@@ -44,6 +45,7 @@ public:
     std::shared_ptr<gf::TextBox> text_control() const { return text_; }
     const Document &document() const { return document_; }
     std::shared_ptr<CsvView> csv_control() const { return csv_; }
+    std::shared_ptr<QueryField> query_control() const { return query_; }
 
 private:
     struct Dialog;
@@ -166,7 +168,8 @@ private:
     gf::ApplicationWindowHandle handle_{};
     Picker open_picker_{}, save_picker_{};
     Dialog find_{}, font_{};
-    std::shared_ptr<gf::TextBox> query_{}, replacement_{};
+    std::shared_ptr<QueryField> query_{};
+    std::shared_ptr<gf::TextBox> replacement_{};
     std::shared_ptr<gf::CheckBox> match_case_{};
     std::shared_ptr<gf::Label> find_status_{};
     std::shared_ptr<gf::Button> find_next_button_{}, find_close_{}, font_apply_{}, font_close_{};

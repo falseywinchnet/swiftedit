@@ -22,7 +22,10 @@ import and column resizing are not implemented.
 - Font selection currently chooses a bundled toolkit role, size, bold and italic;
   it is not an arbitrary installed-font-family chooser.
 - Case-insensitive search folds only ASCII A-Z. Literal non-ASCII text searches
-  exactly. There are no regex, wildcard, whole-word or selection-only modes.
+  exactly. Query characters can be flagged as one-grapheme wildcards by right-click.
+  Native Ctrl+? requires the provider's Windows key normalization update; normalized
+  key events are covered by headless tests. Search orchestration remains synchronous
+  and needs cooperative yielding/cancellation. No regex, whole-word or selection-only modes.
 - No printing/page setup, Characters dialog, syntax
   colors, settings persistence, recovery files, installer, file association or
   OS-default changes.

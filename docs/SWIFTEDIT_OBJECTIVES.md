@@ -23,7 +23,7 @@ precedence. The previous DECISIONS.md is historical implementation evidence.
 | Binary bytes, later correction | Open as text; don't hide/collapse; save blocked while illegal bytes remain; Save Text Copy replaces each illegal byte with space | Byte-faithful command session and explicit copy implemented; GUI invalid-byte glyph/mapping view pending |
 | Controls, later correction | Existing Unicode controls remain real editable content, shown visibly and inert | Session preserves valid UTF-8 controls; terminal transport escapes all controls; GUI glyphs/inspector/pickers pending |
 | Selection | Ctrl/Cmd+drag discontiguous selection; equal lengths parallel edits, unequal lengths copy-only | Provider only has one anchor/caret pair; pending provider contract |
-| Search | Flagged single-character wildcard slot; literal punctuation remains literal; no regex | Literal GUI/CLI search; wildcard slot UI/model pending |
+| Search | Flagged single-character wildcard slot; literal punctuation remains literal; no regex | Native flagged query field/right-click, grapheme Find/Replace and wrapping; normalized Ctrl+? tested, native host mapping and interruptible orchestration pending |
 | Status | Grapheme character count, selection length; separate word-count tool | GUI counts graphemes; column still scalar-based; Document > Word Count reports document/selection; CLI shares counting core |
 | Navigation | Paged navigation, draggable scrollbar; no jump-byte/jump-line product UI | Low-level CLI byte page cursor implemented; GUI scrollbar/virtualization pending |
 | Wrap, 02:32 | No wrap / wrap to window; intelligent breaks at spaces by default, visual only | Existing provider space/tab wrap with grapheme fallback; no separate preference yet |

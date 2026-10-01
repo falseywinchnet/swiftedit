@@ -547,19 +547,22 @@ void Editor::execute(const std::string &id) {
         } else if (id == "font")
             static_cast<void>(font_.handle.show());
         else if (id == "help")
-            message("SwiftEdit help",
-                    "Use File > Open to edit a plain-text document. Ctrl+S saves. A star beside "
-                    "the filename means unsaved changes.\n\nFind/Replace is literal; Match case "
-                    "off folds English A-Z only. Search wraps once. Replace All is one undo "
-                    "action.\n\nThis build preserves UTF-8 and BOM-marked UTF-16, including "
-                    "existing line endings. Malformed or unsupported encodings are refused. Files "
-                    "changed externally are never silently overwritten: use Save As or "
-                    "reopen.\n\nWrap and font affect display only. Editable text is limited to 1 "
-                    "MiB of UTF-8 and 4096 UTF-8 bytes per logical line. Settings are "
-                    "session-only. Save resets ordinary Undo. Document > Restore As Opened "
-                    "recovers the original session text. Document also offers explicit newline "
-                    "conversion and date/time insertion (F5). The separate command-session "
-                    "executable supports bounded large-file pages and CSV calculations.");
+            message(
+                "SwiftEdit help",
+                "Use File > Open to edit a plain-text document. Ctrl+S saves. A star beside "
+                "the filename means unsaved changes.\n\nFind/Replace keeps punctuation literal. "
+                "Right-click a query character or press Ctrl+? to toggle a one-character "
+                "wildcard, displayed as a dot. Match case "
+                "off folds English A-Z only. Search wraps once. Replace All is one undo "
+                "action.\n\nThis build preserves UTF-8 and BOM-marked UTF-16, including "
+                "existing line endings. Malformed or unsupported encodings are refused. Files "
+                "changed externally are never silently overwritten: use Save As or "
+                "reopen.\n\nWrap and font affect display only. Editable text is limited to 1 "
+                "MiB of UTF-8 and 4096 UTF-8 bytes per logical line. Settings are "
+                "session-only. Save resets ordinary Undo. Document > Restore As Opened "
+                "recovers the original session text. Document also offers explicit newline "
+                "conversion and date/time insertion (F5). The separate command-session "
+                "executable supports bounded large-file pages and CSV calculations.");
         else if (id == "about")
             message(
                 "About SwiftEdit",
@@ -622,9 +625,7 @@ void Editor::build_find() {
     find_.root = gf::make_control<DialogLayout>(gf::StableId("notepad.find"));
     place_find_label("find.label", "Find what:", {16, 18, 105, 28});
     place_find_label("replace.label", "Replace with:", {16, 60, 105, 28});
-    query_ = gf::make_control<gf::TextBox>(gf::StableId("find.query"));
-    (*query_).set_accessible_name("Find what");
-    (*query_).set_maximum_length(4096);
+    query_ = gf::make_control<QueryField>(gf::StableId("find.query"));
     (*find_.root).place(query_, {125, 16, 360, 30});
     replacement_ = gf::make_control<gf::TextBox>(gf::StableId("find.replacement"));
     (*replacement_).set_accessible_name("Replace with");
@@ -639,8 +640,9 @@ void Editor::build_find() {
     place_find_button("find.all", "Replace All", {248, 144, 108, 32}, ButtonAction::replace_all);
     find_close_ =
         place_find_button("find.close", "Close", {368, 144, 116, 32}, ButtonAction::close_find);
-    find_status_ = gf::make_control<gf::Label>(gf::StableId("find.status"),
-                                               "Literal search. Search wraps at the end.");
+    find_status_ = gf::make_control<gf::Label>(
+        gf::StableId("find.status"),
+        "Right-click a character or press Ctrl+? to toggle one-character wildcard. Search wraps.");
     (*find_.root).place(find_status_, {16, 190, 470, 50});
 }
 void Editor::show_find() {
@@ -655,30 +657,38 @@ void Editor::show_find() {
 }
 void Editor::find_next() {
     if ((*query_).text().empty()) {
-        (*find_status_).set_text("Enter the literal text to find.");
+        (*find_status_).set_text("Enter the text to find; flag unknown characters as wildcards.");
         return;
     }
-    std::optional<std::size_t> found =
-        find_literal((*text_).text(), (*query_).text(), (*text_).selection().end().value(),
-                     (*match_case_).checked());
+    const swiftedit::SearchPattern pattern = (*query_).pattern();
+    const gf::TextStore source((*text_).text());
+    std::optional<swiftedit::SourceRange> found = swiftedit::find_pattern(
+        source, pattern, (*text_).selection().end().value(), (*match_case_).checked());
     bool wrapped = false;
     if (!found) {
-        found = find_literal((*text_).text(), (*query_).text(), 0, (*match_case_).checked());
+        found = swiftedit::find_pattern(source, pattern, 0, (*match_case_).checked());
         wrapped = true;
     }
     if (!found) {
         (*find_status_).set_text("Text not found.");
         return;
     }
-    (*text_).select(gf::Utf8Offset(*found), gf::Utf8Offset(*found + (*query_).text().size()));
+    (*text_).select(gf::Utf8Offset((*found).offset),
+                    gf::Utf8Offset((*found).offset + (*found).length));
     (*find_status_).set_text(wrapped ? "Found (wrapped to beginning)." : "Found.");
     refresh();
 }
 void Editor::replace_one() {
+    if ((*query_).text().empty()) {
+        (*find_status_).set_text("Enter the text to replace.");
+        return;
+    }
     const std::string selected = (*text_).selected_text();
-    const std::optional<std::size_t> match =
-        find_literal(selected, (*query_).text(), 0, (*match_case_).checked());
-    if (match && *match == 0 && selected.size() == (*query_).text().size())
+    const gf::TextStore source(selected);
+    const swiftedit::SearchPattern pattern = (*query_).pattern();
+    const std::optional<swiftedit::SourceRange> match =
+        swiftedit::find_pattern(source, pattern, 0, (*match_case_).checked());
+    if (match && (*match).offset == 0 && selected.size() == (*match).length)
         (*text_).replace_selection((*replacement_).text());
     find_next();
 }
@@ -687,8 +697,11 @@ void Editor::replace_every() {
         (*find_status_).set_text("Enter the literal text to replace.");
         return;
     }
-    const Replacement result = replace_all((*text_).text(), (*query_).text(),
-                                           (*replacement_).text(), (*match_case_).checked());
+    const gf::TextStore source((*text_).text());
+    const swiftedit::SearchPattern pattern = (*query_).pattern();
+    const swiftedit::PatternReplacement result =
+        swiftedit::replace_pattern(source, pattern, (*replacement_).text(),
+                                   (*match_case_).checked(), gf::TextBox::maximum_multiline_bytes);
     if (gf::TextBox::validate_multiline_text(result.text) !=
         gf::TextBox::MultilineValidation::valid) {
         (*find_status_)

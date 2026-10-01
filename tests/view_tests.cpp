@@ -1,4 +1,5 @@
 #include "markdown_view.hpp"
+#include "query_field.hpp"
 #include <iostream>
 #include <stdexcept>
 
@@ -37,6 +38,52 @@ void check(bool good, const char *message) {
 }
 int main() {
     try {
+        const std::shared_ptr<notepad::QueryField> query =
+            gf::make_control<notepad::QueryField>(gf::StableId("test.query"));
+        gf::Window query_window(query, {300, 32});
+        (*query).set_text("a?c");
+        query_window.perform_layout();
+        ObservingPainter query_painter{};
+        (*query).on_paint(query_painter, {0, 0, 300, 32});
+        check(query_painter.drawn == "a?c", "Question mark is initially rendered literally");
+        (*query).select(gf::Utf8Offset(1), gf::Utf8Offset(1));
+        (*query).on_focus_changed(true);
+        gf::KeyEvent toggle{};
+        toggle.physical_key = 0x38;
+        toggle.modifiers = gf::Modifier::control | gf::Modifier::shift;
+        (*query).on_key(toggle);
+        const swiftedit::SearchPattern flagged = (*query).pattern();
+        check(toggle.handled && flagged.slots()[1].wildcard && (*query).text() == "a?c",
+              "Ctrl-question toggles metadata without rewriting the literal query");
+        query_painter.drawn.clear();
+        (*query).on_paint(query_painter, {0, 0, 300, 32});
+        check(query_painter.drawn == "a\xe2\x80\xa2"
+                                     "c",
+              "Flagged position renders as a dot");
+        gf::PointerEvent right_click{};
+        right_click.action = gf::PointerAction::down;
+        right_click.button = gf::PointerButton::secondary;
+        right_click.position = {20, 10};
+        (*query).on_pointer(right_click);
+        const swiftedit::SearchPattern unflagged = (*query).pattern();
+        check(right_click.handled && !unflagged.slots()[1].wildcard,
+              "Right-click toggles the hit character back to literal");
+        (*query).toggle_slot(1);
+        (*query).set_text("a?cd");
+        const swiftedit::SearchPattern extended = (*query).pattern();
+        check(extended.slots()[1].wildcard && !extended.slots()[3].wildcard,
+              "Typing outside a flagged position retains its flag");
+        (*query).set_text("a\xc3\xa9"
+                          "c");
+        const swiftedit::SearchPattern edited = (*query).pattern();
+        check(!edited.slots()[1].wildcard, "Replaced query character starts as literal");
+        (*query).select(gf::Utf8Offset(3), gf::Utf8Offset(3));
+        gf::TextInputEvent inserted{};
+        inserted.text_utf8 = "?";
+        (*query).on_text_input(inserted);
+        check(inserted.handled && (*query).text() == "a\xc3\xa9?c",
+              "Query field routes standard Unicode text input");
+        (*query).on_focus_changed(false);
         const std::shared_ptr<notepad::MarkdownView> view =
             gf::make_control<notepad::MarkdownView>(gf::StableId("test.markdown"));
         gf::Window window(view, {640, 480});

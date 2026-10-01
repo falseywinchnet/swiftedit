@@ -282,6 +282,25 @@ int main() {
         (*editor).execute("markdown-view");
         check((*text).text() == before_render && (*text).selection() == before_render_selection,
               "Markdown toggle preserves source and selection");
+        (*text).set_text("a?c a\xc3\xa9"
+                         "c ae\xcc\x81"
+                         "c aZZc");
+        const std::shared_ptr<notepad::QueryField> query = (*editor).query_control();
+        (*query).set_text("a?c");
+        (*text).select(gf::Utf8Offset(0), gf::Utf8Offset(0));
+        (*editor).execute("find-next");
+        check((*text).selected_text() == "a?c", "GUI literal question-mark search");
+        (*query).toggle_slot(1);
+        (*editor).execute("find-next");
+        check((*text).selected_text() == "a\xc3\xa9"
+                                         "c",
+              "GUI wildcard selects exact Unicode source bytes");
+        (*editor).execute("find-next");
+        check((*text).selected_text() == "ae\xcc\x81"
+                                         "c",
+              "GUI wildcard consumes one combining grapheme");
+        (*editor).execute("find-next");
+        check((*text).selected_text() == "a?c", "Wildcard skips two-character gap and wraps");
         std::cout << "Editor headless tests passed: native control input routing, CRLF, menu "
                      "edit/save, undo boundary, mixed endings, oversized-line refusal.\n";
         return 0;

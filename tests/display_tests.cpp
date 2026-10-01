@@ -107,6 +107,17 @@ int main() {
             swiftedit::search_slice(searchable, pattern, 16, 1, true);
         check(!slice.match && slice.next_grapheme == 17 && !slice.complete,
               "Search slice yields without unbounded scanning");
+        const swiftedit::PatternReplacement replaced =
+            swiftedit::replace_pattern(searchable, pattern, "X", true, 100);
+        check(replaced.text == "X X X X aZZc" && replaced.count == 4,
+              "Wildcard replacement uses matched grapheme lengths, not query byte length");
+        bool growth_refused = false;
+        try {
+            static_cast<void>(swiftedit::replace_pattern(searchable, pattern, "long", true, 5));
+        } catch (const std::runtime_error &) {
+            growth_refused = true;
+        }
+        check(growth_refused, "Replacement refuses excess output growth");
         std::cout << "Display mapping and atomic source-range tests passed.\n";
         return 0;
     } catch (const std::exception &failure) {
