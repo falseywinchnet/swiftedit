@@ -24,6 +24,9 @@ public:
     void on_paint(gf::Painter &, gf::Rect) override;
     void on_pointer(gf::PointerEvent &) override;
     void on_key(gf::KeyEvent &) override;
+    void on_frame(gf::FrameTime) override;
+    void cancel_calculations();
+    [[nodiscard]] bool calculations_pending() const { return next_calculation_ < calculations_.size(); }
     const std::string &status() const { return status_; }
     swiftedit::CellAddress selected() const { return caret_; }
     gf::ContextMenu &context_menu() const { return *context_; }
@@ -47,6 +50,7 @@ private:
     };
     std::weak_ptr<CsvView> observe();
     void prepare_view();
+    void advance_view();
     void reveal_caret();
     void update_scrollbars();
     void update_field();
@@ -63,6 +67,10 @@ private:
     std::vector<gf::SubscriptionToken> subscriptions_{};
     gf::Event<const std::string &> changed_{};
     std::map<std::pair<std::size_t, std::size_t>, CellDisplay> cells_{};
+    std::vector<swiftedit::CellAddress> calculations_{};
+    std::map<std::string, swiftedit::CellAddress> formula_sources_{};
+    std::size_t next_calculation_{};
+    gf::FrameRequestToken calculation_frame_{};
     swiftedit::CellAddress anchor_{}, caret_{};
     std::size_t columns_{}, top_{}, left_{}, visible_rows_{1}, visible_columns_{1};
     std::size_t whole_columns_{1};

@@ -116,3 +116,11 @@ carry exact source ranges for highlighting; inert label fragments map back to
 one source control byte. The owned-console regression checks successful copying
 and cancelled whole-document copying preserving the prior clipboard. Horizontal
 read-only caret/selection movement and GUI integration remain open.
+
+CSV viewport computation now yields between formulas in a revocable frame queue.
+Source/view changes revoke stale work; leaving table view cancels pending work.
+Results appear progressively, with explicit placeholders while pending. Each
+slice permits at most eight uncached formulas and checks a two-millisecond budget
+between formulas. One formula is still synchronous under the existing expression,
+dependency-depth and reference-work bounds; this is not full parser preemption.
+See performance/2026-10-01-csv-cooperative for measurements and test scope.

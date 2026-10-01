@@ -360,6 +360,8 @@ void Editor::show_csv(bool show) {
         show_markdown(false);
     }
     csv_visible_ = show;
+    if (!show)
+        (*csv_).cancel_calculations();
     (*text_).set_visible(!show);
     (*csv_).set_visible(show);
     refresh();

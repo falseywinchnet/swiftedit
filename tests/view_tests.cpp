@@ -44,12 +44,14 @@ void check(bool good, const char *message) {
     if (!good)
         throw std::runtime_error(message);
 }
+void settle_formulas(notepad::CsvView &);
 void verify_duplicate_formulas() {
     const std::shared_ptr<notepad::CsvView> grid =
         gf::make_control<notepad::CsvView>(gf::StableId("formulas.csv"));
     gf::Window window(grid, {800, 600});
     (*grid).set_source("21,=A1*2,=A1*2\n5,=A1*2,=A1*2");
     window.perform_layout();
+    settle_formulas(*grid);
     ObservingPainter first{};
     (*grid).on_paint(first, {0, 0, 800, 600});
     check(std::count(first.labels.begin(), first.labels.end(), "42") == 4,
@@ -63,26 +65,90 @@ void verify_duplicate_formulas() {
     check(highlighted.reference_outlines == 1 && (*grid).status() == "=A1*2 | References: A1",
           "Reused formula preserves reference tooltip and visible reference outline");
     (*grid).set_source("3,=A1*2,=A1*2\n5,=A1*2,=A1*2");
+    settle_formulas(*grid);
     ObservingPainter edited{};
     (*grid).on_paint(edited, {0, 0, 800, 600});
     check(std::count(edited.labels.begin(), edited.labels.end(), "6") == 4 &&
               std::count(edited.labels.begin(), edited.labels.end(), "42") == 0,
           "Source change cannot reuse a previous refresh's calculation");
     (*grid).set_source("=B1,=B1\n1,=A2");
+    settle_formulas(*grid);
     ObservingPainter cyclic{};
     (*grid).on_paint(cyclic, {0, 0, 800, 600});
     check(std::count(cyclic.labels.begin(), cyclic.labels.end(), "#ERROR") == 2,
           "Identical cyclic formulas remain errors at both root addresses");
     (*grid).set_source("7,=A1,=A1");
+    settle_formulas(*grid);
     ObservingPainter recovered{};
     (*grid).on_paint(recovered, {0, 0, 800, 600});
     check(std::count(recovered.labels.begin(), recovered.labels.end(), "7") == 3 &&
               std::count(recovered.labels.begin(), recovered.labels.end(), "#ERROR") == 0,
           "Repairing formula source clears all previous errors");
 }
+void settle_formulas(notepad::CsvView &grid) {
+    std::size_t steps = 0;
+    while (grid.calculations_pending()) {
+        grid.on_frame(gf::FrameClock::now());
+        check(++steps <= 4096, "Calculation queue makes bounded progress");
+    }
+}
+void verify_cooperative_formulas() {
+    const std::shared_ptr<notepad::CsvView> grid =
+        gf::make_control<notepad::CsvView>(gf::StableId("cooperative.csv"));
+    gf::Window window(grid, {800, 600});
+    window.perform_layout();
+    std::string source{};
+    for (std::size_t row = 0; row < 40; ++row) {
+        if (row)
+            source += '\n';
+        source += "=" + std::to_string(1000 + row);
+    }
+    (*grid).set_source(source);
+    check((*grid).calculations_pending(), "Distinct visible formulas yield instead of blocking input");
+    ObservingPainter pending{};
+    (*grid).on_paint(pending, {0, 0, 800, 600});
+    check(std::count(pending.labels.begin(), pending.labels.end(), "...") > 0,
+          "Pending formulas are visibly distinct from computed results");
+    (*grid).cancel_calculations();
+    check(!(*grid).calculations_pending(), "Leaving table view cancels pending calculations");
+    (*grid).set_source(source);
+    check((*grid).calculations_pending(), "Returning to unchanged table restarts cancelled work");
+    gf::PointerEvent hover{};
+    hover.action = gf::PointerAction::move;
+    hover.position = {60, 493}; // A16 is beyond the first eight-formula slice.
+    (*grid).on_pointer(hover);
+    check((*grid).status() == "Calculating...", "Hover describes a pending result");
+    settle_formulas(*grid);
+    check((*grid).status() == "=1015 | References:",
+          "Completing a hovered cell updates its detail without another mouse move");
+    (*grid).cancel_calculations();
+    (*grid).set_source(source);
+    (*grid).set_source("7,=A1*2,=A1*2");
+    settle_formulas(*grid);
+    (*grid).on_frame(gf::FrameClock::now());
+    ObservingPainter replacement{};
+    (*grid).on_paint(replacement, {0, 0, 800, 600});
+    check(std::count(replacement.labels.begin(), replacement.labels.end(), "14") == 2 &&
+              std::count(replacement.labels.begin(), replacement.labels.end(), "1000") == 0,
+          "Replacing source revokes stale queued formula results");
+    (*grid).set_source(source);
+    gf::PointerEvent wheel{};
+    wheel.action = gf::PointerAction::wheel;
+    wheel.wheel_delta.y = -1;
+    (*grid).on_pointer(wheel);
+    settle_formulas(*grid);
+    ObservingPainter scrolled{};
+    (*grid).on_paint(scrolled, {0, 0, 800, 600});
+    check(std::count(scrolled.labels.begin(), scrolled.labels.end(), "1000") == 0 &&
+              std::count(scrolled.labels.begin(), scrolled.labels.end(), "...") == 0,
+          "Scrolling replaces pending work with only the new viewport");
+    window.reset_activity_metrics();
+    check(!(*grid).calculations_pending(), "Completed view retains no calculation work");
+}
 int main() {
     try {
         verify_duplicate_formulas();
+        verify_cooperative_formulas();
         const std::shared_ptr<notepad::CsvView> grid =
             gf::make_control<notepad::CsvView>(gf::StableId("test.csv"));
         gf::Window grid_window(grid, {800, 600});
