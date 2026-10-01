@@ -1,6 +1,8 @@
 #include "session.hpp"
 #include <algorithm>
+#include <atomic>
 #include <charconv>
+#include <limits>
 #include <stdexcept>
 #include <windows.h>
 
@@ -27,6 +29,22 @@ std::size_t utf8_sequence_length(std::string_view s, std::size_t i) {
     return n;
 }
 namespace {
+DocumentIdentity allocate_identity() {
+    // Process-wide identity allocation permits independent sessions on separate
+    // threads. Session content itself remains confined to its owning thread.
+    static std::atomic<std::uint64_t> next{1};
+    std::uint64_t value = next.load(std::memory_order_relaxed);
+    for (;;) {
+        if (value == std::numeric_limits<std::uint64_t>::max())
+            throw std::runtime_error("Document identity space exhausted.");
+        const bool acquired =
+            next.compare_exchange_weak(value, value + 1, std::memory_order_relaxed);
+        if (acquired) {
+            const DocumentIdentity identity{value};
+            return identity;
+        }
+    }
+}
 void payload(std::string_view s) {
     if (s.find("\r\r") != s.npos)
         throw std::runtime_error(
@@ -109,6 +127,7 @@ Session::Session() {
     undo_.reserve(257);
     redo_.reserve(257);
     previews_.reserve(100);
+    identity_ = allocate_identity();
 }
 void Session::open(const std::filesystem::path &source) {
     std::filesystem::path path = std::filesystem::absolute(source);
@@ -137,6 +156,7 @@ void Session::open(const std::filesystem::path &source) {
     opened_ = std::move(opened);
 }
 void Session::reset() {
+    const DocumentIdentity next_identity = allocate_identity();
     large_.reset();
     path_.clear();
     snapshot_ = {};
@@ -147,6 +167,7 @@ void Session::reset() {
     redo_.clear();
     previews_.clear();
     ++revision_.value;
+    identity_ = next_identity;
 }
 void Session::editable() const {
     if (large_)
@@ -266,6 +287,12 @@ void Session::commit(EditToken token, DocumentRevision revision) {
     next.replace((*p).offset, (*p).length, (*p).inserted);
     change(std::move(next));
     previews_.clear();
+}
+void Session::replace_ranges(const std::vector<SourceRange> &ranges, std::string_view replacement,
+                             DocumentStamp observed) {
+    if (observed.identity != identity_)
+        throw std::runtime_error("Stale edit: document identity changed.");
+    replace_ranges(ranges, replacement, observed.revision);
 }
 void Session::replace_ranges(const std::vector<SourceRange> &ranges, std::string_view replacement,
                              DocumentRevision observed) {

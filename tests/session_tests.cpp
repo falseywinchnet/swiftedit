@@ -31,7 +31,34 @@ int main() {
         const std::filesystem::path file = dir / "sample.txt";
         raw(file, "before old after\r\nsecond old after");
         Session s{};
+        Session other{};
+        const DocumentStamp initial_stamp = s.stamp();
+        check(initial_stamp.identity.value != 0 && other.identity() != s.identity(),
+              "Independent sessions have distinct nonzero document identities");
+        check(other.revision() == s.revision(), "Cross-session test has matching revisions");
+        bool foreign_refused = false;
+        try {
+            other.replace_ranges({{0, 0}}, "foreign", initial_stamp);
+        } catch (const std::exception &) {
+            foreign_refused = true;
+        }
+        check(foreign_refused && other.text().empty(), "Foreign document stamp refused intact");
+        other.replace_ranges({{0, 0}}, "local", other.stamp());
+        const DocumentIdentity before_reset = other.identity();
+        other.reset();
+        check(other.identity() != before_reset, "Reset starts a distinct document lifetime");
         s.open(file);
+        check(s.identity() != initial_stamp.identity, "Open starts a distinct document lifetime");
+        const DocumentIdentity opened_identity = s.identity();
+        const DocumentRevision opened_revision = s.revision();
+        bool missing_refused = false;
+        try {
+            s.open(dir / "missing.txt");
+        } catch (const std::exception &) {
+            missing_refused = true;
+        }
+        check(missing_refused && s.identity() == opened_identity && s.revision() == opened_revision,
+              "Failed open preserves document identity and revision");
         check(!s.dirty(), "clean open");
         std::vector<Preview> p = s.preview("", "old", " after", "new");
         check(p.size() == 2, "ambiguity enumerated");
@@ -51,6 +78,7 @@ int main() {
         const bool redone = s.redo();
         check(redone, "redo");
         s.save();
+        check(s.identity() == opened_identity, "Editing, undo, redo and save preserve identity");
         const bool undo_after_save = s.undo();
         check(!undo_after_save && !s.dirty(), "successful save resets history");
         s.restore_opened();

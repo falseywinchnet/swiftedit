@@ -7,9 +7,11 @@ class ObservingPainter final : public gf::Painter {
 public:
     std::size_t measurements{}, texts{};
     std::string drawn{};
+    bool fail_measurement{};
+    gf::Point translation{};
     void save() override {}
     void restore() override {}
-    void translate(gf::Point) override {}
+    void translate(gf::Point point) override { translation = point; }
     void clip_rect(gf::Rect) override {}
     void fill_rect(gf::Rect, gf::Color) override {}
     void stroke_rect(gf::Rect, gf::Color, double) override {}
@@ -23,6 +25,8 @@ public:
     }
     gf::Size measure_text_utf8(std::string_view text, gf::FontSpec font) override {
         ++measurements;
+        if (fail_measurement)
+            throw std::runtime_error("Injected measurement failure");
         const gf::Size result = gf::Painter::measure_text_utf8(text, font);
         return result;
     }
@@ -58,6 +62,34 @@ int main() {
         (*view).on_paint(painter, {0, 0, 640, 480});
         check(painter.drawn.find("Changed") != std::string::npos,
               "Changed source invalidates render cache");
+        gf::PointerEvent wheel{};
+        wheel.action = gf::PointerAction::wheel;
+        wheel.wheel_delta.y = -1;
+        (*view).on_pointer(wheel);
+        (*view).on_paint(painter, {0, 0, 640, 480});
+        check(painter.translation.y == 28, "Fitting content cannot scroll into artificial range");
+        (*view).arrange({0, 0, 640, 90});
+        (*view).on_pointer(wheel);
+        (*view).on_paint(painter, {0, 0, 640, 90});
+        check(painter.translation.y < 28, "Height-only shrink updates scroll extent");
+        const std::size_t before_expand = painter.measurements;
+        (*view).arrange({0, 0, 640, 480});
+        (*view).on_paint(painter, {0, 0, 640, 480});
+        check(painter.translation.y == 28 && painter.measurements == before_expand,
+              "Height-only expansion resets scrolling without measuring text again");
+        (*view).set_source("# Recovery");
+        painter.fail_measurement = true;
+        painter.drawn.clear();
+        (*view).on_paint(painter, {0, 0, 640, 480});
+        check(painter.drawn.find("Injected measurement failure") != std::string::npos,
+              "Layout failures are reported");
+        painter.fail_measurement = false;
+        painter.drawn.clear();
+        (*view).arrange({0, 0, 600, 480});
+        (*view).on_paint(painter, {0, 0, 600, 480});
+        check(painter.drawn.find("Recovery") != std::string::npos &&
+                  painter.drawn.find("Injected measurement failure") == std::string::npos,
+              "Successful layout retry clears the previous error");
         std::cout << "Native Markdown paint/cache tests passed.\n";
         return 0;
     } catch (const std::exception &failure) {

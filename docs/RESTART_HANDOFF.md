@@ -1,8 +1,10 @@
-# Restart handoff — 2026-10-01 shutdown checkpoint
+# Restart handoff — 2026-10-01 active implementation
 
 Owner requests full implementation, followed by a measured lag/bug scan. This
-checkpoint is NOT completion. Parent reported an imminent machine shutdown and
-requested immediate source freeze and remote push.
+checkpoint is NOT completion. The owner explicitly revoked the historical
+shutdown freeze; the coordinating chat acknowledged the correction. Implementation
+is active under the full-feature goal, followed by the measured lag/bug scan.
+Do not interpret the earlier shutdown checkpoint as a current stop instruction.
 
 Completed since bc8a331: atomic revision-checked source-range edits, inert bounded
 source/display mapping, flagged grapheme wildcard search core, native CSV table

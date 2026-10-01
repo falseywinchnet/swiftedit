@@ -22,6 +22,17 @@ struct DocumentRevision {
         return equal;
     }
 };
+struct DocumentIdentity {
+    std::uint64_t value{};
+    bool operator==(const DocumentIdentity &other) const {
+        const bool equal = value == other.value;
+        return equal;
+    }
+};
+struct DocumentStamp {
+    DocumentIdentity identity{};
+    DocumentRevision revision{};
+};
 struct Page {
     std::uint64_t offset{}, next{}, size{};
     std::string bytes{};
@@ -70,6 +81,9 @@ public:
     // the ranges and replacement through the synchronous call.
     void replace_ranges(const std::vector<SourceRange> &, std::string_view replacement,
                         DocumentRevision observed);
+    // Deferred GUI work must match both document lifetime and revision.
+    void replace_ranges(const std::vector<SourceRange> &, std::string_view replacement,
+                        DocumentStamp observed);
     [[nodiscard]] bool undo();
     [[nodiscard]] bool redo();
     void restore_opened();
@@ -85,6 +99,11 @@ public:
         return large_file;
     }
     [[nodiscard]] DocumentRevision revision() const { return revision_; }
+    [[nodiscard]] DocumentIdentity identity() const { return identity_; }
+    [[nodiscard]] DocumentStamp stamp() const {
+        const DocumentStamp result{identity_, revision_};
+        return result;
+    }
     [[nodiscard]] std::uint64_t size() const {
         const std::uint64_t bytes =
             large_ ? (*large_).size() : static_cast<std::uint64_t>(text_.size());
@@ -105,6 +124,7 @@ private:
     std::vector<std::string> undo_{}, redo_{};
     std::vector<Preview> previews_{};
     DocumentRevision revision_{1};
+    DocumentIdentity identity_{};
     EditToken next_token_{1};
 };
 [[nodiscard]] std::size_t utf8_sequence_length(std::string_view, std::size_t offset);

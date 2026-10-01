@@ -156,3 +156,31 @@ CLI 1.22 s, editor 0.26 s, views 0.13 s; total 2.18 s.
 Native desktop QA, full semantic style review of this new scope, and the final
 measured lag scan remain pending. See RESTART_HANDOFF.md. No updated release ZIP
 or stage was published. Frozen SDKs and prior distributed packages are unchanged.
+
+## 2026-10-01 owner-revoked freeze; active goal
+
+The owner corrected the historical shutdown instruction and explicitly authorized
+a sustained full-feature goal. Parent acknowledged the correction. Work resumed.
+
+Fixed Markdown height-only resize scroll extents, artificial one-pixel scrolling
+when content fits, and persistent error text after a successful layout retry.
+Fault-injection and resize tests verify these behaviors, including no remeasurement
+on height-only expansion. CSV reuses cached visible results when source and viewport
+are unchanged; source replacement invalidates before scrollbar callbacks. Viewport
+changes hide obsolete hover tooltips.
+
+Session now exposes nonzero process-wide document identities and identity/revision
+stamps for deferred edits. Open/reset changes identity; editing/undo/save preserves
+it; failed open preserves the complete stamp. Tests reject a foreign document stamp
+even with equal revisions. Allocation refuses identity exhaustion rather than wrapping.
+Provider request-token ownership remains a separate adapter obligation.
+
+Source/display boundary lookup now uses binary search over ordered mappings.
+Regression tests round-trip every unit of a 65536-byte page with alternating
+ordinary and expanded illegal-byte labels, and reject scalar/CRLF interiors.
+
+Release build and all eight headless suites passed: document 0.10 s, session 0.22 s,
+CSV 0.05 s, display 0.07 s, Markdown 0.05 s, CLI 0.81 s, editor 0.12 s, views 0.14 s;
+total 1.58 s. Spelling audit: zero findings in 30 first-party C++ files. These are
+test timings, not the final responsiveness certification. Native desktop validation,
+remaining feature implementation and the final lag/bug scan are still pending.

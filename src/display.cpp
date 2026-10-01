@@ -4,6 +4,28 @@
 
 namespace swiftedit {
 namespace {
+struct DisplayOffsetLess {
+    bool operator()(const DisplayUnit &unit, std::size_t offset) const {
+        const bool before = unit.display.offset < offset;
+        return before;
+    }
+};
+struct SourceOffsetLess {
+    bool operator()(const DisplayUnit &unit, std::size_t offset) const {
+        const bool before = unit.source.offset < offset;
+        return before;
+    }
+};
+std::size_t source_boundary(const std::vector<DisplayUnit> &units, std::size_t offset,
+                            std::size_t display_size, std::size_t source_size) {
+    if (offset == display_size)
+        return source_size;
+    const std::vector<DisplayUnit>::const_iterator found =
+        std::lower_bound(units.begin(), units.end(), offset, DisplayOffsetLess{});
+    if (found == units.end() || (*found).display.offset != offset)
+        throw std::runtime_error("Select whole characters or control labels.");
+    return (*found).source.offset;
+}
 bool visible_control(char32_t scalar) {
     const bool control = scalar < 32 || (scalar >= 0x7f && scalar <= 0x9f) || scalar == 0xad ||
                          scalar == 0x61c || scalar == 0x200b || scalar == 0x200e ||
@@ -70,21 +92,8 @@ SourceRange DisplayPage::source_range(SourceRange display) const {
     if (display.offset > text_.size() || display.length > text_.size() - display.offset)
         throw std::runtime_error("Display selection exceeds page.");
     const std::size_t end = display.offset + display.length;
-    std::size_t first = source_size_, last = source_size_;
-    bool found_first = display.offset == text_.size();
-    bool found_last = end == text_.size();
-    for (const DisplayUnit &unit : units_) {
-        if (unit.display.offset == display.offset) {
-            first = unit.source.offset;
-            found_first = true;
-        }
-        if (unit.display.offset == end) {
-            last = unit.source.offset;
-            found_last = true;
-        }
-    }
-    if (!found_first || !found_last)
-        throw std::runtime_error("Select whole characters or control labels.");
+    const std::size_t first = source_boundary(units_, display.offset, text_.size(), source_size_);
+    const std::size_t last = source_boundary(units_, end, text_.size(), source_size_);
     const SourceRange result{first, last - first};
     return result;
 }
@@ -93,9 +102,10 @@ std::size_t DisplayPage::display_offset(std::size_t source_offset) const {
         const std::size_t end = text_.size();
         return end;
     }
-    for (const DisplayUnit &unit : units_)
-        if (unit.source.offset == source_offset)
-            return unit.display.offset;
-    throw std::runtime_error("Source position splits a display unit.");
+    const std::vector<DisplayUnit>::const_iterator found =
+        std::lower_bound(units_.begin(), units_.end(), source_offset, SourceOffsetLess{});
+    if (found == units_.end() || (*found).source.offset != source_offset)
+        throw std::runtime_error("Source position splits a display unit.");
+    return (*found).display.offset;
 }
 } // namespace swiftedit

@@ -76,6 +76,8 @@ void MarkdownView::arrange(gf::Rect bounds) {
     (*horizontal_).set_large_change(std::max(32.0, bounds.width - 18));
     if (layout_width_ != bounds.width)
         layout_dirty_ = true;
+    if (!layout_dirty_)
+        update_scroll_ranges();
 }
 void MarkdownView::layout(gf::Painter &painter, double width) {
     std::vector<Run> next{};
@@ -191,6 +193,9 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
     maximum_run_height_ = maximum_height;
     layout_width_ = width;
     layout_dirty_ = false;
+    update_scroll_ranges();
+}
+void MarkdownView::update_scroll_ranges() {
     const gf::Rect bounds = arranged_bounds();
     const double vertical_extent =
         std::max(0.0, content_height_ - bounds.height + ruler_height + 18);
@@ -211,6 +216,7 @@ void MarkdownView::on_paint(gf::Painter &painter, gf::Rect) {
     if (layout_dirty_) {
         try {
             layout(painter, bounds.width);
+            layout_error_.clear();
         } catch (const std::exception &failure) {
             layout_error_ = failure.what();
             layout_dirty_ = false;
@@ -263,7 +269,10 @@ void MarkdownView::on_pointer(gf::PointerEvent &event) {
     if (event.phase != gf::EventPhase::target)
         return;
     if (event.action == gf::PointerAction::wheel) {
-        (*vertical_).increment(event.wheel_delta.y < 0 ? 64 : -64);
+        const gf::Rect bounds = arranged_bounds();
+        const double extent = content_height_ - bounds.height + ruler_height + 18;
+        if (!layout_dirty_ && layout_error_.empty() && extent > 0 && event.wheel_delta.y != 0)
+            (*vertical_).increment(event.wheel_delta.y < 0 ? 64 : -64);
         event.handled = true;
         return;
     }

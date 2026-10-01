@@ -75,6 +75,7 @@ void CsvView::set_source(std::string_view source) {
     table_ = std::move(next);
     source_ = std::move(retained);
     columns_ = columns;
+    cells_dirty_ = true;
     caret_.row = std::min(caret_.row, (*table_).rows().size() - 1);
     caret_.column = std::min(caret_.column, (*table_).rows()[caret_.row].size() - 1);
     anchor_ = caret_;
@@ -112,10 +113,18 @@ void CsvView::arrange(gf::Rect bounds) {
 void CsvView::prepare_view() {
     if (!table_)
         return;
-    top_ = static_cast<std::size_t>((*vertical_).value());
-    left_ = static_cast<std::size_t>((*horizontal_).value());
+    const std::size_t top = static_cast<std::size_t>((*vertical_).value());
+    const std::size_t left = static_cast<std::size_t>((*horizontal_).value());
+    if (!cells_dirty_ && top == top_ && left == left_ && cached_rows_ == visible_rows_ &&
+        cached_columns_ == visible_columns_)
+        return;
+    cells_dirty_ = true;
+    top_ = top;
+    left_ = left;
     cells_.clear();
     hovered_.reset();
+    if (tooltip_)
+        (*tooltip_).hide();
     const std::size_t row_end = std::min((*table_).rows().size(), top_ + visible_rows_);
     for (std::size_t row = top_; row < row_end; ++row) {
         const std::size_t column_end =
@@ -149,6 +158,9 @@ void CsvView::prepare_view() {
             cells_.emplace(std::pair<std::size_t, std::size_t>{row, column}, std::move(display));
         }
     }
+    cached_rows_ = visible_rows_;
+    cached_columns_ = visible_columns_;
+    cells_dirty_ = false;
     invalidate(gf::Dirty::paint);
 }
 void CsvView::update_field() {

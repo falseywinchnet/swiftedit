@@ -36,6 +36,7 @@ private:
         void operator()(const double &) const;
     };
     void layout(gf::Painter &, double width);
+    void update_scroll_ranges();
     std::string source_{};
     std::vector<swiftedit::MarkdownBlock> blocks_{};
     std::vector<Run> runs_{};

@@ -35,6 +35,32 @@ int main() {
         check(end.offset == 0 && end.length == 0, "Empty insertion maps correctly");
         const swiftedit::DisplayPage literal("[BYTE FF]");
         check(literal.units().size() == 9, "Literal label text remains ordinary source text");
+        std::string maximum_source(swiftedit::maximum_page, 'a');
+        for (std::size_t index = 1; index < maximum_source.size(); index += 2)
+            maximum_source[index] = static_cast<char>(0xff);
+        const swiftedit::DisplayPage maximum(maximum_source);
+        for (const swiftedit::DisplayUnit &unit : maximum.units()) {
+            const swiftedit::SourceRange mapped = maximum.source_range(unit.display);
+            check(mapped.offset == unit.source.offset && mapped.length == unit.source.length,
+                  "Maximum-page expanded-label forward mapping");
+            const std::size_t inverse = maximum.display_offset(unit.source.offset);
+            check(inverse == unit.display.offset, "Maximum-page inverse mapping");
+        }
+        const std::size_t maximum_end = maximum.display_offset(maximum_source.size());
+        const swiftedit::SourceRange maximum_eof = maximum.source_range({maximum_end, 0});
+        check(maximum_eof.offset == maximum_source.size() && maximum_eof.length == 0,
+              "Expanded maximum-page EOF maps exactly");
+        for (const swiftedit::DisplayUnit &unit : page.units()) {
+            for (std::size_t interior = 1; interior < unit.source.length; ++interior) {
+                bool refused = false;
+                try {
+                    static_cast<void>(page.display_offset(unit.source.offset + interior));
+                } catch (const std::runtime_error &) {
+                    refused = true;
+                }
+                check(refused, "Inverse mapping rejects scalar and CRLF interiors");
+            }
+        }
 
         swiftedit::Session session{};
         session.replace_ranges({{0, 0}}, "abc abc", session.revision());
