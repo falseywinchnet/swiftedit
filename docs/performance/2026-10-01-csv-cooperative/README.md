@@ -56,3 +56,7 @@ requests and scheduler wakes in the focus-cleared settled observation. Raw
 metrics are preserved as settled-mac-86fb579.txt and settled-windows-86fb579.txt.
 Linux validation was still installing dependencies when these observations were
 recorded; it must be checked separately rather than inferred from these results.
+
+Run 36881985501 subsequently completed successfully on Linux as well. All three
+native jobs and portable run 36881985581 are green. Mac source 86fb579 is published
+as v0.2.3-dogfood.20261001; see the dogfood receipt for exact package hashes.
