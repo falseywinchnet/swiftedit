@@ -170,3 +170,41 @@ an actual directory symlink and then return Home on macOS and Linux. These
 consumer measurements must pass before claiming that the packaged app fixes the
 reported idle work. The provider packaging receipt does not assert prepared-text
 availability. File symlink opening remains a separate limitation.
+
+## Consumer result and published refresh: 700157e
+
+Native run `36876699339` and portable run `36876698899` passed on all three
+platforms for source `700157e71997aa39aac4f61eced27113f40e7774` with SDK
+`032237152148ff76ca125eb382f43d589d3baeb9`. The Mac ran 19 suites, including
+actual Open/Save directory-link navigation and the controlled idle probe.
+All 18 window observations were parsed, with raw rows retained in
+`updated-700157e-controlled.txt`.
+
+| Observation | Focused blank | Text focus cleared |
+|---|---:|---:|
+| CPU seconds | 0.089931 | 0.009495 |
+| Elapsed seconds | 5.07364 | 5.06986 |
+| One-core CPU | 1.77252% | 0.187283% |
+| Main paints / frame deadlines | 9 / 9 | 0 / 0 |
+| Main painted damage area | 342 | 0 |
+| Each of eight hidden dialogs: paints / deadlines / wakes | 0 / 0 / 0 | 0 / 0 / 0 |
+
+All hidden dialogs are occluded in both phases. Main focused painted area fell
+from 4,796,820 to 342 across nine blinks. However, focused CPU remains close to
+the earlier 1.8294–2.14822% observations; the owner-reported idle cost is not
+considered fully resolved. Cleared-focus CPU was previously 0.405965–0.416568%.
+These are individual CI observations, not statistical distributions or a
+reproduction of the owner's machine. Clearing text focus is not app switching.
+The candidate combines visibility and caret changes, so these CPU observations
+do not assign separate causal percentages to either fix.
+
+The packaged app observed 0.898% of one core across 10.022325375 seconds with
+uncontrolled focus/occlusion, after five seconds of startup settling. The exact
+manifest is retained in `updated-700157e-manifest.json`. Remaining focused work
+and the native stack sample were referred to the toolkit coordinator.
+
+A fresh local Windows Release build passed all 18 headless suites in 4.86 s.
+Additional component checks against this SDK: caret status over a 266,240-byte
+fixture, 1,000 samples, p50/p95/p99/worst = 0.0023/0.0041/0.0051/0.0117 ms;
+formula viewport, 31 samples, 5.6851/6.7171/6.8363/6.8363 ms. These exclude native
+presentation and are not a complete product lag certification.

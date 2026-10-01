@@ -512,3 +512,15 @@ or shared-source fix claimed. Package-Mac now samples process CPU over10quiet
 seconds after5s warmup on an empty fixture, stores one-core percentage and scope
 in manifest; focus/occlusion are not controlled and no pass threshold inferred.
 CPU time parser sample checks pass; native measurement awaits CI.
+
+2026-10-01 Mac dogfood correction checkpoint: source700157e and SDK0322371
+passed all native/portable CI on all three systems (36876699339/36876698899).
+Published v0.2.2-dogfood.20261001 with verified archive/executable hashes; see
+DOGFOOD_2026-10-01.md. Consumer Home and real directory-link tests pass. Eight
+hidden dialogs now have zero paints/deadlines/wakes; main nine caret blinks
+paint342 rather than4796820 square units. Focused blank CPU remains1.77252%
+on CI, focus-cleared .187283%; owner idle complaint is NOT fully resolved.
+Provider coordinator has exact remaining measurements and stack sample path.
+File-link opening still pending separately from directory navigation. Active
+full-feature goal remains unfinished, including GUI Session migration, larger
+GUI files, visible controls/multiselection, printing and independent windows.
