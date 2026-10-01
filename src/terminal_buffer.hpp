@@ -22,6 +22,7 @@ public:
     void select_all();
     void select_range(SourceRange, DocumentStamp);
     void insert(std::string_view);
+    void replace_document(std::string_view, DocumentStamp);
     void enter();
     void erase(bool backward);
     std::string cut();

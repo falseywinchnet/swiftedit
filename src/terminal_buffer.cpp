@@ -176,6 +176,11 @@ void TerminalBuffer::insert(std::string_view source) {
     selection_ = {range.offset + source.size(), range.offset + source.size()};
     desired_column_.reset();
 }
+void TerminalBuffer::replace_document(std::string_view text, DocumentStamp observed) {
+    session_.replace_ranges({{0, session_.text().size()}}, text, observed);
+    selection_ = {};
+    desired_column_.reset();
+}
 void TerminalBuffer::enter() { insert(newline_); }
 void TerminalBuffer::erase(bool backward) {
     SourceRange range = selected_range();

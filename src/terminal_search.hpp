@@ -18,4 +18,20 @@ private:
     bool wrapped_{};
     TerminalSearchState state_{TerminalSearchState::idle};
 };
+enum class TerminalReplaceState { idle, pending, complete, cancelled };
+class TerminalReplace {
+public:
+    void begin(TerminalBuffer &, SearchPattern, std::string replacement, bool match_case = false);
+    TerminalReplaceState step(TerminalBuffer &, std::size_t budget = 4096);
+    void cancel();
+    TerminalReplaceState state() const { return state_; }
+    std::size_t count() const { return count_; }
+
+private:
+    std::unique_ptr<ReplacementScan> scan_{};
+    DocumentStamp stamp_{};
+    TerminalSelection selection_{};
+    TerminalReplaceState state_{TerminalReplaceState::idle};
+    std::size_t count_{};
+};
 } // namespace swiftedit

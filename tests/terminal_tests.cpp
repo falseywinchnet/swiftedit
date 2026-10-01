@@ -266,6 +266,30 @@ int main() {
               "Query grapheme deletion preserves other flags");
         query.toggle();
         check(!query.pattern().slots()[2].wildcard, "Toggle at query end addresses last slot");
+        terminal.reset(true);
+        terminal.insert("cat cat cat");
+        swiftedit::TerminalReplace replacement{};
+        replacement.begin(terminal, swiftedit::SearchPattern("cat"), "dog", true);
+        check(replacement.step(terminal, 1) == swiftedit::TerminalReplaceState::pending &&
+                  terminal.session().text() == "cat cat cat",
+              "Partial replacement remains private");
+        replacement.cancel();
+        check(terminal.session().text() == "cat cat cat", "Cancel preserves source");
+        replacement.begin(terminal, swiftedit::SearchPattern("cat"), "dog", true);
+        for (std::size_t i = 0;
+             i < 100 && replacement.state() == swiftedit::TerminalReplaceState::pending; ++i)
+            static_cast<void>(replacement.step(terminal, 2));
+        check(replacement.state() == swiftedit::TerminalReplaceState::complete &&
+                  replacement.count() == 3 && terminal.session().text() == "dog dog dog",
+              "Prepared replacements publish together");
+        check(terminal.undo() && terminal.session().text() == "cat cat cat",
+              "One undo restores entire Replace All");
+        replacement.begin(terminal, swiftedit::SearchPattern("cat"), "dog", true);
+        terminal.move(swiftedit::TerminalMotion::document_end);
+        terminal.insert("!");
+        check(replacement.step(terminal) == swiftedit::TerminalReplaceState::cancelled &&
+                  terminal.session().text() == "cat cat cat!",
+              "Source edit revokes replacement authority");
         std::cout << "Terminal navigation and shared edit tests passed.\n";
         return 0;
     } catch (const std::exception &failure) {

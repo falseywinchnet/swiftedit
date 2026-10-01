@@ -129,11 +129,12 @@ void status_line(std::string &output, std::size_t row, std::string_view source, 
     const std::string safe = swiftedit::escape_field(source);
     output.append(safe, 0, std::min(width, safe.size()));
 }
-enum class Prompt { none, save_path, open_path, exit_choice, find };
+enum class Prompt { none, save_path, open_path, exit_choice, find, replacement };
 class Terminal {
 public:
 #ifdef SWIFTEDIT_TERMINAL_SMOKE
     std::size_t search_hits() const { return search_hits_; }
+    std::size_t replacement_count() const { return replacement_.count(); }
     bool wildcard_enabled() const {
         const swiftedit::SearchPattern pattern = query_.pattern();
         return pattern.slots()[0].wildcard;
@@ -141,6 +142,7 @@ public:
 #endif
     void open(const std::filesystem::path &path) {
         search_.cancel();
+        replacement_.cancel();
         buffer_.open(path);
         pager_.reset(buffer_.session());
         top_ = 0;
@@ -167,22 +169,43 @@ public:
                 }
                 redraw = false;
             }
-            if (search_.state() == swiftedit::TerminalSearchState::pending) {
-                const swiftedit::TerminalSearchState state = search_.step(buffer_);
-                if (state != swiftedit::TerminalSearchState::pending) {
-#ifdef SWIFTEDIT_TERMINAL_SMOKE
-                    if (state == swiftedit::TerminalSearchState::found)
-                        ++search_hits_;
-#endif
-                    status_ = state == swiftedit::TerminalSearchState::found ? "Found"
-                              : state == swiftedit::TerminalSearchState::not_found
-                                  ? "Not found"
-                                  : "Search cancelled";
-                    redraw = true;
-                    continue;
+            try {
+                if (replacement_.state() == swiftedit::TerminalReplaceState::pending) {
+                    const swiftedit::TerminalReplaceState state = replacement_.step(buffer_);
+                    if (state != swiftedit::TerminalReplaceState::pending) {
+                        status_ = state == swiftedit::TerminalReplaceState::complete
+                                      ? "Replaced " + std::to_string(replacement_.count()) +
+                                            " matches; Ctrl+Z undoes"
+                                      : "Replacement cancelled";
+                        redraw = true;
+                        continue;
+                    }
+                    if (!console_.input_ready())
+                        continue;
                 }
-                if (!console_.input_ready())
-                    continue;
+                if (search_.state() == swiftedit::TerminalSearchState::pending) {
+                    const swiftedit::TerminalSearchState state = search_.step(buffer_);
+                    if (state != swiftedit::TerminalSearchState::pending) {
+#ifdef SWIFTEDIT_TERMINAL_SMOKE
+                        if (state == swiftedit::TerminalSearchState::found)
+                            ++search_hits_;
+#endif
+                        status_ = state == swiftedit::TerminalSearchState::found ? "Found"
+                                  : state == swiftedit::TerminalSearchState::not_found
+                                      ? "Not found"
+                                      : "Search cancelled";
+                        redraw = true;
+                        continue;
+                    }
+                    if (!console_.input_ready())
+                        continue;
+                }
+            } catch (const std::exception &failure) {
+                search_.cancel();
+                replacement_.cancel();
+                status_ = failure.what();
+                redraw = true;
+                continue;
             }
             const INPUT_RECORD input = console_.read();
             if (input.EventType == WINDOW_BUFFER_SIZE_EVENT) {
@@ -280,14 +303,18 @@ private:
             message = "Open file: " + input_ + "  [Enter / Esc]";
         if (prompt_ == Prompt::find)
             message = "Find: " + query_.display() + "  [Ctrl+? wildcard, Enter / Esc]";
+        if (prompt_ == Prompt::replacement)
+            message = "Replace ALL with: " + input_ + "  [Enter applies / Esc cancels]";
         if (prompt_ == Prompt::exit_choice)
             message = "Save changes before exit? Y=Save N=Discard Esc=Cancel";
         status_line(screen, height - 3, message, width_);
         if (prompt_ != Prompt::none && !status_.empty())
             status_line(screen, height - 2, status_, width_);
         else
-            status_line(screen, height - 2,
-                        "^S Save  ^W Find  F3 Next  ^R Open  ^X Exit  ^Z Undo  ^Y Redo", width_);
+            status_line(
+                screen, height - 2,
+                "^S Save  ^W Find  F3 Next  ^H Replace All  ^R Open  ^X Exit  ^Z Undo  ^Y Redo",
+                width_);
         if (buffer_.session().read_only())
             status_line(screen, height - 1,
                         "Read-only: PgDn Next  PgUp Previous  Ctrl+Home First  ^X Exit", width_);
@@ -328,7 +355,8 @@ private:
         const std::string text = utf8(units);
         if (prompt_ == Prompt::find) {
             query_.insert(text);
-        } else if (prompt_ == Prompt::save_path || prompt_ == Prompt::open_path) {
+        } else if (prompt_ == Prompt::save_path || prompt_ == Prompt::open_path ||
+                   prompt_ == Prompt::replacement) {
             const std::size_t limit = 32768;
             if (input_.size() + text.size() > limit)
                 throw std::runtime_error("Prompt input exceeds its UTF-8 byte limit.");
@@ -343,6 +371,12 @@ private:
         const WORD key = event.wVirtualKeyCode;
         if (key != 0 && event.uChar.UnicodeChar < 32)
             high_surrogate_ = 0;
+        if (replacement_.state() == swiftedit::TerminalReplaceState::pending) {
+            replacement_.cancel();
+            status_ = "Replacement cancelled";
+            if (key == VK_ESCAPE)
+                return;
+        }
         if (search_.state() == swiftedit::TerminalSearchState::pending) {
             search_.cancel();
             status_ = "Search cancelled";
@@ -365,9 +399,20 @@ private:
                 }
             } else if (key == VK_RETURN && prompt_ == Prompt::find) {
                 swiftedit::SearchPattern pattern = query_.pattern();
-                search_.begin(buffer_, std::move(pattern));
+                if (replace_query_) {
+                    prompt_ = Prompt::replacement;
+                    input_.clear();
+                    status_.clear();
+                } else {
+                    search_.begin(buffer_, std::move(pattern));
+                    prompt_ = Prompt::none;
+                    status_ = "Searching... Escape cancels";
+                }
+            } else if (key == VK_RETURN && prompt_ == Prompt::replacement) {
+                swiftedit::SearchPattern pattern = query_.pattern();
+                replacement_.begin(buffer_, std::move(pattern), input_);
                 prompt_ = Prompt::none;
-                status_ = "Searching... Escape cancels";
+                status_ = "Preparing Replace All... Escape cancels before publication";
             } else if (prompt_ == Prompt::find && key == VK_LEFT) {
                 query_.move(false);
             } else if (prompt_ == Prompt::find && key == VK_RIGHT) {
@@ -419,7 +464,14 @@ private:
         }
         if (ctrl && !alt) {
             switch (key) {
+            case 'H':
+                replace_query_ = true;
+                prompt_ = Prompt::find;
+                query_.end();
+                status_.clear();
+                return;
             case 'W':
+                replace_query_ = false;
                 prompt_ = Prompt::find;
                 query_.end();
                 status_.clear();
@@ -524,6 +576,8 @@ private:
     swiftedit::TerminalBuffer buffer_{};
     swiftedit::TerminalPager pager_{};
     swiftedit::TerminalSearch search_{};
+    swiftedit::TerminalReplace replacement_{};
+    bool replace_query_{};
     swiftedit::TerminalQuery query_{};
     Prompt prompt_{Prompt::none};
     std::string input_{}, clipboard_{}, status_{"F1 Help"};
@@ -633,6 +687,11 @@ int wmain() {
         enqueue(console.input, 'A', L'a');
         enqueue(console.input, VK_OEM_2, 0, LEFT_CTRL_PRESSED | SHIFT_PRESSED);
         enqueue(console.input, VK_RETURN, L'\r');
+        enqueue(console.input, 'H', 0, LEFT_CTRL_PRESSED);
+        enqueue(console.input, VK_RETURN, L'\r');
+        enqueue(console.input, 'B', L'b');
+        enqueue(console.input, VK_RETURN, L'\r');
+        enqueue(console.input, 'Z', 0, LEFT_CTRL_PRESSED);
         enqueue(console.input, VK_END, 0, LEFT_CTRL_PRESSED);
         enqueue(console.input, 'Q', L'q');
         enqueue(console.input, 'X', 0, LEFT_CTRL_PRESSED);
@@ -643,6 +702,9 @@ int wmain() {
             Terminal terminal{};
             if (terminal.run(path) != 0)
                 throw std::runtime_error("Terminal run failed.");
+            if (terminal.replacement_count() != 3)
+                throw std::runtime_error(
+                    "Terminal Replace All did not replace all three graphemes.");
             if (terminal.search_hits() != 1 || !terminal.wildcard_enabled())
                 throw std::runtime_error(
                     "Terminal wildcard Find did not publish the expected match.");

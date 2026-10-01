@@ -107,3 +107,11 @@ Thirteen suites and extended owned-console smoke passed. Native production host
 routes query input to TerminalQuery, not filename input. Search currently valid
 UTF8 editable-only; snapshot preparation remains synchronous. Replace controls,
 wrap, large-file selection/search, clipboard/save parity and finalperf unfinished.
+
+2026-10-01 terminal Replace All checkpoint: CtrlH query+replacement prompt drives
+TerminalReplace/ReplacementScan, private bounded work, cancel/stamp/selection
+revocation, one undoable whole publication. Deferred work exceptions now retain
+input loop/session. Thirteen suites and native console three-wildcard-replacement
+assertion/undo passed. Whole publication latency and pre-existing CRCR source
+payload rejection remain documented limitations. Next full-goal work still wrap,
+clipboard/save parity, large-file interaction, provider integration and finalperf.

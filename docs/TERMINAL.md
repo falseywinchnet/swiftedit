@@ -14,6 +14,7 @@ buffer when it exits normally or unwinds an exception.
 | Typing, Enter, Tab | Replace selection or insert text |
 | Backspace/Delete | Delete one complete grapheme or selection |
 | Ctrl+S | Save; unnamed documents prompt for a new filename |
+| Ctrl+H | Replace All: query, replacement, then Enter applies; Escape cancels preparation |
 | Ctrl+W / F3 | Edit Find query / find next, wrapping at EOF |
 | Ctrl+? in Find | Toggle one grapheme wildcard at the query caret, or last slot at query end |
 | Ctrl+R | Open; unsaved changes must first be saved |
@@ -42,7 +43,7 @@ are reported unavailable, preserving the source. Read-only range selection/copy
 and more granular line navigation still need implementation.
 
 This executable is unfinished. Wrap preferences,
-Replace controls, text-copy prompt, full conflict review, external
+Text-copy prompt, full conflict review, external
 clipboard integration and further interactive/accessibility checks remain.
 An internal cut containing malformed UTF-8 cannot yet be pasted back through
 Session's valid-insertion rule; Undo still restores it. Long logical lines and
@@ -67,3 +68,13 @@ selection; stale work cannot move the caret. The scan yields after 4096 work
 units to service input. Snapshot preparation remains synchronous. Search currently
 requires editable valid UTF-8 source; large readonly/malformed-byte search remains
 unfinished. Case-insensitive matching currently folds ASCII only.
+
+
+Replace All uses the same flagged query. The replacement prompt accepts an empty
+string to delete all matches. Preparation is incremental and private; Enter starts
+it, Escape or another key cancels while pending, and publication is one undoable
+Session edit. Source/selection changes revoke the prepared result. A failure
+preserves the document. The final whole-result publication remains synchronous
+and must be measured. Replacement follows Session's valid UTF-8 and reserved
+metadata payload rules, including refusal of a result containing CRCR; resolving
+that restriction for pre-existing source CRCR remains follow-through work.

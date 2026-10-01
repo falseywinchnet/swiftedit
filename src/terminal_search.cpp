@@ -52,4 +52,47 @@ void TerminalSearch::cancel() {
     scan_.reset();
     state_ = TerminalSearchState::cancelled;
 }
+void TerminalReplace::begin(TerminalBuffer &buffer, SearchPattern pattern, std::string replacement,
+                            bool match_case) {
+    if (buffer.session().read_only())
+        throw std::runtime_error("Large-file pages are read-only.");
+    const TerminalSelection selection = buffer.selection();
+    std::unique_ptr<ReplacementScan> prepared =
+        std::make_unique<ReplacementScan>(buffer.session().text(), std::move(pattern),
+                                          std::move(replacement), match_case, editable_limit - 1);
+    scan_ = std::move(prepared);
+    stamp_ = buffer.session().stamp();
+    selection_ = selection;
+    count_ = 0;
+    state_ = TerminalReplaceState::pending;
+}
+TerminalReplaceState TerminalReplace::step(TerminalBuffer &buffer, std::size_t budget) {
+    if (state_ != TerminalReplaceState::pending)
+        return state_;
+    const DocumentStamp current = buffer.session().stamp();
+    if (current.identity != stamp_.identity || current.revision != stamp_.revision) {
+        cancel();
+        return state_;
+    }
+    const TerminalSelection selection = buffer.selection();
+    if (selection.anchor != selection_.anchor || selection.caret != selection_.caret) {
+        cancel();
+        return state_;
+    }
+    if (!(*scan_).step(budget))
+        return state_;
+    PatternReplacement result = (*scan_).take_result();
+    scan_.reset();
+    state_ = TerminalReplaceState::cancelled;
+    if (result.count)
+        buffer.replace_document(result.text, stamp_);
+    count_ = result.count;
+    state_ = TerminalReplaceState::complete;
+    return state_;
+}
+void TerminalReplace::cancel() {
+    scan_.reset();
+    state_ = TerminalReplaceState::cancelled;
+    count_ = 0;
+}
 } // namespace swiftedit

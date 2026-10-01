@@ -500,3 +500,25 @@ This verifies owned console virtual-key dispatch, not physical keyboard layouts,
 visual quality, accessibility or latency. Large-file/malformed-byte search and
 terminal replacement controls remain. Snapshot construction is synchronous and
 must be included in the final measured responsiveness audit.
+
+## Terminal Replace All - 2026-10-01
+
+Ctrl+H opens the shared flagged query and replacement prompts. TerminalReplace
+uses ReplacementScan for private bounded preparation, validates document stamp
+and original selection before publication, and makes one Session edit. Partial
+work/cancellation/source edits cannot publish. Deferred search/replacement errors
+are caught at the input-loop boundary, retaining the session instead of exiting.
+
+Thirteen headless suites passed in 2.63 s; zero spelling findings across 58 files.
+Semantic review covered private result lifetime, pre-publication revocation,
+count/no-match behavior and atomic undo boundaries. Added tests for incremental
+private preparation, cancellation, replacement count, one-step undo and source
+edit invalidation. Native owned-console smoke asserts three wildcard grapheme
+replacements and undo, then prior dirty-exit/largefile/mode-restoration cases.
+Exit 0; smoke SHA-256:
+`6AC55FAF3F38CA910FFBD46D0931538F926A5323D1AE06498B5639F5FA8AD4B4`.
+Log: `.build/swiftedit-resumed/console-20261001-024441.stdout.txt`.
+No latency, physical-keyboard or visual assertion follows from this smoke.
+Final whole-result publication is synchronous. Existing CRCR source can cause
+Session payload rejection of a whole replacement result; source remains intact,
+and this terminal/model parity limitation is not marked complete.
