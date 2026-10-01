@@ -574,3 +574,11 @@ UTF-8 bytes8..15 (accented e, space, emoji), checks exact cross-process paste an
 retained text after parent GUI shutdown, and records one command-return timing
 observation separately from child startup. Local compile/style pass; native
 results pending. Provider2d04310 jobs still live, not restarted or repinned.
+
+Published v0.2.4-dogfood.20261001 from a011391 with exact archive/executable hashes
+and published asset digest verified; see DOGFOOD_2026-10-01.md. Adds independent
+windows/cross-process clipboard, not a CPU fix. Unicode/timing fixture7518073 is
+newer than the release and still needs native evidence. Provider2d04310 Linux
+and Mac jobs failed; Linux frontend log says single-selection picker profile
+requires boundone. Sent exact evidence to provider owner, who retains source
+ownership. Keep SDK032 pin until corrected candidate fixtures/archives pass.
