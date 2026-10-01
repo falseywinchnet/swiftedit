@@ -65,3 +65,8 @@ Final publication binds to reviewed file identity/bytes and original document
 identity/revision; field changes require another review, races refuse intact.
 Ten headless suites and the nine-window native lifecycle smoke pass. This does
 not complete byte-faithful GUI migration, print, dynamic windows or final lag QA.
+
+TerminalBuffer editing model now shares Session and provides grapheme selection,
+CRLF-atomic movement, preferred vertical columns, line cut, undo/redo and saves.
+The terminal screen/input loop is still unchecked; synchronous metadata rebuild
+and malformed internal cut/paste behavior need follow-through.

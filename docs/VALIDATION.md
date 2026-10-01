@@ -372,3 +372,26 @@ continuation and stale-read errors. C++ spelling audit has zero findings across
 source/metadata separation were reviewed separately. No native desktop run was
 needed for this command/core change; no latency conclusion is drawn from suite
 runtime.
+
+## Terminal editing model - 2026-10-01
+
+Added TerminalBuffer on the existing Session, with grapheme movement/selection,
+CRLF-atomic traversal, preferred-column vertical/page movement, Home/End,
+selection replacement, deletion, whole-line cut, undo/redo and shared save rules.
+Navigation metadata is lazy and stamped by document identity/revision. Invalid
+bytes from opened files have private one-byte control placeholders only in the
+navigation copy; actual source and clipboard extraction remain byte-faithful.
+New malformed UTF-8 insertions remain refused by Session. Pasting an internally
+cut malformed sequence is therefore still an unresolved terminal behavior.
+
+The terminal regression found an undo caret inside a restored multibyte scalar;
+index-based grapheme snapping fixes it without passing an invalid scalar offset
+to the provider. Twelve headless suites passed in 2.72 s. Spelling audit: zero
+findings across 47 authored files; semantic review covered borrowed text,
+revision cache, selection publication after successful edits, and dirty reset.
+
+This is the editing model, not a completed terminal executable. Console screen,
+input loop, safe Unicode cell layout, large-file terminal pagination, shortcuts,
+search/wildcard controls and interactive validation remain. Full metadata rebuild
+on a changed editable buffer is synchronous and needs measurement/optimization
+before a responsiveness claim.

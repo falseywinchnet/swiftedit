@@ -64,3 +64,13 @@ ContextCursor stamped by document identity/revision. CLI open emits context/page
 blank records, context restarts and context-next continues. Exact CRCR L<number>
 CRCR markers are escaped separate metadata, never source. Eleven headless suites
 pass; full terminal screen is still outstanding. Source CRCR stays byte-faithful.
+
+2026-10-01 terminal model checkpoint: src/terminal_buffer.hpp/cpp drives Session
+with grapheme/CRLF navigation, selection, preferred-column up/down, line cuts,
+undo/redo and save boundaries. tests/terminal_tests.cpp includes illegal opened
+bytes and undo restoring a scalar around an old caret. Twelve suites pass.
+Next: actual terminal console renderer/input loop and large-file page navigation;
+model alone is not the promised nano-like UI. Metadata rebuilding is synchronous;
+final lag scan remains outstanding. Private navigation placeholders never reach
+source/output. Session still refuses newly inserted malformed UTF-8, including
+an internally cut malformed sequence; resolve explicitly during terminal work.
