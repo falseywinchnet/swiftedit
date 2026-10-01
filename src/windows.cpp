@@ -1,6 +1,8 @@
 #include "editor.hpp"
 #include "session.hpp"
+#ifdef _WIN32
 #include <windows.h>
+#endif
 
 namespace notepad {
 void Editor::WindowReady::operator()(gf::Window &window, gf::ApplicationWindowHandle handle) const {
@@ -127,6 +129,7 @@ Editor::application_windows(const std::filesystem::path &initial) {
         request.show_hidden = true;
         request.authority = file_manager::DocumentPickerAuthority::trusted_local_host;
         request.home_location = start;
+#ifdef _WIN32
         const DWORD drives = GetLogicalDrives();
         for (unsigned i = 0; i < 26; ++i)
             if (drives & (1u << i)) {
@@ -135,6 +138,9 @@ Editor::application_windows(const std::filesystem::path &initial) {
                 if (kind == DRIVE_FIXED || kind == DRIVE_REMOVABLE || kind == DRIVE_RAMDISK)
                     request.admitted_roots.emplace_back(root);
             }
+#else
+        request.admitted_roots.emplace_back(start.root_path());
+#endif
         request.filters = {{"all", "All files", {}},
                            {"text", "Text documents", {"txt", "log", "ini", "cfg", "md"}}};
         request.active_filter_id = "all";

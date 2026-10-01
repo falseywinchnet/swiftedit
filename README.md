@@ -49,3 +49,10 @@ directory and historical internal C++ namespace have not been renamed.
 GUI.Forms owns native editing mechanics, File Manager owns the picker, SwiftEdit
 owns interpretation, session behavior and publication. See
 [known gaps](docs/KNOWN_GAPS.md) and [validation](docs/VALIDATION.md).
+
+## MacBook and cross-platform builds
+
+Cross-platform CSV/formula core CI now runs on Windows, macOS and Linux.
+A native downloadable SwiftEdit Mac application is still being implemented;
+the core test artifacts are not application downloads. See
+[MacBook build status and remaining work](docs/MACOS_BUILD_HANDOFF.md).

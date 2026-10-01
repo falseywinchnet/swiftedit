@@ -149,3 +149,5 @@ Measured 1 MiB ASCII warm-row p50 127.2604 -> 0.0279 ms; insert+row 171.5926 ->
 `docs/performance/2026-10-01-terminal-rows/README.md`. These are component timings,
 not end-to-end snappiness evidence. Edit metadata still rebuilds synchronously;
 wrapping, provider integration and final full lag/bug scan remain unfinished.
+
+2026-10-01 MacBook dogfood direction: see MACOS_BUILD_HANDOFF.md. Native Windows build and all 14 suites passed after startup/localtime/picker guards. SDK-independent production CSV core build and tests also passed locally. New cross-platform core CI runs on push; its remote result is not yet known and it does not package the app. Public TextStore::replace probe retained; no speculative metadata optimization integrated. Mac SDK/POSIX adapters/native packaging still unfinished.

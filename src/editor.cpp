@@ -594,7 +594,13 @@ void Editor::execute(const std::string &id) {
             const std::time_t now =
                 std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
             std::tm local{};
-            localtime_s(&local, &now);
+#ifdef _WIN32
+            const bool local_time_failed = localtime_s(&local, &now) != 0;
+#else
+            const bool local_time_failed = localtime_r(&now, &local) == nullptr;
+#endif
+            if (local_time_failed)
+                throw std::runtime_error("Cannot determine local date and time.");
             std::ostringstream out{};
             out << std::put_time(&local, "%Y-%m-%d %H:%M:%S");
             (*text_).replace_selection(out.str());

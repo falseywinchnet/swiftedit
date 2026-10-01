@@ -71,6 +71,21 @@ void measure(const char *fixture, const std::string &source, std::size_t repetit
     if (!observed)
         throw std::runtime_error("Benchmark produced no rows.");
 }
+void measure_provider(std::ofstream &raw) {
+    const std::size_t bytes = 1024 * 1024;
+    gui_forms::TextStore text(std::string(bytes, 'x'));
+    std::vector<double> samples{};
+    samples.reserve(31);
+    for (std::size_t index = 0; index < 31; ++index) {
+        const Clock::time_point start = Clock::now();
+        const gui_forms::TextEditResult result =
+            text.replace({gui_forms::Utf8Offset(0), gui_forms::Utf8Offset(0)}, "y");
+        static_cast<void>(result);
+        const double milliseconds = elapsed(start);
+        samples.push_back(milliseconds);
+    }
+    report("ascii-1m", "public-textstore-replace", bytes, samples, raw);
+}
 } // namespace
 int main(int argc, char **argv) {
     try {
@@ -97,6 +112,7 @@ int main(int argc, char **argv) {
         }
         std::cout << std::fixed << std::setprecision(4);
         std::cout << "fixture,operation,source_bytes,samples,p50_ms,p95_ms,p99_ms,worst_ms\n";
+        measure_provider(raw);
         measure("ascii-100k", std::string(100 * 1024, 'x'), 101, indexed, raw);
         measure("ascii-1m", std::string(1024 * 1024, 'x'), 31, indexed, raw);
         std::string mixed{};

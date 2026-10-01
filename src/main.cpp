@@ -1,8 +1,11 @@
 #include "editor.hpp"
 #include <iostream>
+#ifdef _WIN32
 #include <windows.h>
 #include <shellapi.h>
+#endif
 
+#ifdef _WIN32
 namespace {
 // CommandLineToArgvW owns one LocalAlloc block, including every string.
 struct NativeArguments {
@@ -20,13 +23,21 @@ struct NativeArguments {
     NativeArguments &operator=(const NativeArguments &) = delete;
 };
 } // namespace
+#endif
 
-int main() {
+int main(int argc, char **argv) {
     try {
-        const NativeArguments arguments{};
         std::filesystem::path initial{};
+#ifdef _WIN32
+        static_cast<void>(argc);
+        static_cast<void>(argv);
+        const NativeArguments arguments{};
         if (arguments.count > 1)
             initial = std::filesystem::absolute(arguments.values[1]);
+#else
+        if (argc > 1)
+            initial = std::filesystem::absolute(argv[1]);
+#endif
         std::shared_ptr<notepad::Editor> editor =
             gui_forms::make_control<notepad::Editor>(gui_forms::StableId("notepad.editor"));
         std::vector<gui_forms::ApplicationWindow> windows = (*editor).application_windows(initial);
