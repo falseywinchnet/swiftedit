@@ -93,7 +93,8 @@ int main() {
         check(terminal.session().text().empty(), "Cut captures malformed source before deletion");
         terminal.paste(raw_cut);
         check(terminal.session().text() == malformed, "Malformed cut/paste preserves exact bytes");
-        check(terminal.undo() && terminal.session().text().empty(), "Paste is one undo step");
+        const bool paste_undone = terminal.undo();
+        check(paste_undone && terminal.session().text().empty(), "Paste is one undo step");
         terminal.paste(raw_copy);
         bool external_refused = false;
         try {
@@ -366,7 +367,8 @@ int main() {
         check(capacity_refused && near_limit.revision() == before_capacity.revision &&
                   near_limit.size() == swiftedit::editable_limit - 2,
               "Oversized paste preserves source and revision");
-        check(near_limit.undo() && near_limit.text().empty(),
+        const bool original_insert_undone = near_limit.undo();
+        check(original_insert_undone && near_limit.text().empty(),
               "Refused paste does not add an undo step");
         bool stale_copy_refused = false;
         try {
