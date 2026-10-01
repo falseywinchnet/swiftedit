@@ -153,7 +153,7 @@ void status_line(std::string &output, std::size_t row, std::string_view source, 
     const std::string safe = swiftedit::escape_field(source);
     output.append(safe, 0, std::min(width, safe.size()));
 }
-enum class Prompt { none, save_path, open_path, exit_choice, find, replacement };
+enum class Prompt { none, save_path, text_copy_path, open_path, exit_choice, find, replacement };
 class Terminal {
 public:
 #ifdef SWIFTEDIT_TERMINAL_SMOKE
@@ -162,6 +162,8 @@ public:
     std::size_t viewport_width() const { return width_; }
     bool wraps() const { return wrap_; }
     std::size_t wrap_cancellations() const { return wrap_cancellations_; }
+    std::size_t text_copy_saves() const { return text_copy_saves_; }
+    bool document_dirty() const { return buffer_.session().dirty(); }
     bool wildcard_enabled() const {
         const swiftedit::SearchPattern pattern = query_.pattern();
         return pattern.slots()[0].wildcard;
@@ -349,6 +351,8 @@ private:
         std::string message = status_;
         if (prompt_ == Prompt::save_path)
             message = "Save new file: " + input_ + "  [Enter / Esc]";
+        if (prompt_ == Prompt::text_copy_path)
+            message = "Save Text Copy: " + input_ + "  [Enter / Esc]";
         if (prompt_ == Prompt::open_path)
             message = "Open file: " + input_ + "  [Enter / Esc]";
         if (prompt_ == Prompt::find)
@@ -370,7 +374,8 @@ private:
                         "Read-only: PgDn Next  PgUp Previous  Ctrl+Home First  ^X Exit", width_);
         else
             status_line(screen, height - 1,
-                        "Shift+arrows Select  ^C Copy  ^K Cut  ^U Paste  F2 Wrap", width_);
+                        "^C Copy  ^K Cut  ^U Paste  ^T Text Copy  F2 Wrap  Shift+arrows Select",
+                        width_);
         if (prompt_ == Prompt::none && cursor_column) {
             position(screen, cursor_row, *cursor_column);
             screen += "\x1b[?25h";
@@ -389,6 +394,20 @@ private:
         if (exit_after_save_)
             done_ = true;
     }
+    void text_copy() {
+        if (buffer_.session().read_only())
+            throw std::runtime_error("Save Text Copy is not yet available for read-only pages.");
+        const std::filesystem::path source =
+            buffer_.session().path().empty()
+                ? std::filesystem::path(utf16(swiftedit::suggested_name(buffer_.session().text())))
+                : buffer_.session().path();
+        const std::u8string name = swiftedit::versioned_name(source).u8string();
+        std::string prepared(reinterpret_cast<const char *>(name.data()), name.size());
+        input_ = std::move(prepared);
+        exit_after_save_ = false;
+        prompt_ = Prompt::text_copy_path;
+        status_ = "Each illegal byte becomes a space. Source unchanged. New file only.";
+    }
     void character(wchar_t value) {
         if (!value)
             return;
@@ -405,8 +424,8 @@ private:
         const std::string text = utf8(units);
         if (prompt_ == Prompt::find) {
             query_.insert(text);
-        } else if (prompt_ == Prompt::save_path || prompt_ == Prompt::open_path ||
-                   prompt_ == Prompt::replacement) {
+        } else if (prompt_ == Prompt::save_path || prompt_ == Prompt::text_copy_path ||
+                   prompt_ == Prompt::open_path || prompt_ == Prompt::replacement) {
             const std::size_t limit = 32768;
             if (input_.size() + text.size() > limit)
                 throw std::runtime_error("Prompt input exceeds its UTF-8 byte limit.");
@@ -425,7 +444,8 @@ private:
         const bool alt = (event.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED)) != 0;
         const bool shift = (event.dwControlKeyState & SHIFT_PRESSED) != 0;
         const WORD key = event.wVirtualKeyCode;
-        const bool preserving_command = ctrl && !alt && (key == 'X' || key == 'S' || key == 'R');
+        const bool preserving_command =
+            ctrl && !alt && (key == 'X' || key == 'S' || key == 'R' || key == 'T');
         if (key != VK_ESCAPE && prompt_ == Prompt::none && !preserving_command)
             wrap_suspended_ = false;
         if (key != 0 && event.uChar.UnicodeChar < 32)
@@ -493,6 +513,12 @@ private:
                     status_ = "Saved";
                     if (exit_after_save_)
                         done_ = true;
+                } else if (prompt_ == Prompt::text_copy_path) {
+                    buffer_.save_text_copy(path);
+#ifdef SWIFTEDIT_TERMINAL_SMOKE
+                    ++text_copy_saves_;
+#endif
+                    status_ = "Text copy saved; open document unchanged";
                 } else
                     open(path);
                 prompt_ = Prompt::none;
@@ -523,6 +549,9 @@ private:
         }
         if (ctrl && !alt) {
             switch (key) {
+            case 'T':
+                text_copy();
+                return;
             case 'H':
                 replace_query_ = true;
                 prompt_ = Prompt::find;
@@ -636,6 +665,7 @@ private:
 #ifdef SWIFTEDIT_TERMINAL_SMOKE
     std::size_t search_hits_{};
     std::size_t wrap_cancellations_{};
+    std::size_t text_copy_saves_{};
 #endif
     Console console_{};
     swiftedit::TerminalBuffer buffer_{};
@@ -661,7 +691,8 @@ int wmain(int argc, wchar_t **argv) {
         if (argc > 2 || (argc == 2 && std::wstring_view(argv[1]) == L"--help")) {
             std::cout << "SwiftEdit interactive terminal\nUsage: swiftedit-terminal [file]\n"
                          "Ctrl+S Save, Ctrl+R Open, Ctrl+X Exit, Shift+arrows Select, "
-                         "Ctrl+Z/Y Undo/Redo, Ctrl+K Cut, Ctrl+U Paste, F2 Wrap to window.\n";
+                         "Ctrl+Z/Y Undo/Redo, Ctrl+K Cut, Ctrl+U Paste, Ctrl+T Save Text Copy, "
+                         "F2 Wrap to window.\n";
             return argc > 2 ? 1 : 0;
         }
         Terminal terminal{};
@@ -835,6 +866,44 @@ int wmain() {
             throw std::runtime_error("Wrap cancellation/recovery or exit cancel changed source.");
         if (!GetConsoleMode(console.input, &restored) || restored != mode)
             throw std::runtime_error("Cancelled wrapped terminal did not restore input mode.");
+        const std::filesystem::path illegal_path = dir / "illegal.txt";
+        const std::filesystem::path copy_path = dir / "illegal.1.txt";
+        const std::string illegal_source("A\xff\xfe\r\rZ", 6);
+        {
+            std::ofstream file(illegal_path, std::ios::binary);
+            file.write(illegal_source.data(), static_cast<std::streamsize>(illegal_source.size()));
+        }
+        FlushConsoleInputBuffer(console.input);
+        enqueue(console.input, 'T', 0, LEFT_CTRL_PRESSED);
+        enqueue(console.input, VK_ESCAPE);
+        enqueue(console.input, 'X', 0, LEFT_CTRL_PRESSED);
+        {
+            Terminal terminal{};
+            if (terminal.run(illegal_path) != 0 || std::filesystem::exists(copy_path))
+                throw std::runtime_error("Cancelled Text Copy wrote a destination.");
+        }
+        FlushConsoleInputBuffer(console.input);
+        enqueue(console.input, 'Q', L'Q');
+        enqueue(console.input, 'T', 0, LEFT_CTRL_PRESSED);
+        enqueue(console.input, VK_RETURN, L'\r');
+        // A second attempt must refuse this now-existing destination.
+        enqueue(console.input, 'T', 0, LEFT_CTRL_PRESSED);
+        enqueue(console.input, VK_RETURN, L'\r');
+        enqueue(console.input, VK_ESCAPE);
+        enqueue(console.input, 'X', 0, LEFT_CTRL_PRESSED);
+        enqueue(console.input, 'N', L'n');
+        {
+            Terminal terminal{};
+            if (terminal.run(illegal_path) != 0 || terminal.text_copy_saves() != 1 ||
+                !terminal.document_dirty())
+                throw std::runtime_error("Text Copy terminal run failed.");
+        }
+        if (notepad::read_file(copy_path).bytes != "QA  \r\rZ" ||
+            notepad::read_file(illegal_path).bytes != illegal_source)
+            throw std::runtime_error(
+                "Text Copy changed source or failed byte-for-space conversion.");
+        if (!GetConsoleMode(console.input, &restored) || restored != mode)
+            throw std::runtime_error("Text Copy terminal did not restore input mode.");
         const std::filesystem::path large_path = dir / "large.txt";
         {
             std::ofstream file(large_path, std::ios::binary);

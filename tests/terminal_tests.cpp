@@ -107,6 +107,31 @@ int main() {
         terminal.move(swiftedit::TerminalMotion::document_end);
         terminal.insert("changed");
         const std::string dirty = terminal.session().text();
+        const swiftedit::DocumentStamp before_copy = terminal.session().stamp();
+        const swiftedit::TerminalSelection copy_selection = terminal.selection();
+        const std::filesystem::path text_copy = dir / "malformed.1.txt";
+        terminal.save_text_copy(text_copy);
+        check(notepad::read_file(text_copy).bytes == std::string(" \xcc\x81Zchanged"),
+              "Text Copy replaces each malformed byte while preserving Unicode");
+        check(terminal.session().text() == dirty && terminal.session().dirty() &&
+                  terminal.session().path() == path &&
+                  terminal.session().stamp().identity == before_copy.identity &&
+                  terminal.session().stamp().revision == before_copy.revision &&
+                  terminal.selection().anchor == copy_selection.anchor &&
+                  terminal.selection().caret == copy_selection.caret,
+              "Text Copy does not alter the open document, dirty state or selection");
+        bool copy_overwrite_refused = false;
+        try {
+            terminal.save_text_copy(text_copy);
+        } catch (const std::exception &) {
+            copy_overwrite_refused = true;
+        }
+        check(copy_overwrite_refused && notepad::read_file(path).bytes == malformed,
+              "Text Copy refuses an existing destination and leaves the source file intact");
+        check(terminal.undo() && terminal.session().text() == malformed,
+              "Text Copy does not establish a new undo boundary");
+        check(terminal.redo() && terminal.session().text() == dirty,
+              "Text Copy preserves redo history");
         bool discard_refused = false;
         try {
             terminal.reset();

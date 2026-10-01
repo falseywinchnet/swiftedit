@@ -362,3 +362,23 @@ Earlier ae3cfc5 native36857611197 was cancelled/superseded, not passed. Current
 wrap benchmarks use no console probe and do not measure poll overhead or total
 Escape latency; broader interactive p50/p95/p99/worst work remains. Also retain
 GUI/provider/full-objective gaps; cancellation here is only one owned phase.
+
+Terminal Save Text Copy is now reachable through Ctrl+T and an editable filename
+prompt. Uses existing Session sanitization and new-file-only publication, with
+next dot-version suggestion. Escape writes nothing; destination collision leaves
+the prompt open; successful copy preserves original path/bytes/selection/dirty
+state and history. Read-only paged copy is explicitly unavailable. Save/Open/
+Exit/Text Copy remain usable while wrap layout is suspended.
+
+Headless17 suites passed1.66s including new terminal dirty-state/selection/stamp/
+undo/redo preservation checks. Coordinated hidden-console smoke exit0 under1s
+verified prompt cancel/nooutput, twoillegalbytes->twospaces with CRCR preserved,
+original disk bytes unchanged, open document still dirty and exactlyone copy
+success across an existing-target retry. Prior wrap/cancel/Unicode/paging/mode
+checks also passed. BinarySHA256:
+ACD4EF0647345C00AB8BF7380D3EE7A23A4C17E89468711E78A0D6C7D9D83F1D.
+Logs .build/swiftedit-sdk-6def54a/textcopy-smoke-20261001-045937.stdout.txt and
+.stderr.txt. Desktop slot released immediately;77-file spelling audit clean.
+Previous11eafc0 native36858517854 still observedlive; portable36858518167 passed.
+No full-feature/lag completion claim: GUIprovider, pagedcopy, synchronous metadata
+and comprehensive native responsiveness work remain outstanding.

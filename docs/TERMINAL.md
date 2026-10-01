@@ -15,6 +15,7 @@ buffer when it exits normally or unwinds an exception.
 | Typing, Enter, Tab | Replace selection or insert text |
 | Backspace/Delete | Delete one complete grapheme or selection |
 | Ctrl+S | Save; unnamed documents prompt for a new filename |
+| Ctrl+T | Save Text Copy to a new filename; each illegal byte becomes a space |
 | Ctrl+H | Replace All: query, replacement, then Enter applies; Escape cancels preparation |
 | Ctrl+W / F3 | Edit Find query / find next, wrapping at EOF |
 | Ctrl+? in Find | Toggle one grapheme wildcard at the query caret, or last slot at query end |
@@ -71,13 +72,22 @@ construction is still synchronous. This is not a strict wall-clock deadline or
 complete interruptibility for all document work.
 
 This executable is unfinished. Persistent wrap preferences,
-Text-copy prompt, full conflict review, external
+full conflict review, external
 clipboard integration and further interactive/accessibility checks remain.
 Internal Copy/Cut captures an owned source clipboard, so malformed UTF-8 and
 existing CRCR bytes paste back exactly. New external insertions remain validated. Warm logical-line rendering now uses bounded revision-checked sparse indexes;
 see performance/2026-10-01-terminal-rows/README.md. Metadata rebuilding after edits
 remains synchronous and needs further lag work. A display-layout
 failure retains the input loop so Save and Exit remain available.
+
+Save Text Copy (Ctrl+T) suggests the next dot-version filename and lets you edit
+it before Enter. Escape cancels without writing. An existing destination is
+refused; choose another filename instead. The separate copy includes unsaved
+edits, replacing each illegal UTF-8 byte with one space while retaining valid
+Unicode, controls, whitespace and line endings. It does not change the open
+document's path, bytes, selection, dirty state, undo or redo history. Normal Save
+still refuses illegal bytes. Read-only paged Text Copy remains unavailable;
+the command reports that limit without beginning a write.
 
 `swiftedit-terminal-smoke.exe` is an opt-in test, not a user editor. It detaches
 from any caller console, allocates its own hidden console, injects paired key
