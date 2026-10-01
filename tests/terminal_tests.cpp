@@ -5,7 +5,7 @@
 #include "terminal_query.hpp"
 #include <iostream>
 #include <fstream>
-#include <windows.h>
+#include "platform.hpp"
 #include <stdexcept>
 namespace {
 void check(bool condition, const char *message) {
@@ -63,7 +63,7 @@ int main() {
         const std::string malformed("\xff\xcc\x81Z", 4);
         const std::filesystem::path dir =
             std::filesystem::temp_directory_path() /
-            ("swiftedit-terminal-" + std::to_string(GetCurrentProcessId()));
+            ("swiftedit-terminal-" + std::to_string(test_process_id()));
         check(std::filesystem::create_directory(dir), "Unique terminal fixture");
         struct Cleanup {
             std::filesystem::path path{};

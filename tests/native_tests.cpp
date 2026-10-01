@@ -3,7 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
-#include <windows.h>
+#include "platform.hpp"
 namespace gf = gui_forms;
 void require(bool good, const char *message) {
     if (!good)
@@ -272,7 +272,7 @@ int main() {
     try {
         const std::filesystem::path path =
             std::filesystem::temp_directory_path() /
-            ("notepad-native-" + std::to_string(GetCurrentProcessId()) + ".txt");
+            ("notepad-native-" + std::to_string(test_process_id()) + ".txt");
         const bool observed_2 = std::filesystem::exists(path);
         require(!observed_2, "Unique native fixture");
         struct Cleanup {

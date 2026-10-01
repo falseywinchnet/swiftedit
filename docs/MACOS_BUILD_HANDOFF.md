@@ -13,8 +13,9 @@ library build or a passing source audit does not satisfy it.
   process arguments on POSIX. Picker drive enumeration is Windows-only; POSIX
   uses the filesystem root. Local date insertion uses the platform localtime API
   and reports conversion failure. Windows build validation preserves current use.
-* The native CMake build still intentionally refuses non-Windows configurations
-  until real file and page adapters exist. No unsupported platform success claim.
+* Native CMake now selects Windows or POSIX file/page adapters and creates a
+  macOS app-bundle target. Whole-application Mac validation still awaits matching
+  installed SDKs; only the standalone core/adapters have passed Mac CI.
 * File Manager has a macos-arm64 dogfood app release, but its release assets do
   not supply the matching installed GUI.Forms/picker SDK required by SwiftEdit.
   The provider confirms no new prepared-text SDK is available yet.
@@ -71,3 +72,21 @@ FIFO checks passed on macOS/Linux. Evidence:
 https://github.com/falseywinchnet/swiftedit/actions/runs/36848596407
 This proves the tested file-reader component, not a native app or downloadable
 Mac bundle. Next: POSIX save/conflict semantics and installed macOS SDK packaging.
+
+2026-10-01 POSIX save checkpoint: 3e655d4 passed real Windows/macOS/Linux CI run
+36849322565. POSIX adapter creates sibling files privately, preserves existing
+permissions/attributes, checks snapshots and metadata before publication, uses
+atomic no-overwrite link publication for new files and atomic name exchange for
+replacement. Cooperating writers are excluded by flock. A detected late replace
+race leaves displaced bytes at the reported sibling recovery path and reports
+failure; it does not claim the visible target was unchanged after an uncertain
+publication. POSIX uncooperative writers are not prevented by mandatory locks.
+Deterministic test-only publication hooks prove new-target collision refusal and
+displaced-content retention. Ordinary saves delete temporary files; no persistent
+history is retained on success. Unsupported atomic exchange/metadata copy fails
+without a destructive fallback. New files start private (0600).
+Main CMake now selects platform adapters and creates a macOS app bundle; Windows
+console target stays Windows-only. Fixture process IDs, permissions and cooperating
+writer ownership are portable. Windows native build + 15 suites passed (2.10s),
+69-file spelling audit clean. Full Mac GUI/SDK/bundle validation remains pending.
+The modification-time follow-up is being rechecked on macOS/Linux CI.

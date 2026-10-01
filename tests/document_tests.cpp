@@ -2,7 +2,7 @@
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
-#include <windows.h>
+#include "platform.hpp"
 
 using namespace notepad;
 void require(bool test, const char *label) {
@@ -114,9 +114,8 @@ int main() {
         require(replaced.text == "bb" && replaced.count == 2, "Nonoverlapping replace all");
         const Replacement calculated_6 = replace_all("a", "a", "aa", true);
         require(calculated_6.text == "aa", "No recursive replacement");
-        const std::filesystem::path dir =
-            std::filesystem::temp_directory_path() /
-            ("notepad-tests-" + std::to_string(GetCurrentProcessId()));
+        const std::filesystem::path dir = std::filesystem::temp_directory_path() /
+                                          ("notepad-tests-" + std::to_string(test_process_id()));
         const bool observed_5 = std::filesystem::create_directory(dir);
         require(observed_5, "Unique fixture directory");
         struct Cleanup {
@@ -169,7 +168,7 @@ int main() {
         }
         require(doc.saved_text == original, "Failed open retains document");
         const FileSnapshot observed = read_file(path);
-        SetFileAttributesW(path.c_str(), FILE_ATTRIBUTE_READONLY);
+        set_test_read_only(path, true);
         {
             bool refused = false;
             try {
@@ -179,7 +178,7 @@ int main() {
             }
             require(refused, "Expected refusal");
         }
-        SetFileAttributesW(path.c_str(), FILE_ATTRIBUTE_NORMAL);
+        set_test_read_only(path, false);
         const std::filesystem::path hard = dir / "hard.txt";
         const BOOL hardlink_created = CreateHardLinkW(hard.c_str(), path.c_str(), nullptr);
         require(hardlink_created != FALSE, "Create hardlink fixture");
@@ -213,20 +212,18 @@ int main() {
         const std::string expected_utf16 = encode("alpha\r\nbeta\ntail", Encoding::utf16_be);
         require(saved_utf16.bytes == expected_utf16, "UTF16 save preserves format");
         const FileSnapshot locked = read_file(utf16);
-        HANDLE writer = CreateFileW(utf16.c_str(), GENERIC_WRITE,
-                                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
-                                    OPEN_EXISTING, 0, nullptr);
-        require(writer != INVALID_HANDLE_VALUE, "External writer fixture");
         {
-            bool refused = false;
-            try {
-                static_cast<void>(write_file(utf16, "contended", locked));
-            } catch (const std::exception &failure) {
-                refused = true;
+            const TestWriter writer(utf16);
+            {
+                bool refused = false;
+                try {
+                    static_cast<void>(write_file(utf16, "contended", locked));
+                } catch (const std::exception &failure) {
+                    refused = true;
+                }
+                require(refused, "Expected refusal");
             }
-            require(refused, "Expected refusal");
         }
-        CloseHandle(writer);
         const notepad::FileSnapshot observed_4 = read_file(utf16);
         require(observed_4 == locked, "Open writer refusal preserves original");
         for (const std::filesystem::directory_entry &entry :

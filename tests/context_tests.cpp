@@ -1,7 +1,7 @@
 #include "context.hpp"
 #include <iostream>
 #include <fstream>
-#include <windows.h>
+#include "platform.hpp"
 #include <stdexcept>
 namespace {
 void check(bool condition, const char *message) {
@@ -71,7 +71,7 @@ int main() {
         check(empty_page.blanks.empty(), "Empty document has no synthetic blank line");
         const std::filesystem::path dir =
             std::filesystem::temp_directory_path() /
-            ("swiftedit-context-" + std::to_string(GetCurrentProcessId()));
+            ("swiftedit-context-" + std::to_string(test_process_id()));
         check(std::filesystem::create_directory(dir), "Unique context fixture");
         struct Cleanup {
             std::filesystem::path path{};

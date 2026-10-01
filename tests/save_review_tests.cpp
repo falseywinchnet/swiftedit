@@ -2,7 +2,7 @@
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
-#include <windows.h>
+#include "platform.hpp"
 
 namespace {
 void check(bool condition, const char *message) {
@@ -27,7 +27,7 @@ int main() {
     try {
         const std::filesystem::path dir =
             std::filesystem::temp_directory_path() /
-            ("swiftedit-save-review-" + std::to_string(GetCurrentProcessId()));
+            ("swiftedit-save-review-" + std::to_string(test_process_id()));
         check(std::filesystem::create_directory(dir), "Unique fixture directory");
         Cleanup cleanup{dir};
         const std::filesystem::path path = dir / "report.txt";

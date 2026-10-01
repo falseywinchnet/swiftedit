@@ -3,7 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
-#include <windows.h>
+#include "platform.hpp"
 
 namespace gf = gui_forms;
 gf::HostCapabilities capabilities() {
@@ -70,7 +70,7 @@ gf::Control::Ptr find_control(const gf::Control::Ptr &root, std::string_view id)
 void verify_conflict_fields() {
     const std::filesystem::path dir =
         std::filesystem::temp_directory_path() /
-        ("swiftedit-conflict-ui-" + std::to_string(GetCurrentProcessId()));
+        ("swiftedit-conflict-ui-" + std::to_string(test_process_id()));
     check(std::filesystem::create_directory(dir), "Unique conflict fixture");
     struct Cleanup {
         std::filesystem::path path{};
@@ -230,7 +230,7 @@ int main() {
               "DPI transitions preserve document and selection");
         const std::filesystem::path path =
             std::filesystem::temp_directory_path() /
-            ("notepad-ui-tests-" + std::to_string(GetCurrentProcessId()) + ".txt");
+            ("notepad-ui-tests-" + std::to_string(test_process_id()) + ".txt");
         const bool observed_2 = std::filesystem::exists(path);
         check(!observed_2, "Unique fixture");
         struct Cleanup {

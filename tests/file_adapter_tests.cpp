@@ -105,10 +105,15 @@ int main() {
         const int attribute_set = setxattr(path.c_str(), "user.swiftedit", "metadata", 8, 0);
 #endif
         check(attribute_set == 0, "Set fixture extended attribute");
+        const std::filesystem::file_time_type old_modified =
+            std::filesystem::file_time_type::clock::now() - std::chrono::hours(24);
+        std::filesystem::last_write_time(path, old_modified);
         const notepad::FileSnapshot metadata_source = notepad::read_file(path);
         const notepad::FileSnapshot metadata_saved =
             notepad::write_file(path, "metadata retained", metadata_source);
         check(metadata_saved.bytes == "metadata retained", "Metadata save completed");
+        const std::filesystem::file_time_type new_modified = std::filesystem::last_write_time(path);
+        check(new_modified > old_modified, "Edited file receives a new modification time");
         struct stat info{};
         const int inspected = stat(path.c_str(), &info);
         check(inspected == 0 && (info.st_mode & 0777) == 0604, "Permissions preserved");

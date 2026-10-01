@@ -1,5 +1,6 @@
 #include "document.hpp"
 #include <atomic>
+#include <array>
 #include <cerrno>
 #include <fcntl.h>
 #include <stdexcept>
@@ -246,8 +247,20 @@ FileSnapshot write_file(const std::filesystem::path &path, std::string_view byte
             fail("Cannot write prepared file");
         copied += static_cast<std::size_t>(count);
     }
-    if (actual.exists)
+    if (actual.exists) {
         copy_metadata(current.value, prepared.value, original);
+        // Preserve access time and metadata, but an edited file must receive a
+        // fresh modification time even when COPYFILE_METADATA copied the old one.
+        std::array<timespec, 2> times{};
+#ifdef __APPLE__
+        times[0] = original.st_atimespec;
+#else
+        times[0] = original.st_atim;
+#endif
+        times[1].tv_nsec = UTIME_NOW;
+        if (futimens(prepared.value, times.data()) != 0)
+            fail("Cannot set edited file timestamp");
+    }
     if (fsync(prepared.value) != 0)
         fail("Cannot flush prepared file");
     const FileSnapshot candidate = snapshot(prepared.value);

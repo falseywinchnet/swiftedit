@@ -2,7 +2,7 @@
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
-#include <windows.h>
+#include "platform.hpp"
 
 void check(bool b, const char *s) {
     if (!b)
@@ -18,7 +18,7 @@ int main() {
         using namespace swiftedit;
         const std::filesystem::path dir =
             std::filesystem::temp_directory_path() /
-            ("swiftedit-session-" + std::to_string(GetCurrentProcessId()));
+            ("swiftedit-session-" + std::to_string(test_process_id()));
         const bool observed_5 = std::filesystem::create_directory(dir);
         check(observed_5, "unique fixture");
         struct Cleanup {
