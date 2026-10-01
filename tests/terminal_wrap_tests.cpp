@@ -112,6 +112,33 @@ void verify_view() {
     }
     check(refused, "Visible row retention has an explicit upper bound");
 }
+void verify_scroll() {
+    swiftedit::TerminalBuffer buffer{};
+    swiftedit::TerminalWrapView view{};
+    buffer.insert(std::string(1000, 'x'));
+    buffer.move_to(2, buffer.session().stamp());
+    static_cast<void>(view.frame(buffer, 7, 4));
+    std::size_t expected_top = 0;
+    for (std::size_t row = 1; row <= 40; ++row) {
+        view.move(buffer, swiftedit::TerminalMotion::down, false, 1, 7);
+        const std::vector<swiftedit::TerminalWrappedRow> &frame = view.frame(buffer, 7, 4);
+        expected_top = row > 3 ? row - 3 : 0;
+        check(frame[0].span.source.offset == expected_top * 7,
+              "Crossing the viewport bottom scrolls by one visual row");
+        check(frame[row - expected_top].display.caret_column == 2,
+              "Downward scrolling keeps the caret at its expected screen position");
+    }
+    for (std::size_t row = 40; row > 0;) {
+        --row;
+        view.move(buffer, swiftedit::TerminalMotion::up, false, 1, 7);
+        const std::vector<swiftedit::TerminalWrappedRow> &frame = view.frame(buffer, 7, 4);
+        expected_top = std::min(expected_top, row);
+        check(frame[0].span.source.offset == expected_top * 7,
+              "Crossing the viewport top scrolls by one visual row");
+        check(frame[row - expected_top].display.caret_column == 2,
+              "Upward scrolling preserves the desired column");
+    }
+}
 void verify_checkpoints() {
     swiftedit::TerminalBuffer buffer{};
     swiftedit::TerminalWrapView view{};
@@ -145,6 +172,7 @@ void verify_checkpoints() {
 int main() {
     try {
         verify_view();
+        verify_scroll();
         verify_checkpoints();
         swiftedit::TerminalBuffer buffer{};
         verify(buffer, 0, 5, {""});

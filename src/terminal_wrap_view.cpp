@@ -148,10 +148,11 @@ TerminalWrapView::frame(TerminalBuffer &buffer, std::size_t width, std::size_t h
         probe = following;
     }
     if (!visible) {
+        const bool below = caret.offset > top_.offset;
         top_ = caret;
         // Reveal a caret below the viewport on its bottom row; one above it
         // becomes the top row. Source ordering also orders visual rows.
-        if (caret.offset > probe.offset) {
+        if (below) {
             for (std::size_t index = 1; index < height; ++index)
                 top_ = previous(buffer, top_);
         }

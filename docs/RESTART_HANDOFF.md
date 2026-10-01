@@ -320,3 +320,20 @@ was made for this follow-up. Previous 508c220 native CI 36857210839 remains
 observed in progress; portable 36857212014 succeeded. Provider A2 remains
 unavailable as public SDK; resumed its already coordinated work by message,
 without assuming editing support from visual-only shaping.
+
+Wrapped scrolling bug scan reproduced an exact-bottom boundary bug: one Down
+past the last visible row jumped the caret to the top. The previous comparison
+used a probe already advanced to that same first-offscreen row. Reveal direction
+now compares against the old viewport top. A regression fails on the old code
+and checks exact top offsets and caret cells across 40 downward and 40 upward
+moves; the fix passes. Full 17-suite run passed in 2.73s; 77-file spelling audit
+clean. No new desktop launch. Reconciled stale objective-ledger status for the
+implemented terminal, Markdown/CSV views, control pickers and wrap; this does
+not remove pending full GUI migration or final visual/responsiveness audits.
+
+Checked installed public Application API again: fixed startup window vector,
+maximum64, weak show/hide/close/fullscreen handles, no dynamic registration.
+Relayed independent New Window runtime/lifetime prerequisite to coordinator.
+A2 remains OFF-default draft work and not consumer SDK availability. Current
+ae3cfc5 native run 36857611197 and portable36857611148 were observed live at
+the start of this follow-up; continue checking those exact jobs.
