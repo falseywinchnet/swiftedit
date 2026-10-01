@@ -108,18 +108,26 @@ private:
                 text.replace_selection("unsaved parent document");
                 text.select(gf::Utf8Offset(2), gf::Utf8Offset(7));
                 const gf::TextSelection selection = text.selection();
+                (*editor_).execute("copy");
                 (*editor_).execute("new-window");
                 require(!failure_, "Native child launch accepted");
                 require(text.text() == "unsaved parent document" && text.selection() == selection &&
                             (*editor_).document().dirty(text.text()), "Parent document preserved");
             }
             require(!std::filesystem::exists("child.failed"), "Child reported native failure");
-            const bool ready_to_close = parent_ ? std::filesystem::exists("child.ready") :
+            if (!parent_ && !pasted_) {
+                (*editor_).execute("paste");
+                require(text.text() == "saved", "Native clipboard crosses independent processes");
+                pasted_ = true;
+                receipt("child.pasted");
+            }
+            const bool ready_to_close = parent_ ? std::filesystem::exists("child.pasted") :
                                                  std::filesystem::exists("parent.closed");
             if (!ready_to_close)
                 return;
             if (!parent_) {
-                require(text.text().empty(), "Child source remains independent after parent closes");
+                require(text.text() == "saved", "Child source remains independent after parent closes");
+                text.select_all();
                 text.replace_selection("child still editable");
                 require(text.text() == "child still editable", "Child still accepts edits");
             }
@@ -136,7 +144,7 @@ private:
             static_cast<void>(handle_.request_close());
         }
     }
-    bool parent_{}, complete_{};
+    bool parent_{}, complete_{}, pasted_{};
     unsigned ticks_{};
     std::size_t ready_count_{};
     std::shared_ptr<notepad::Editor> editor_{};

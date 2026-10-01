@@ -559,3 +559,11 @@ hidden dialogs were quiet in both phases. This is baseline variation, not a
 rendering improvement: New Window did not change caret/host rendering.
 Provider root is pushing 2d04310 with file-alias opening support; wait for
 actual native fixtures and verified SDK archives before adopting it.
+
+Two-real-editor a7390b8 passed all three native jobs (36886655054) and core
+(36886655139). Raw native logs are under .build/new-window-a7390b8 per platform.
+The next fixture adds native clipboard transfer while both windows are alive,
+then checks retained pasted text and editing after parent GUI shutdown. This
+does not assume an X11 clipboard manager or test clipboard persistence after
+source shutdown. Local native-fixture compilation and 101-file style audit pass;
+no local GUI launched. Provider2d04310 native36886549919 remains running.

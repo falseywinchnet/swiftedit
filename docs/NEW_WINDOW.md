@@ -61,8 +61,18 @@ still narrower than the two-window product requirement.
 A separate opt-in `independent-window-native` fixture now opens two actual
 Editor/Application instances in separate processes. It invokes the first
 editor's New Window command while the first document is dirty and selected,
-checks preservation, closes the first GUI, and verifies the second editor stays
-blank and accepts an edit after that shutdown. Both use the normal nine-window
+checks preservation and the child's blank initial state, copies selected text
+through the native clipboard to the child, closes the first GUI, and verifies
+the child retains the pasted text and accepts another edit after shutdown.
+Clipboard transfer occurs while its source window is alive; persistence after
+source shutdown depends on the desktop clipboard service and is not asserted
+by this fixture. Both use the normal nine-window
 topology and stop their owned timers before closing. This fixture is built
 locally but awaits native CI execution. Packaged macOS activation/placement and
 keyboard interaction remain separate dogfood checks.
+
+The two-editor lifecycle fixture without clipboard transfer passed on all three
+native platforms at a7390b8, run 36886655054 (macOS 3.70 seconds, Linux 0.41
+seconds). The separate core run 36886655139 also passed. The next fixture adds
+native clipboard transfer as described above; that addition is not yet covered
+by these successful runs. Local compilation and the 101-file spelling audit pass.
