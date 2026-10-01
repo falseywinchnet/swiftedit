@@ -620,3 +620,9 @@ first observed ending, including mixed-ending files. GUI New/initial constructio
 and terminal reset/initial construction use the same native_newline policy.
 Windows full build and 16 suites passed (3.39s); standalone 4-suite gate passed.
 Cross-platform CI checks the actual compiled host convention and preservation.
+
+2026-10-01 native three-platform and Mac release gate passed at 5d7d1c7.
+Run 36853053157: Windows 17/17, macOS ARM64 16/16, Linux 16/16 including owned
+native save/dialog/shutdown. Packaged Mac startup, loader paths, ad-hoc signature,
+archive/executable hashes and published asset digest verified. Full evidence and
+scope limits: DOGFOOD_2026-10-01.md. Suite times do not establish UI latency.

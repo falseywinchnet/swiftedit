@@ -202,3 +202,11 @@ first observed ending, including mixed-ending files. GUI New/initial constructio
 and terminal reset/initial construction use the same native_newline policy.
 Windows full build and 16 suites passed (3.39s); standalone 4-suite gate passed.
 Cross-platform CI checks the actual compiled host convention and preservation.
+
+2026-10-01 Mac dogfood published: native run 36853053157 is fully green at
+5d7d1c7 (Windows 17/17, Mac 16/16, Linux 16/16, including native lifecycle).
+The Mac app is released as v0.2.0-dogfood.20261001. See DOGFOOD_2026-10-01.md
+for source/SDK pins, checksums, packaging/sign/startup evidence and limitations.
+The earlier missing-SDK/Mac-app gate is resolved. Next work resumes the unfinished
+expanded feature set, especially shared-session GUI migration and public-provider
+coordination; the final end-to-end lag/bug scan remains pending.

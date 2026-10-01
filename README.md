@@ -4,6 +4,16 @@ A native C++20 text editor built with the installed GUI.Forms and File Manager
 Document Picker packages. Traditional dropdown menus, owned dialogs, plain-text
 clipboard, no ribbon, browser runtime or persistent recovery files.
 
+**Mac download:** [SwiftEdit 0.2.0 dogfood for Apple silicon, macOS 26](https://github.com/falseywinchnet/swiftedit/releases/tag/v0.2.0-dogfood.20261001).
+Download the ZIP, extract it and open SwiftEdit.app. This private-repository
+release requires GitHub sign-in. It is ad-hoc signed, not notarized; the release
+notes include first-launch instructions and current limits.
+
+Native CI builds and tests Windows x64, macOS ARM64 and Linux x64 on every push.
+It consumes the matching installed SDK archives pinned in
+`ci/native-sdk-lock.json` and uploads a verified Mac app archive. The
+[first release evidence](docs/DOGFOOD_2026-10-01.md) records the exact checks.
+
 This development checkpoint adds the SwiftEdit identity, separate as-opened
 restore, last-save undo boundary, grapheme character/selection counts, explicit
 LF/CRLF conversion, date/time insertion (F5), bracket-based filename suggestions,
@@ -27,7 +37,7 @@ This is not a claim that the full expanded product is finished.
 Run `tools/Build-Windows.ps1` in PowerShell. Default compiler is the existing
 MinGW-w64 installation at `C:/Users/Shadow/plan-paint/build-deps/msys64/mingw64/bin`.
 The frozen matching SDK pair is
-`C:/Users/Shadow/file_manager/.build/sdk-checkpoints/dbe3766/windows-x64/`:
+`C:/Users/Shadow/file_manager/.build/sdk-checkpoints/house-style-final/windows-x64/`:
 `gui-forms-sdk` and `picker-sdk`. The TextBox `clear_undo_history` API is required.
 Only installed public packages are consumed; no provider-private source is copied.
 
