@@ -1,4 +1,5 @@
 #include "editor.hpp"
+#include "user_paths.hpp"
 #include <deque>
 #include <fstream>
 #include <iostream>
@@ -245,6 +246,40 @@ void verify_csv_keyboard_commands() {
         }
     }
 }
+void verify_picker_home() {
+    const std::filesystem::path home = notepad::user_home_directory();
+    const std::filesystem::path initial =
+        std::filesystem::canonical(std::filesystem::temp_directory_path()) / "unopened.txt";
+    const std::u8string home_utf8 = home.u8string();
+    const std::string expected(reinterpret_cast<const char *>(home_utf8.data()), home_utf8.size());
+    for (const bool named : {false, true}) {
+        const std::shared_ptr<notepad::Editor> editor =
+            gf::make_control<notepad::Editor>(gf::StableId("home.editor"));
+        const std::filesystem::path start = named ? initial : std::filesystem::path{};
+        std::vector<gf::ApplicationWindow> windows = (*editor).application_windows(start);
+        std::size_t checked = 0;
+        for (gf::ApplicationWindow &entry : windows) {
+            if (entry.stable_id != "notepad.open-picker" &&
+                entry.stable_id != "notepad.save-picker")
+                continue;
+            gf::Window &window = *entry.model;
+            entry.options.ready(window, {});
+            window.perform_layout();
+            const std::shared_ptr<gf::TextBox> path =
+                std::dynamic_pointer_cast<gf::TextBox>(window.find("file-manager.picker.path"));
+            const std::shared_ptr<gf::Button> home_button =
+                std::dynamic_pointer_cast<gf::Button>(window.find("file-manager.picker.root"));
+            check(path && home_button, "Picker exposes path and Home controls");
+            if (!named)
+                check((*path).text() == expected, "Untitled picker starts in user home, not cwd");
+            const bool clicked = (*home_button).perform_click();
+            check(clicked && (*path).text() == expected,
+                  "Open and Save picker Home resolves user home independently of document folder");
+            ++checked;
+        }
+        check(checked == 2, "Both picker profiles checked");
+    }
+}
 void verify_callback_revocation() {
     std::shared_ptr<notepad::Editor> editor =
         gf::make_control<notepad::Editor>(gf::StableId("lifetime.editor"));
@@ -334,6 +369,7 @@ void verify_grapheme_status() {
 int main() {
     try {
         verify_callback_revocation();
+        verify_picker_home();
         verify_csv_keyboard_commands();
         verify_conflict_fields();
         verify_grapheme_status();

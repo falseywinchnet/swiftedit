@@ -501,3 +501,14 @@ with 32768 row cursors /1024 page starts maximum. Tests cover CRLF after exact
 wrap, EOF, mixed page/row movement, split control labels, and an actual16MiB
 read-only file with unchanged stamp/dirty state.17/17suites passed4.48s;81-file
 style spelling audit/diff check clean. Native physical-key smoke not rerun.
+
+Mac owner dogfood defects: approximately7% idleCPU on a blank document, picker
+symlink navigation fails, Home points incorrectly. Home consumer bug fixed:
+actual user home is resolved independently of cwd/document location; untitled
+picker starts there. Both Open/Save Home buttons tested with untitled and named
+startup; all17suites passed2.96s,83-file style audit clean. Provider coordinator
+notified of trusted picker symlink navigation and blank Mac idle CPU; no cause
+or shared-source fix claimed. Package-Mac now samples process CPU over10quiet
+seconds after5s warmup on an empty fixture, stores one-core percentage and scope
+in manifest; focus/occlusion are not controlled and no pass threshold inferred.
+CPU time parser sample checks pass; native measurement awaits CI.

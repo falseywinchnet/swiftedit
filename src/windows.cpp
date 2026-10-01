@@ -1,5 +1,6 @@
 #include "editor.hpp"
 #include "session.hpp"
+#include "user_paths.hpp"
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -116,8 +117,8 @@ Editor::application_windows(const std::filesystem::path &initial) {
     main.options.ready = WindowReady{observe(), WindowKind::main, initial};
     main.options.closing = WindowClosing{observe(), WindowKind::main};
     result.push_back(std::move(main));
-    const std::filesystem::path requested_start =
-        initial.empty() ? std::filesystem::current_path() : initial.parent_path();
+    const std::filesystem::path home = user_home_directory();
+    const std::filesystem::path requested_start = initial.empty() ? home : initial.parent_path();
     // System directory aliases (for example macOS /var) identify the starting
     // directory. Grant its resolved location; do not resolve the document file.
     const std::filesystem::path start = std::filesystem::canonical(requested_start);
@@ -131,7 +132,7 @@ Editor::application_windows(const std::filesystem::path &initial) {
         request.owner_application_id = "org.malkuth.swiftedit";
         request.show_hidden = true;
         request.authority = file_manager::DocumentPickerAuthority::trusted_local_host;
-        request.home_location = start;
+        request.home_location = home;
 #ifdef _WIN32
         const DWORD drives = GetLogicalDrives();
         for (unsigned i = 0; i < 26; ++i)
@@ -231,7 +232,7 @@ void Editor::show_picker(bool save_as) {
     if (!picker.window || !picker.handle.active())
         throw std::runtime_error("The shared file picker is not ready.");
     const std::filesystem::path requested_start =
-        document_.path.empty() ? std::filesystem::current_path() : document_.path.parent_path();
+        document_.path.empty() ? user_home_directory() : document_.path.parent_path();
     const std::filesystem::path start = std::filesystem::canonical(requested_start);
     (*picker.view).set_authority_valid(true);
     if (save_as)

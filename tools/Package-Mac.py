@@ -10,6 +10,7 @@ import platform
 import shutil
 import subprocess
 import tempfile
+import time
 from typing import BinaryIO, Protocol
 
 
@@ -54,10 +55,35 @@ def verify_load_paths(binary: Path, executable: Path, app: Path) -> None:
             raise RuntimeError('Unresolved external runtime dependency: ' + dependency)
 
 
-def verify_startup(executable: Path, stage: Path) -> None:
+def cpu_seconds(value: str) -> float:
+    fields: list[str] = value.strip().split(':')
+    if len(fields) < 2 or len(fields) > 3:
+        raise RuntimeError('Unexpected process CPU time: ' + value)
+    result: float = 0.0
+    field: str
+    for field in fields:
+        result = result * 60.0 + float(field)
+    return result
+
+
+def read_cpu_seconds(pid: int) -> float:
+    sample: str = run(['/bin/ps', '-p', str(pid), '-o', 'time='])
+    result: float = cpu_seconds(sample)
+    return result
+
+
+def wait_alive(child: subprocess.Popen[bytes], seconds: int, log: Path) -> None:
+    try:
+        child.wait(timeout=seconds)
+    except subprocess.TimeoutExpired:
+        return
+    raise RuntimeError('Packaged app exited during observation; inspect ' + str(log))
+
+
+def verify_startup(executable: Path, stage: Path) -> dict[str, object]:
     """Own one child and a disposable fixture; always reap the child on exit."""
     fixture: Path = stage / 'startup-fixture.txt'
-    fixture.write_text('SwiftEdit packaged startup fixture\n', encoding='utf-8')
+    fixture.write_text('', encoding='utf-8')
     log: Path = stage / 'startup.log'
     environment: dict[str, str] = dict(os.environ)
     variable: str
@@ -69,11 +95,23 @@ def verify_startup(executable: Path, stage: Path) -> None:
             [str(executable), str(fixture)], cwd=stage, env=environment,
             stdout=stream, stderr=subprocess.STDOUT)
         try:
-            try:
-                child.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                return
-            raise RuntimeError('Packaged app exited during startup; inspect ' + str(log))
+            wait_alive(child, 5, log)
+            before: float = read_cpu_seconds(child.pid)
+            started: float = time.monotonic()
+            wait_alive(child, 10, log)
+            after: float = read_cpu_seconds(child.pid)
+            elapsed: float = time.monotonic() - started
+            consumed: float = after - before
+            if consumed < 0:
+                raise RuntimeError('Process CPU time moved backwards')
+            observation: dict[str, object] = {
+                'warmup_seconds': 5, 'elapsed_seconds': elapsed,
+                'process_cpu_seconds': consumed,
+                'percent_of_one_core': 100.0 * consumed / elapsed,
+                'scope': 'ten quiet seconds with an empty text fixture on the CI runner; '
+                         'focus and occlusion not controlled; no idle-performance pass threshold'}
+            print('Packaged idle CPU: ' + json.dumps(observation))
+            return observation
         finally:
             if child.poll() is None:
                 child.terminate()
@@ -122,12 +160,13 @@ def main() -> None:
             run(['codesign', '--force', '--sign', '-', str(library)])
     run(['codesign', '--force', '--deep', '--sign', '-', str(app)])
     run(['codesign', '--verify', '--deep', '--strict', str(app)])
-    verify_startup(executable, stage)
+    idle_cpu: dict[str, object] = verify_startup(executable, stage)
     manifest: dict[str, object] = {
         'product': 'SwiftEdit', 'source_revision': revision,
         'platform': platform.platform(), 'architecture': platform.machine(),
         'signature': 'ad-hoc; not Developer ID signed or notarized',
         'packaged_startup': 'remained running for five seconds on a disposable text fixture',
+        'idle_cpu_observation': idle_cpu,
         'sdk': json.loads((sdk / 'manifest.json').read_text(encoding='utf-8')),
         'executable_sha256': sha256(executable)}
     (output / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
