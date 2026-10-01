@@ -39,6 +39,8 @@ struct Calculation {
 [[nodiscard]] Calculation calculate(const Csv &, std::string_view expression);
 // Formula text stays in Csv source. Each evaluation owns its dependency cache;
 // reopening/evaluating a changed table cannot reuse stale results.
+// Cached dependencies retain path depth, so reference order cannot bypass the
+// 64-cell dependency bound.
 [[nodiscard]] Calculation calculate_cell(const Csv &, CellAddress);
 [[nodiscard]] std::string convert_to_value(const Csv &, CellAddress);
 } // namespace swiftedit

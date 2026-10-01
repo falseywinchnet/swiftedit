@@ -10,8 +10,36 @@ std::string calculate_result(const swiftedit::Csv &table, std::string_view expre
     const swiftedit::Calculation result = swiftedit::calculate(table, expression);
     return result.result;
 }
+std::string dependency_graph(std::size_t cells, bool shallow_first) {
+    std::string result = shallow_first ? "=D1+B1,=C1,=D1" : "=B1+D1,=C1,=D1";
+    for (std::size_t column = 3; column + 1 < cells; ++column) {
+        result += ",=";
+        result += swiftedit::cell_name({0, column + 1});
+    }
+    result += ",1";
+    return result;
+}
+void verify_dependency_depth() {
+    for (const bool shallow_first : {true, false}) {
+        const swiftedit::Csv allowed(dependency_graph(64, shallow_first));
+        const swiftedit::Calculation result = swiftedit::calculate_cell(allowed, {0, 0});
+        check(result.result == "2", "A 64-cell dependency path is accepted in either order");
+        const swiftedit::Csv excessive(dependency_graph(65, shallow_first));
+        bool refused = false;
+        try {
+            static_cast<void>(swiftedit::convert_to_value(excessive, {0, 0}));
+        } catch (const std::runtime_error &failure) {
+            const std::string_view message = failure.what();
+            refused = message.find("depth exceeds 64") != message.npos;
+        }
+        check(refused, "Cached dependencies must not bypass the 64-cell path limit");
+        check(excessive.cell({0, 0}).value.starts_with('='),
+              "Refused excessive-depth conversion preserves the formula");
+    }
+}
 int main() {
     try {
+        verify_dependency_depth();
         using namespace swiftedit;
         Csv csv("\"a,b\",\"quoted \"\"word\"\"\",\"line\r\nbreak\"\r\n1,2,3\n4,,6");
         check(csv.rows().size() == 3 && csv.cell({0, 2}).value == "line\r\nbreak",

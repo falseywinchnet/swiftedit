@@ -396,3 +396,18 @@ Provider reports independent A2 service/session/layout/raster work compiles and
 6 focused tests pass, with review pending at root. Window/Painter/native host
 integration and SDK export are not available; keep6def54a pinned. This report
 does not establish D4 editing availability or resolve SwiftEdit GUI migration.
+
+CSV audit found/reproduced cache-order-dependent depth enforcement. A shared
+dependency first reached shallowly was returned from the numeric cache before
+checking a deeper caller's64-cell limit. Cached numbers now retain dependency
+depth; active frames propagate maximum child path. Bothreferenceorders accept64
+and refuse65 cells; refused conversion leaves formula source intact. Full17
+suites passed2.71s;78-file spelling audit clean. No new native launch.
+
+Added productionCsvView scroll baseline: 512x8 CSV,85visible formulas summing512
+literal cells,5warmups+31three-row scrolls, exact rendered1024 results verified
+outside timing. Median4.9806ms,p955.3842ms,worst5.3898ms. Source/binary identities,
+raw samples and limitations are in performance/2026-10-01-csv-view/. This is
+headless component evidence, not nativepaint or maximum-workload completion.
+496bd40 native36859063461 succeeded; earlier7b76967 native36858915672 was
+cancelled/superseded. Do not report the cancelled run passed. SDK remains6def54a.

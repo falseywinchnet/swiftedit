@@ -252,10 +252,18 @@ std::string decimal(Number a) {
     }
     return out;
 }
+struct ActiveEvaluation {
+    CellAddress address{};
+    std::size_t depth{1};
+};
+struct CachedNumber {
+    Number value{};
+    std::size_t depth{1};
+};
 struct Evaluation {
     const Csv &table;
-    std::vector<CellAddress> active{};
-    std::map<std::pair<std::size_t, std::size_t>, Number> values{};
+    std::vector<ActiveEvaluation> active{};
+    std::map<std::pair<std::size_t, std::size_t>, CachedNumber> values{};
     std::size_t references{};
 };
 Number evaluate_cell(Evaluation &, CellAddress);
@@ -543,21 +551,30 @@ private:
 };
 Number evaluate_cell(Evaluation &evaluation, CellAddress address) {
     const std::pair<std::size_t, std::size_t> key{address.row, address.column};
-    const std::map<std::pair<std::size_t, std::size_t>, Number>::const_iterator cached =
+    const std::map<std::pair<std::size_t, std::size_t>, CachedNumber>::const_iterator cached =
         evaluation.values.find(key);
-    if (cached != evaluation.values.end())
-        return (*cached).second;
-    for (const CellAddress active : evaluation.active)
-        if (active == address)
+    if (cached != evaluation.values.end()) {
+        const CachedNumber &value = (*cached).second;
+        if (value.depth > 64 - evaluation.active.size())
+            throw std::runtime_error("Formula dependency depth exceeds 64 cells.");
+        if (!evaluation.active.empty()) {
+            ActiveEvaluation &parent = evaluation.active.back();
+            parent.depth = std::max(parent.depth, value.depth + 1);
+        }
+        return value.value;
+    }
+    for (const ActiveEvaluation &active : evaluation.active)
+        if (active.address == address)
             throw std::runtime_error("Circular formula reference.");
     if (evaluation.active.size() >= 64)
         throw std::runtime_error("Formula dependency depth exceeds 64 cells.");
     const Cell &cell = evaluation.table.cell(address);
     Number result{};
+    std::size_t depth = 1;
     if (cell.value.starts_with('=')) {
-        evaluation.active.push_back(address);
+        evaluation.active.push_back({address, 1});
         struct ActiveCell {
-            std::vector<CellAddress> &stack;
+            std::vector<ActiveEvaluation> &stack;
             ~ActiveCell() { stack.pop_back(); }
         } active{evaluation.active};
         Parser parser(evaluation, cell.value);
@@ -565,9 +582,14 @@ Number evaluate_cell(Evaluation &evaluation, CellAddress address) {
         // A referenced formula must itself have a valid displayable result.
         const std::string validated_decimal = decimal(result);
         static_cast<void>(validated_decimal);
+        depth = evaluation.active.back().depth;
     } else
         result = numeric(cell.value);
-    evaluation.values.emplace(key, result);
+    evaluation.values.emplace(key, CachedNumber{result, depth});
+    if (!evaluation.active.empty()) {
+        ActiveEvaluation &parent = evaluation.active.back();
+        parent.depth = std::max(parent.depth, depth + 1);
+    }
     return result;
 }
 } // namespace
@@ -584,7 +606,7 @@ Calculation calculate_cell(const Csv &table, CellAddress address) {
         return literal;
     }
     Evaluation evaluation{table};
-    evaluation.active.push_back(address);
+    evaluation.active.push_back({address, 1});
     Parser parser(evaluation, cell.value);
     Calculation result = parser.run();
     return result;
