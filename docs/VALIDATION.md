@@ -453,3 +453,26 @@ Log: `.build/swiftedit-resumed/console-20261001-022718.stdout.txt`.
 This is not terminal feature completion. TERMINAL.md enumerates remaining
 large-file pages, wrap/search/wildcard/clipboard/save-review work. No native
 visual, keyboard-layout, accessibility or latency claim is made by this smoke.
+
+## Bounded terminal large-file pages - 2026-10-01
+
+TerminalPager replaces the host's large-file placeholder. It reads at most
+64 KiB, defers the trailing unproven grapheme and partial scalar, caches by
+source identity/revision/dimensions, and retains at most 1024 prior cursors.
+Source-aware label continuation and full-row/newline state prevent skipped
+bytes and spurious empty rows across pages. Context-exceeding or window-wider
+printable graphemes report unavailable rather than being split. Source is kept.
+
+Thirteen suites passed in 4.14 s on the final run; zero spelling findings across
+54 authored files, plus semantic review of cursor publication, bounded storage,
+UTF-8 edge handling, label/source separation and stale cache rejection. Tests
+include a real 16 MiB file with a combining grapheme split by the 64 KiB read,
+full-row CRLF continuation, label continuation, previous page, stale revision,
+and an oversized unprovable cluster.
+
+Owned private-console smoke exited 0, including large-file Next/Previous/First,
+save refusal, unchanged file size/mtime and restored console mode. Binary hash:
+`A4CA7688CD96DFE631A889D0A777F1EE6D937DECC2746137C6A850BA1B61DBF3`.
+Log: `.build/swiftedit-resumed/console-20261001-023352.stdout.txt`.
+No running test process remains. No visual geometry, physical keyboard,
+accessibility or latency guarantee follows from these correctness tests.

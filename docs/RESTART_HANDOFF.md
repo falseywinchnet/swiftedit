@@ -91,3 +91,11 @@ search/wildcard, save review, external clipboard and responsiveness. Do not
 claim full goal completion. Provider visual-only prepared paragraph proving
 stage accepted with typed unsupported interaction; full interactive D4 remains
 required, no consumable SDK yet.
+
+2026-10-01 terminal pager checkpoint: src/terminal_page.hpp/cpp now drives
+large-file readonly pages in terminal_windows.cpp. PgDn/Down next, PgUp/Up
+previous, CtrlHome first. Bounded64KiB reads, 1024 cursor history, deferred last
+unproven grapheme, literal label continuation and exact full-row/newline state.
+Thirteen suites and extended native console smoke pass. Largefile readonly
+selection/copy and granular navigation remain; wrap/search/wildcard plus final
+latency/GUI/provider work still outstanding. docs/TERMINAL.md tracks limits.

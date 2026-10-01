@@ -31,7 +31,15 @@ bidi controls are inert labels, not terminal commands. Printable Unicode uses
 the declared Unicode 17 cell-width policy; compatibility with individual fonts
 and terminal hosts still needs visual QA. Filenames/status are escaped metadata.
 
-This executable is unfinished. Large-file read-only pages, wrap preferences,
+Files at or above 16 MiB use bounded read-only pages. Page Down/Down advances,
+Page Up/Up returns to the previous page, and Ctrl+Home returns to the first page.
+Each frame reads at most 64 KiB. The most recent 1024 page starts are retained;
+trying to go farther back reports the limit and offers Ctrl+Home. Full graphemes
+are preserved across reads. Oversized graphemes that exceed the context limit
+are reported unavailable, preserving the source. Read-only range selection/copy
+and more granular line navigation still need implementation.
+
+This executable is unfinished. Wrap preferences,
 search/replace/wildcard controls, text-copy prompt, full conflict review, external
 clipboard integration and further interactive/accessibility checks remain.
 An internal cut containing malformed UTF-8 cannot yet be pasted back through

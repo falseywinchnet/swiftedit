@@ -1,4 +1,5 @@
 #include "terminal_row.hpp"
+#include "terminal_page.hpp"
 #include <algorithm>
 #include <iostream>
 #ifdef SWIFTEDIT_TERMINAL_SMOKE
@@ -124,6 +125,7 @@ class Terminal {
 public:
     void open(const std::filesystem::path &path) {
         buffer_.open(path);
+        pager_.reset(buffer_.session());
         top_ = 0;
         left_ = 0;
         status_ = "Opened";
@@ -193,11 +195,12 @@ private:
         std::optional<std::size_t> cursor_column{};
         std::size_t cursor_row = 1;
         if (buffer_.session().read_only()) {
-            status_line(screen, 1,
-                        "Read-only large file: terminal page controls are still in development.",
-                        width_);
-            status_line(screen, 2,
-                        "Use the command session's bounded page/context commands for now.", width_);
+            const swiftedit::TerminalPageFrame &page =
+                pager_.frame(buffer_.session(), width_, rows_);
+            for (const swiftedit::TerminalPageRun &run : page.runs) {
+                position(screen, run.row + 1, run.column);
+                screen += run.text;
+            }
         } else {
             const std::size_t caret_line = buffer_.line_index();
             if (caret_line < top_)
@@ -248,8 +251,12 @@ private:
             status_line(screen, height - 2, status_, width_);
         else
             status_line(screen, height - 2, "^S Save  ^R Open  ^X Exit  ^Z Undo  ^Y Redo", width_);
-        status_line(screen, height - 1,
-                    "Shift+arrows Select  ^C Copy  ^K Cut line/selection  ^U Paste", width_);
+        if (buffer_.session().read_only())
+            status_line(screen, height - 1,
+                        "Read-only: PgDn Next  PgUp Previous  Ctrl+Home First  ^X Exit", width_);
+        else
+            status_line(screen, height - 1,
+                        "Shift+arrows Select  ^C Copy  ^K Cut line/selection  ^U Paste", width_);
         if (prompt_ == Prompt::none && cursor_column) {
             position(screen, cursor_row, *cursor_column);
             screen += "\x1b[?25h";
@@ -332,6 +339,20 @@ private:
             } else if ((!ctrl || alt) && event.uChar.UnicodeChar >= 32)
                 character(event.uChar.UnicodeChar);
             return;
+        }
+        if (buffer_.session().read_only()) {
+            if (key == VK_NEXT || key == VK_DOWN) {
+                pager_.next();
+                return;
+            }
+            if (key == VK_PRIOR || key == VK_UP) {
+                pager_.previous();
+                return;
+            }
+            if (key == VK_HOME && ctrl) {
+                pager_.first();
+                return;
+            }
         }
         if (ctrl && !alt) {
             switch (key) {
@@ -424,6 +445,7 @@ private:
     }
     Console console_{};
     swiftedit::TerminalBuffer buffer_{};
+    swiftedit::TerminalPager pager_{};
     Prompt prompt_{Prompt::none};
     std::string input_{}, clipboard_{}, status_{"F1 Help"};
     std::size_t top_{}, left_{}, width_{80}, rows_{20};
@@ -544,8 +566,33 @@ int wmain() {
         if (notepad::read_file(path).bytes != expected)
             throw std::runtime_error(
                 "Console input/save/undo did not preserve expected UTF-8 bytes.");
+        const std::filesystem::path large_path = dir / "large.txt";
+        {
+            std::ofstream file(large_path, std::ios::binary);
+            file << "read-only\r\n\xf0\x9f\x98\x80";
+            file.seekp(swiftedit::editable_limit - 1);
+            file.put('z');
+        }
+        const std::filesystem::file_time_type original_time =
+            std::filesystem::last_write_time(large_path);
+        FlushConsoleInputBuffer(console.input);
+        enqueue(console.input, VK_NEXT);
+        enqueue(console.input, VK_PRIOR);
+        enqueue(console.input, VK_HOME, 0, LEFT_CTRL_PRESSED);
+        enqueue(console.input, 'S', 0, LEFT_CTRL_PRESSED);
+        enqueue(console.input, 'X', 0, LEFT_CTRL_PRESSED);
+        {
+            Terminal terminal{};
+            if (terminal.run(large_path) != 0)
+                throw std::runtime_error("Read-only terminal run failed.");
+        }
+        if (std::filesystem::last_write_time(large_path) != original_time ||
+            std::filesystem::file_size(large_path) != swiftedit::editable_limit)
+            throw std::runtime_error("Read-only terminal navigation/save altered the file.");
+        if (!GetConsoleMode(console.input, &restored) || restored != mode)
+            throw std::runtime_error("Read-only terminal did not restore input mode.");
         std::cout << "Owned console smoke passed: input, supplementary Unicode, save, dirty-exit "
-                     "cancel, undo and mode restoration.\n";
+                     "cancel, undo, large-file pages and mode restoration.\n";
         return 0;
     } catch (const std::exception &failure) {
         std::cerr << failure.what() << '\n';

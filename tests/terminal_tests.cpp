@@ -1,5 +1,6 @@
 #include "terminal_buffer.hpp"
 #include "terminal_row.hpp"
+#include "terminal_page.hpp"
 #include <iostream>
 #include <fstream>
 #include <windows.h>
@@ -137,6 +138,81 @@ int main() {
         check(clipped.runs[0].text == " " && clipped.runs[0].source.length == 3 &&
                   clipped.clipped_left && clipped.clipped_right && clipped.caret_column == 1,
               "Partial wide glyph never emits a broken character or changes its source range");
+        swiftedit::Session paged_source{};
+        paged_source.replace_ranges({{0, 0}}, "ABCD\r\nEF\nG", paged_source.stamp());
+        swiftedit::TerminalPager pager{};
+        pager.reset(paged_source);
+        const swiftedit::TerminalPageFrame first_page = pager.frame(paged_source, 4, 1);
+        check(first_page.next.offset == 4 && first_page.next.after_wrap,
+              "Page carries full-row wrap boundary");
+        pager.next();
+        const swiftedit::TerminalPageFrame second_page = pager.frame(paged_source, 4, 1);
+        check(second_page.runs.size() == 2 && second_page.runs[0].text == "E" &&
+                  second_page.next.offset == 9,
+              "Newline after full row does not create an extra empty screen row");
+        pager.previous();
+        check(pager.frame(paged_source, 4, 1).runs[0].text == "A",
+              "Previous restores exact page cursor");
+        pager.first();
+        paged_source.replace_ranges({{0, paged_source.text().size()}}, "\x1bZ",
+                                    paged_source.stamp());
+        bool old_page_refused = false;
+        try {
+            static_cast<void>(pager.frame(paged_source, 4, 1));
+        } catch (const std::exception &) {
+            old_page_refused = true;
+        }
+        check(old_page_refused, "Pager cache rejects changed source");
+        pager.reset(paged_source);
+        const swiftedit::TerminalPageFrame label_first = pager.frame(paged_source, 4, 1);
+        check(label_first.runs[0].text == "[U+0" && label_first.next.offset == 0 &&
+                  label_first.next.label_cell == 4,
+              "Long inert label can continue without consuming its source byte early");
+        pager.next();
+        check(pager.frame(paged_source, 4, 1).runs[0].text == "01B]",
+              "Label continuation is exact");
+        pager.next();
+        check(pager.frame(paged_source, 4, 1).runs[0].text == "Z",
+              "Following content is not skipped");
+        const std::filesystem::path large_path = dir / "large.txt";
+        {
+            std::ofstream file(large_path, std::ios::binary);
+            file << std::string(swiftedit::maximum_page - 2, 'a') << "e\xcc\x81";
+            file.seekp(swiftedit::editable_limit - 1);
+            file.put('z');
+            check(static_cast<bool>(file), "Large terminal fixture written");
+        }
+        swiftedit::Session large{};
+        large.open(large_path);
+        check(large.read_only(), "Actual large terminal fixture uses bounded file handle");
+        swiftedit::TerminalPager large_pager{};
+        large_pager.reset(large);
+        const swiftedit::TerminalPageFrame large_first = large_pager.frame(large, 1000, 300);
+        check(large_first.next.offset == swiftedit::maximum_page - 2,
+              "Incomplete trailing scalar and its preceding grapheme are deferred together");
+        large_pager.next();
+        const swiftedit::TerminalPageFrame &large_second = large_pager.frame(large, 1000, 300);
+        check(large_second.runs[0].text == "e\xcc\x81",
+              "Next bounded read reconstructs full combining grapheme");
+        const std::filesystem::path huge_cluster_path = dir / "huge-cluster.txt";
+        {
+            std::ofstream file(huge_cluster_path, std::ios::binary);
+            file << 'e';
+            for (std::size_t i = 0; i < 35000; ++i)
+                file << "\xcc\x81";
+            file.seekp(swiftedit::editable_limit - 1);
+            file.put('z');
+        }
+        swiftedit::Session huge_cluster{};
+        huge_cluster.open(huge_cluster_path);
+        bool incomplete_refused = false;
+        try {
+            static_cast<void>(swiftedit::terminal_page(huge_cluster, {}, 80, 20));
+        } catch (const std::exception &) {
+            incomplete_refused = true;
+        }
+        check(incomplete_refused && huge_cluster.read_only(),
+              "Oversized unknown grapheme is explicit unavailable, never sliced");
         std::cout << "Terminal navigation and shared edit tests passed.\n";
         return 0;
     } catch (const std::exception &failure) {
