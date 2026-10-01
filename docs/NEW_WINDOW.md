@@ -5,6 +5,9 @@ process. File > New continues to replace the current document after its existing
 unsaved-work review. New Window does not ask to save, clear selection, change
 source, or share document history. Each process owns its normal editor and
 dialogs. Launch acceptance does not prove that later GUI startup succeeded.
+Mac menu labels now show Command shortcuts. File > Close Window and Cmd+W use
+the existing close request and unsaved-work check; they close this editor's
+window rather than requesting closure of another process's document.
 
 The coordinating provider chat reconciled this consumer-only boundary on
 2026-10-01. Independent windows are the owner requirement; an in-process
@@ -80,12 +83,17 @@ ASCII clipboard transfer passed on all three platforms at a011391, native run
 the complete two-editor lifecycle fixture. Raw logs are retained locally under
 .build/new-window-a011391.
 
-The Unicode fixture passed on all three platforms at7518073, native run
-36887657481 and core36887657412. It transfers an accented character, a space
+The Unicode fixture passed on all three platforms at `7518073`, native run
+36887657481 and core 36887657412. It transfers an accented character, a space
 and an emoji exactly, retains them after parent GUI shutdown and then edits the
-child. Single command-return observations were17.8737ms Mac,1.169ms Windows
-and2.08374ms Linux. These include the fixture's self-path lookup and exclude
+child. Single command-return observations were 17.8737 ms Mac, 1.169 ms Windows
+and 2.08374 ms Linux. These include the fixture's self-path lookup and exclude
 later child GUI startup; they are not percentile distributions or a performance
 pass threshold. Raw logs are under .build/new-window-7518073. Production launch
 and clipboard code is unchanged from the published a011391 package.
 Local compilation and the 101-file spelling audit pass.
+
+The Mac branch of the native fixture now closes each editor through a routed
+Cmd+W key event, then checks the other editor's continued lifetime as before.
+Execution evidence for this new binding is pending. The Windows local build
+and 20 headless suites pass; they do not execute that Mac-specific branch.

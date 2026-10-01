@@ -143,7 +143,15 @@ private:
             text.replace_selection("");
             complete_ = true;
             (*timer_).stop();
+#ifdef __APPLE__
+            gf::KeyEvent close{};
+            close.action = gf::KeyAction::down;
+            close.physical_key = gf::PhysicalKey::w;
+            close.modifiers = gf::Modifier::meta;
+            require((*window_).dispatch_key(close), "Command W closes this editor through its command");
+#else
             static_cast<void>(handle_.request_close());
+#endif
         } catch (...) {
             failure_ = std::current_exception();
             (*timer_).stop();

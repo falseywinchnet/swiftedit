@@ -610,3 +610,9 @@ Meta New creates an untitled document. Full20 suites passed3.71s; after a test
 style cleanup the editor suite passed1.71s,101-file spelling clean. Physical
 native keyboard validation remains separate. Provider owner has now corrected
 the single-file fixture bound and is preparing the next candidate.
+
+Mac shortcut follow-up: menu labels use Cmd, File > Close Window displays Cmd+W,
+and Meta+W routes through the existing exit/unsaved-close path. The two-editor
+native fixture uses that routed key on Mac and still checks the remaining
+editor's lifetime. Local Windows build and 20 suites passed in 3.69 seconds;
+101-file spelling audit passed. Mac-specific execution is pending native CI.

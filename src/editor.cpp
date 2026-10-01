@@ -171,6 +171,13 @@ std::shared_ptr<gf::Button> Editor::place_find_button(const char *id, const char
 }
 
 gf::MenuItemSpec Editor::item(std::string id, std::string label, std::string shortcut_text) {
+#ifdef __APPLE__
+    if (id == "exit") {
+        label = "&Close Window";
+        shortcut_text = "Cmd+W";
+    } else if (shortcut_text.starts_with("Ctrl+"))
+        shortcut_text.replace(0, 5, "Cmd+");
+#endif
     std::shared_ptr<gf::Command> command = std::make_shared<gf::Command>(id, label);
     (*command).set_shortcut(shortcut_text);
     subscriptions_.push_back((*command).invoked().subscribe(*this, CommandListener{observe(), id}));
@@ -719,6 +726,9 @@ void Editor::ready(gf::Window &w, gf::ApplicationWindowHandle handle,
     shortcut(w, K::s, M::meta | M::shift, "save-as");
     shortcut(w, K::n, M::control | M::shift, "new-window");
     shortcut(w, K::n, M::meta | M::shift, "new-window");
+#ifdef __APPLE__
+    shortcut(w, K::w, M::meta, "exit");
+#endif
     shortcut(w, K::f3, M::none, "find-next");
     shortcut(w, K::f1, M::none, "help");
     const Shortcut editing_shortcuts[] = {{K::c, "copy"}, {K::x, "cut"},  {K::v, "paste"},
