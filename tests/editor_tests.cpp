@@ -275,6 +275,13 @@ int main() {
         check((*text).text() == "2,\r\n4,5", "Grid Delete clears contents without shifting");
         (*editor).execute("csv-view");
         check((*text).visible(), "Source toggle restores plain text view");
+        const std::string before_render((*text).text());
+        const gf::TextSelection before_render_selection = (*text).selection();
+        (*editor).execute("markdown-view");
+        check(!(*text).visible(), "Rendered Markdown replaces source presentation");
+        (*editor).execute("markdown-view");
+        check((*text).text() == before_render && (*text).selection() == before_render_selection,
+              "Markdown toggle preserves source and selection");
         std::cout << "Editor headless tests passed: native control input routing, CRLF, menu "
                      "edit/save, undo boundary, mixed endings, oversized-line refusal.\n";
         return 0;

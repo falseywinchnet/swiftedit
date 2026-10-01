@@ -85,6 +85,7 @@ void Editor::continue_operation(Continuation next) {
     case Continuation::none:
         break;
     case Continuation::new_document:
+        show_markdown(false);
         show_csv(false);
         document_ = {};
         (*text_).set_text("");
@@ -175,7 +176,10 @@ void Editor::initialize_control_tree() {
            item("newline-lf", "Convert Line Endings to &LF"),
            item("newline-crlf", "Convert Line Endings to &CRLF")}},
          {"format", "F&ormat", {item("wrap", "&Word Wrap"), item("font", "&Font...")}},
-         {"view", "&View", {item("status", "&Status Bar"), item("csv-view", "CSV &Table View")}},
+         {"view",
+          "&View",
+          {item("status", "&Status Bar"), item("csv-view", "CSV &Table View"),
+           item("markdown-view", "Markdown &Rendered View")}},
          {"csv",
           "&CSV",
           {item("csv-convert-value", "Convert to &Value"), item("csv-clear", "&Clear Cells")}},
@@ -197,6 +201,9 @@ void Editor::initialize_control_tree() {
     (*csv_).set_context_command(commands_.at("csv-convert-value"));
     subscriptions_.push_back((*csv_).changed().subscribe(*this, CsvListener{observe()}));
     add_child(csv_);
+    markdown_ = gf::make_control<MarkdownView>(gf::StableId("swiftedit.markdown"));
+    (*markdown_).set_visible(false);
+    add_child(markdown_);
     status_ = gf::make_control<gf::Label>(gf::StableId("notepad.status"));
     add_child(status_);
     subscriptions_.push_back((*text_).text_changed().subscribe(*this, TextListener{observe()}));
@@ -213,6 +220,7 @@ void Editor::arrange(gf::Rect bounds) {
     const double bottom = show_status_ ? 26 : 0;
     set_child_layout(text_, {0, 52, bounds.width, std::max(0.0, bounds.height - 52 - bottom)});
     set_child_layout(csv_, {0, 52, bounds.width, std::max(0.0, bounds.height - 52 - bottom)});
+    set_child_layout(markdown_, {0, 52, bounds.width, std::max(0.0, bounds.height - 52 - bottom)});
     set_child_layout(status_, {8, std::max(52.0, bounds.height - bottom),
                                std::max(0.0, bounds.width - 16), bottom});
 }
@@ -222,9 +230,12 @@ void Editor::refresh() {
     const std::string_view content = (*text_).text();
     if (csv_visible_)
         (*csv_).set_source(content);
+    if (markdown_visible_)
+        (*markdown_).set_source(content);
     (*commands_.at("csv-convert-value")).set_enabled(csv_visible_);
     (*commands_.at("csv-clear")).set_enabled(csv_visible_);
     (*commands_.at("csv-view")).set_checked(csv_visible_);
+    (*commands_.at("markdown-view")).set_checked(markdown_visible_);
     (*name_).set_text((document_.dirty(content) ? "* " : "") +
                       (document_.path.empty() ? "Untitled" : path_utf8(document_.path)));
     const std::size_t caret = std::min((*text_).selection().caret.value(), content.size());
@@ -261,7 +272,9 @@ void Editor::refresh() {
     (*commands_.at("status")).set_checked(show_status_);
 }
 void Editor::focus_text() {
-    if (window())
+    if (window() && markdown_visible_)
+        (*window()).request_focus(markdown_);
+    else if (window())
         (*window()).request_focus(csv_visible_ ? std::static_pointer_cast<gf::Control>(csv_)
                                                : std::static_pointer_cast<gf::Control>(text_));
 }
@@ -290,10 +303,23 @@ void Editor::show_csv(bool show) {
         if (extension != L".csv")
             throw std::runtime_error("Table view is available only for .csv files.");
         (*csv_).set_source((*text_).text());
+        show_markdown(false);
     }
     csv_visible_ = show;
     (*text_).set_visible(!show);
     (*csv_).set_visible(show);
+    refresh();
+    focus_text();
+}
+void Editor::show_markdown(bool show) {
+    if (show) {
+        (*markdown_).set_source((*text_).text());
+        if (csv_visible_)
+            show_csv(false);
+    }
+    markdown_visible_ = show;
+    (*text_).set_visible(!show && !csv_visible_);
+    (*markdown_).set_visible(show);
     refresh();
     focus_text();
 }
@@ -357,6 +383,7 @@ void Editor::open_file(const std::filesystem::path &source) {
         throw std::runtime_error(
             "This development editor supports up to 1 MiB of UTF-8 text and 4096 UTF-8 bytes per "
             "logical line. The current document was kept.");
+    show_markdown(false);
     show_csv(false);
     (*text_).set_text(next.saved_text);
     document_ = std::move(next);
@@ -390,6 +417,9 @@ void Editor::execute(const std::string &id) {
     if (picker_active_)
         return;
     try {
+        if (markdown_visible_ && (id == "paste" || id == "cut" || id == "delete" ||
+                                  id == "date-time" || id == "find" || id == "replace"))
+            show_markdown(false);
         if (id == "new")
             after_unsaved(Continuation::new_document);
         else if (id == "open")
@@ -402,6 +432,8 @@ void Editor::execute(const std::string &id) {
             static_cast<void>(handle_.request_close());
         else if (id == "csv-view")
             show_csv(!csv_visible_);
+        else if (id == "markdown-view")
+            show_markdown(!markdown_visible_);
         else if (id == "csv-convert-value")
             (*csv_).convert_to_value();
         else if (id == "csv-clear")

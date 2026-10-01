@@ -1,6 +1,7 @@
 #pragma once
 #include "document.hpp"
 #include "csv_view.hpp"
+#include "markdown_view.hpp"
 #include <file_manager/document_picker_view.hpp>
 #include <functional>
 #include <gui_forms/application.hpp>
@@ -132,6 +133,7 @@ private:
     void refresh();
     void apply_csv_change(const std::string &);
     void show_csv(bool);
+    void show_markdown(bool);
     void focus_text();
     void error(const std::string &);
     gf::HostDialogChoice message(std::string title, std::string text,
@@ -154,6 +156,8 @@ private:
     std::shared_ptr<gf::TextBox> text_{};
     std::shared_ptr<CsvView> csv_{};
     bool csv_visible_{};
+    std::shared_ptr<MarkdownView> markdown_{};
+    bool markdown_visible_{};
     std::shared_ptr<gf::MenuStrip> menu_{};
     std::shared_ptr<gf::Label> name_{}, status_{};
     std::map<std::string, std::shared_ptr<gf::Command>> commands_{};

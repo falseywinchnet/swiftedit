@@ -78,8 +78,15 @@ void CsvView::set_source(std::string_view source) {
     caret_.row = std::min(caret_.row, (*table_).rows().size() - 1);
     caret_.column = std::min(caret_.column, (*table_).rows()[caret_.row].size() - 1);
     anchor_ = caret_;
-    (*vertical_).set_range(0, static_cast<double>((*table_).rows().size() - 1));
-    (*horizontal_).set_range(0, static_cast<double>(columns_ - 1));
+    (*vertical_)
+        .set_range(0, static_cast<double>(std::max<std::size_t>(1, (*table_).rows().size() - 1)));
+    (*horizontal_).set_range(0, static_cast<double>(std::max<std::size_t>(1, columns_ - 1)));
+    (*vertical_).set_enabled((*table_).rows().size() > 1);
+    (*horizontal_).set_enabled(columns_ > 1);
+    if ((*table_).rows().size() == 1)
+        (*vertical_).set_value(0);
+    if (columns_ == 1)
+        (*horizontal_).set_value(0);
     update_field();
     prepare_view();
 }

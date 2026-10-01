@@ -277,15 +277,18 @@ void Session::replace_ranges(const std::vector<SourceRange> &ranges, std::string
     payload(replacement);
     std::size_t previous_end = 0;
     std::size_t previous_offset = 0;
+    std::size_t previous_length = 0;
     std::size_t total_removed = 0;
     for (std::size_t index = 0; index < ranges.size(); ++index) {
         const SourceRange &range = ranges[index];
         if (range.offset > text_.size() || range.length > text_.size() - range.offset)
             throw std::runtime_error("Edit range exceeds document.");
-        if (index && (range.offset < previous_end || range.offset == previous_offset))
+        if (index && (range.offset < previous_end || range.offset == previous_offset ||
+                      (range.offset == previous_end && (!range.length || !previous_length))))
             throw std::runtime_error("Edit ranges must be ordered and disjoint.");
         previous_offset = range.offset;
         previous_end = range.offset + range.length;
+        previous_length = range.length;
         total_removed += range.length;
     }
     const std::size_t retained = text_.size() - total_removed;

@@ -144,3 +144,15 @@ C++ spelling audit: zero findings in 17 files. git diff --check: clean.
 Tests cover empty/whitespace text, CR/LF, apostrophes/hyphens, combining accents,
 emoji, Unicode whitespace, zero-width space, unsegmented CJK, malformed input,
 GUI document/selection reporting and state preservation, and the CLI response.
+
+## 2026-10-01 full-feature continuation checkpoint
+
+Native CSV/formula/source-mapping checkpoint a4fa27d was followed by Markdown
+parser/native preview work. The first paint test found a zero-extent scrollbar
+range error; fixed in both Markdown and single-row/column CSV handling.
+Final full build passed all eight headless suites against house-style-final:
+document 0.30 s, session 0.19 s, CSV 0.02 s, display 0.02 s, Markdown 0.02 s,
+CLI 1.22 s, editor 0.26 s, views 0.13 s; total 2.18 s.
+Native desktop QA, full semantic style review of this new scope, and the final
+measured lag scan remain pending. See RESTART_HANDOFF.md. No updated release ZIP
+or stage was published. Frozen SDKs and prior distributed packages are unchanged.
