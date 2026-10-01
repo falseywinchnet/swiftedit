@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
 from typing import BinaryIO, Protocol, TypedDict
 import zipfile
 
@@ -33,6 +34,22 @@ def run(arguments: list[str]) -> None:
     subprocess.run(arguments, check=True)
 
 
+def download_sdk(arguments: list[str]) -> None:
+    # Retry only the read-only download; compilation and checksum failures must
+    # remain failures. --clobber replaces any partial archive before validation.
+    attempt: int
+    for attempt in range(3):
+        try:
+            run(arguments)
+            return
+        except subprocess.CalledProcessError:
+            if attempt == 2:
+                raise
+            delay: int = 2 * (attempt + 1)
+            print(f'SDK download failed; retrying in {delay} seconds.', flush=True)
+            time.sleep(delay)
+
+
 def sha256(path: Path) -> str:
     digest: Digest = hashlib.sha256()
     stream: BinaryIO
@@ -55,7 +72,7 @@ def main() -> None:
     build.mkdir(parents=True, exist_ok=True)
     download: Path = build / 'download'
     download.mkdir(exist_ok=True)
-    run(['gh', 'release', 'download', str(lock['release']), '--repo', 'falseywinchnet/swiftedit',
+    download_sdk(['gh', 'release', 'download', str(lock['release']), '--repo', 'falseywinchnet/swiftedit',
          '--pattern', pinned['name'], '--dir', str(download), '--clobber'])
     archive: Path = download / pinned['name']
     if sha256(archive) != pinned['sha256']:

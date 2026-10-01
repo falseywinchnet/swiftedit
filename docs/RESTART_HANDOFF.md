@@ -382,3 +382,17 @@ Logs .build/swiftedit-sdk-6def54a/textcopy-smoke-20261001-045937.stdout.txt and
 Previous11eafc0 native36858517854 still observedlive; portable36858518167 passed.
 No full-feature/lag completion claim: GUIprovider, pagedcopy, synchronous metadata
 and comprehensive native responsiveness work remain outstanding.
+
+CI follow-up:11eafc0 native36858517854 failed before Mac compilation because
+GitHub release SDK download returned HTTP500. Portable36858518167 succeeded.
+Do not report that native run passed. Build-Native.py now retries only the
+read-only SDK download up to3 attempts with2/4-second backoff; final failure
+propagates and pinned SHA256/platform/revision validation remains mandatory.
+Mocked immediate success, retry success and exhausted failure checks passed.
+7b76967 contains the Text Copy implementation; its native36858915672 and
+portable36858915692 were observedqueued before this retry-helper change.
+
+Provider reports independent A2 service/session/layout/raster work compiles and
+6 focused tests pass, with review pending at root. Window/Painter/native host
+integration and SDK export are not available; keep6def54a pinned. This report
+does not establish D4 editing availability or resolve SwiftEdit GUI migration.
