@@ -46,8 +46,9 @@ This executable is unfinished. Wrap preferences,
 Text-copy prompt, full conflict review, external
 clipboard integration and further interactive/accessibility checks remain.
 Internal Copy/Cut captures an owned source clipboard, so malformed UTF-8 and
-existing CRCR bytes paste back exactly. New external insertions remain validated. Long logical lines and
-metadata rebuilding need the requested measured lag scan. A display-layout
+existing CRCR bytes paste back exactly. New external insertions remain validated. Warm logical-line rendering now uses bounded revision-checked sparse indexes;
+see performance/2026-10-01-terminal-rows/README.md. Metadata rebuilding after edits
+remains synchronous and needs further lag work. A display-layout
 failure retains the input loop so Save and Exit remain available.
 
 `swiftedit-terminal-smoke.exe` is an opt-in test, not a user editor. It detaches

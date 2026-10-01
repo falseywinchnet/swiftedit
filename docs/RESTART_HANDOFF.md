@@ -138,3 +138,14 @@ review checked ownership, source-only construction and publication ordering.
 No new native console run for this slice, and suite runtime is not UI latency.
 Full goal remains open: wrapping, large-file interaction, external clipboard/save
 parity, public-provider GUI integration and final measured lag/bug validation.
+
+2026-10-01 terminal row latency checkpoint: bounded sparse per-line cell/source
+indexes now serve the actual console host for viewport draw and caret reveal.
+Document identity/revision invalidates cached entries; 320 lines maximum, one
+checkpoint per 256 graphemes. Full-traversal equivalence tests and all fourteen
+headless suites passed; coordinated own-console smoke passed and slot released.
+Measured 1 MiB ASCII warm-row p50 127.2604 -> 0.0279 ms; insert+row 171.5926 ->
+47.2718 ms. Raw samples, percentile distributions, workload and build details:
+`docs/performance/2026-10-01-terminal-rows/README.md`. These are component timings,
+not end-to-end snappiness evidence. Edit metadata still rebuilds synchronously;
+wrapping, provider integration and final full lag/bug scan remain unfinished.

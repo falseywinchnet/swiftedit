@@ -264,26 +264,17 @@ private:
                 top_ = caret_line;
             if (caret_line >= top_ + rows_)
                 top_ = caret_line - rows_ + 1;
-            swiftedit::TerminalRow caret =
-                swiftedit::terminal_row(buffer_, caret_line, left_, width_);
+            swiftedit::TerminalRow caret = row_cache_.row(buffer_, caret_line, left_, width_);
             if (!caret.caret_column) {
                 // Reveal by source range, not byte-as-cell assumptions.
                 const swiftedit::TerminalSelection selection = buffer_.selection();
-                const swiftedit::SourceRange line = buffer_.line_range(caret_line);
-                std::size_t column = 0;
-                for (std::size_t offset = line.offset; offset < selection.caret;) {
-                    const swiftedit::SourceRange range = buffer_.grapheme_range(offset);
-                    const std::string_view text(buffer_.session().text().data() + range.offset,
-                                                range.length);
-                    const swiftedit::TerminalGlyph glyph = swiftedit::terminal_glyph(text, column);
-                    column += glyph.cells;
-                    offset += range.length;
-                }
+                const std::size_t column =
+                    row_cache_.source_column(buffer_, caret_line, selection.caret);
                 left_ = column < left_ ? column : column >= width_ ? column - width_ + 1 : 0;
             }
             for (std::size_t row = 0; row < rows_ && top_ + row < buffer_.line_count(); ++row) {
                 const swiftedit::TerminalRow visible =
-                    swiftedit::terminal_row(buffer_, top_ + row, left_, width_);
+                    row_cache_.row(buffer_, top_ + row, left_, width_);
                 for (const swiftedit::TerminalRun &run : visible.runs) {
                     position(screen, row + 1, run.column);
                     screen += run.selected ? "\x1b[7m" : "\x1b[0m";
@@ -574,6 +565,7 @@ private:
 #endif
     Console console_{};
     swiftedit::TerminalBuffer buffer_{};
+    swiftedit::TerminalRowCache row_cache_{};
     swiftedit::TerminalPager pager_{};
     swiftedit::TerminalSearch search_{};
     swiftedit::TerminalReplace replacement_{};
