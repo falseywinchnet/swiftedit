@@ -13,12 +13,19 @@ void TerminalWrapView::synchronize(TerminalBuffer &buffer, std::size_t width) {
     const std::size_t caret = buffer.selection().caret;
     if (!current_ || width_ != width || stamp_.identity != stamp.identity ||
         stamp_.revision != stamp.revision) {
+        const std::size_t retained_row =
+            current_ && stamp_.identity == stamp.identity ? caret_row_ : 0;
         current_ = false;
         entries_.clear();
         next_eviction_ = 0;
         width_ = width;
         stamp_ = stamp;
         top_ = locate(buffer);
+        // Preserve the caret's last painted screen row when reflowing the
+        // same document. Old source offsets cannot be reused after an edit.
+        for (std::size_t row = 0; row < retained_row; ++row)
+            top_ = previous(buffer, top_);
+        caret_row_ = retained_row;
         desired_column_.reset();
         current_ = true;
     } else if (caret != expected_caret_) {
@@ -29,7 +36,7 @@ void TerminalWrapView::synchronize(TerminalBuffer &buffer, std::size_t width) {
 TerminalWrapView::Position TerminalWrapView::locate(TerminalBuffer &buffer) {
     const std::size_t line = buffer.line_index();
     const std::size_t caret = buffer.selection().caret;
-    const Entry &entry = prepare(buffer, line);
+    const Entry &entry = prepare(buffer, line, caret);
     Position result{line, checkpoint(entry, caret, false)};
     for (;;) {
         const TerminalWrapSpan span = terminal_wrap_span(buffer, line, result.offset, width_);
@@ -39,27 +46,22 @@ TerminalWrapView::Position TerminalWrapView::locate(TerminalBuffer &buffer) {
         result.offset = end;
     }
 }
-TerminalWrapView::Entry &TerminalWrapView::prepare(TerminalBuffer &buffer, std::size_t line) {
+TerminalWrapView::Entry &TerminalWrapView::prepare(TerminalBuffer &buffer, std::size_t line,
+                                                   std::size_t through) {
     for (Entry &entry : entries_) {
-        if (entry.line == line)
+        if (entry.line == line) {
+            extend(buffer, entry, through);
             return entry;
+        }
     }
     const SourceRange source = buffer.line_range(line);
     Entry prepared{};
     prepared.line = line;
+    prepared.last = source.offset;
+    prepared.frontier = source.offset;
     prepared.starts.reserve(source.length / 4096 + 1);
     prepared.starts.push_back(source.offset);
-    std::size_t offset = source.offset;
-    for (;;) {
-        if (offset - prepared.starts.back() >= 4096)
-            prepared.starts.push_back(offset);
-        const TerminalWrapSpan span = terminal_wrap_span(buffer, line, offset, width_);
-        if (span.logical_end) {
-            prepared.last = offset;
-            break;
-        }
-        offset += span.source.length;
-    }
+    extend(buffer, prepared, through);
     if (entries_.size() < 320) {
         entries_.push_back(std::move(prepared));
         return entries_.back();
@@ -68,6 +70,19 @@ TerminalWrapView::Entry &TerminalWrapView::prepare(TerminalBuffer &buffer, std::
     entries_[replacement] = std::move(prepared);
     next_eviction_ = (next_eviction_ + 1) % 320;
     return entries_[replacement];
+}
+void TerminalWrapView::extend(TerminalBuffer &buffer, Entry &entry, std::size_t through) {
+    while (!entry.complete && entry.frontier <= through) {
+        const std::size_t offset = entry.frontier;
+        const TerminalWrapSpan span = terminal_wrap_span(buffer, entry.line, offset, width_);
+        // Publish each completed row after layout succeeds. A failed extension
+        // leaves a reusable valid prefix and never claims an unscanned suffix.
+        if (offset - entry.starts.back() >= 4096)
+            entry.starts.push_back(offset);
+        entry.last = offset;
+        entry.frontier = offset + span.source.length;
+        entry.complete = span.logical_end;
+    }
 }
 std::size_t TerminalWrapView::checkpoint(const Entry &entry, std::size_t offset,
                                          bool strictly_before) {
@@ -100,11 +115,12 @@ TerminalWrapView::Position TerminalWrapView::previous(TerminalBuffer &buffer, Po
         if (!position.line)
             return position;
         --position.line;
-        const Entry &prior = prepare(buffer, position.line);
+        const SourceRange prior_line = buffer.line_range(position.line);
+        const Entry &prior = prepare(buffer, position.line, prior_line.offset + prior_line.length);
         const Position result{position.line, prior.last};
         return result;
     }
-    const Entry &entry = prepare(buffer, position.line);
+    const Entry &entry = prepare(buffer, position.line, position.offset);
     Position result{position.line, checkpoint(entry, position.offset, true)};
     for (;;) {
         const Position following = next(buffer, result);
@@ -145,6 +161,8 @@ TerminalWrapView::frame(TerminalBuffer &buffer, std::size_t width, std::size_t h
     Position position = top_;
     for (std::size_t index = 0; index < height; ++index) {
         rows_.push_back(terminal_wrapped_row(buffer, position.line, position.offset, width_));
+        if (rows_.back().display.caret_column)
+            caret_row_ = index;
         const Position following = next(buffer, position);
         if (same(following, position))
             break;

@@ -4,8 +4,8 @@
 namespace swiftedit {
 // Editable wrapped viewport. Retains only visible rows (at most 296), never a
 // whole-document array of visual rows. Sparse source checkpoints cover up to
-// 320 logical lines, spaced at least 4096 source bytes apart. First preparation
-// scans a logical line synchronously; cooperative indexing remains separate.
+// 320 logical lines, spaced at least 4096 source bytes apart. Preparation scans
+// only through the requested position; distant jumps still scan synchronously.
 class TerminalWrapView {
 public:
     const std::vector<TerminalWrappedRow> &frame(TerminalBuffer &, std::size_t width,
@@ -17,10 +17,12 @@ private:
         std::size_t line{}, offset{};
     };
     struct Entry {
-        std::size_t line{}, last{};
+        std::size_t line{}, last{}, frontier{};
+        bool complete{};
         std::vector<std::size_t> starts{};
     };
-    Entry &prepare(TerminalBuffer &, std::size_t line);
+    Entry &prepare(TerminalBuffer &, std::size_t line, std::size_t through);
+    void extend(TerminalBuffer &, Entry &, std::size_t through);
     static std::size_t checkpoint(const Entry &, std::size_t offset, bool strictly_before);
     void synchronize(TerminalBuffer &, std::size_t width);
     Position locate(TerminalBuffer &);
@@ -29,6 +31,7 @@ private:
     static bool same(Position, Position);
     DocumentStamp stamp_{};
     std::size_t width_{}, expected_caret_{};
+    std::size_t caret_row_{};
     Position top_{};
     bool current_{};
     std::optional<std::size_t> desired_column_{};

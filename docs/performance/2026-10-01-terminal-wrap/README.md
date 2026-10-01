@@ -48,3 +48,31 @@ and width invalidation regressions passed afterward. First line preparation,
 edit-time Unicode metadata rebuild, resize, and cancellation remain synchronous
 work needing improvement. Very large graphemes can exceed a checkpoint's usual
 source interval. No claim of complete responsiveness or final bug audit is made.
+
+## On-demand preparation and scroll-context follow-up
+
+The next revision retains the last painted caret row when reflowing the same
+document, and extends each sparse index only through the requested position.
+Completed row prefixes remain usable if a later extension fails. A fresh view
+of the start of a long line no longer prepares checkpoints for its entire suffix.
+New document identity discards the old screen-row preference.
+
+The benchmark now also creates 31 fresh views at the start of a 1 MiB ASCII
+line, with Unicode navigation metadata prepared before timing. Each view lays
+out 24 rows of 80 cells. Current p50/p95/p99/worst: 0.4514 / 0.5455 / 0.5506 /
+0.5506 ms. This is fresh wrap geometry on warm source metadata, not file-open
+latency. There is no matched pre-change distribution for this added workload.
+Raw current samples, including repeated prior workloads, are in
+demand-preparation.csv. Same host/build configuration as above. No native UI
+or console paint loop was run for these measurements.
+
+Source blobs for this follow-up:
+terminal_wrap_view.cpp 55b619a0e725c04351cab36c4934c5042ceae54d;
+terminal_wrap_view.hpp d04cc50288a7e66f781085eaeeb99a1d6c9742d7;
+terminal_wrap_bench.cpp 2dfc09f26b8b4cbba2961307dcf410b9262cc405.
+Executable SHA256:
+C328B9DE58E4D5A076B76708197A094FF9C28FFBC9E58CD03C10615451D4A3D2.
+All 17 suites passed in 2.44s, including edit/resize/undo caret-row retention,
+height reduction, growing checkpoint prefixes and eviction. Distant jumps,
+first-use Unicode indexing and cancellation remain unfinished responsiveness
+work. Earlier before/after files and their source identities are preserved.

@@ -8,6 +8,27 @@
 
 namespace {
 using Clock = std::chrono::steady_clock;
+void measure_start(std::ofstream &raw) {
+    swiftedit::TerminalBuffer buffer{};
+    buffer.insert(std::string(1024 * 1024, 'x'));
+    buffer.move(swiftedit::TerminalMotion::document_start);
+    std::vector<double> samples{};
+    samples.reserve(31);
+    for (std::size_t index = 0; index < 31; ++index) {
+        swiftedit::TerminalWrapView view{};
+        const Clock::time_point start = Clock::now();
+        const std::vector<swiftedit::TerminalWrappedRow> &rows = view.frame(buffer, 80, 24);
+        const std::chrono::duration<double, std::milli> elapsed = Clock::now() - start;
+        samples.push_back(elapsed.count());
+        if (rows.size() != 24 || rows[0].display.caret_column != 0)
+            throw std::runtime_error("First-frame measurement lost its viewport or caret.");
+    }
+    for (std::size_t index = 0; index < samples.size(); ++index)
+        raw << "ascii-1m,fresh-view-at-start," << index << ',' << samples[index] << '\n';
+    std::sort(samples.begin(), samples.end());
+    std::cout << "ascii-1m,fresh-view-at-start,p50=" << samples[15] << ",p95=" << samples[29]
+              << ",p99=" << samples[30] << ",worst=" << samples.back() << '\n';
+}
 void measure(const char *name, const std::string &source, std::ofstream &raw) {
     swiftedit::TerminalBuffer buffer{};
     buffer.insert(source);
@@ -50,6 +71,7 @@ int main(int argc, char **argv) {
             throw std::runtime_error("Cannot create sample file.");
         raw << std::fixed << std::setprecision(6);
         raw << "fixture,operation,sample,elapsed_ms\n";
+        measure_start(raw);
         measure("ascii-100k", std::string(100 * 1024, 'x'), raw);
         std::string mixed{};
         for (std::size_t index = 0; index < 8192; ++index)

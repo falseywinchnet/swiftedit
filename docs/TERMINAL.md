@@ -49,8 +49,12 @@ retain a desired display column across short rows; Home/End target the current
 visual row. A full-width ending uses an empty continuation for the end caret.
 Resize and edits invalidate geometry. The viewport retains at most 296 rows,
 with sparse source checkpoints for up to 320 logical lines. Warm reverse row
-location starts near the requested position. Initial line preparation remains
-synchronous; long-line cold performance and interruptibility need further work.
+location starts near the requested position. Checkpoints extend only through
+the requested source position; displaying the start does not index the unused
+suffix. Distant jumps and Unicode metadata preparation remain synchronous.
+Edits and width changes preserve the caret's last painted row when possible;
+a height reduction reveals it within the new viewport. Interruptibility needs
+further work.
 See performance/2026-10-01-terminal-wrap/README.md for component measurements.
 F2 is session-local.
 

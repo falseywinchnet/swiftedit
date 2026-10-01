@@ -304,3 +304,19 @@ also passed. First preparation still scans the full logical line synchronously;
 do not infer cancellation or final responsiveness completion. Viewport scroll
 context refinement after edit/resize remains open. Native run 36856797302 for
 the preceding 1bd9a22 was last observed live; portable 36856797339 succeeded.
+
+Viewport follow-up now preserves the last painted caret row across same-document
+edit/resize; new documents reset it, and height shrink reveals it in bounds.
+Sparse indexes extend only through requested positions, with valid row-prefix
+publication and a completion flag; opening the start no longer scans the unused
+line suffix. Tests cover row retention through edit/undo/resize, height shrink,
+progressive checkpoints and eviction. All 17 suites passed (2.44s); spelling
+audit 77 files clean. Added fresh-wrap-view-at-start workload: 1 MiB ASCII,
+80x24, 31 fresh views after Unicode metadata preparation, median .4514 ms,
+worst .5506 ms; samples and scope in the existing wrap performance directory.
+Distant-position indexing and first-use Unicode navigation still synchronous;
+cooperative/cancelable work remains the next lag gap. No native desktop run
+was made for this follow-up. Previous 508c220 native CI 36857210839 remains
+observed in progress; portable 36857212014 succeeded. Provider A2 remains
+unavailable as public SDK; resumed its already coordinated work by message,
+without assuming editing support from visual-only shaping.

@@ -82,8 +82,8 @@ void verify_view() {
     check(last.size() == 2 && last[1].display.caret_column == 0,
           "Viewport reveals final continuation at its bottom");
     const std::vector<swiftedit::TerminalWrappedRow> &resized = view.frame(buffer, 4, 2);
-    check(!resized.empty() && resized[0].display.caret_column == 2,
-          "Width change recomputes the source caret's visual row");
+    check(resized.size() == 2 && resized[1].display.caret_column == 2,
+          "Width change recomputes geometry and retains the caret's screen row");
     view.move(buffer, swiftedit::TerminalMotion::home, false, 1, 4);
     check(buffer.selection().caret == 15, "Home uses visual row start");
     view.move(buffer, swiftedit::TerminalMotion::end, true, 1, 4);
@@ -91,7 +91,15 @@ void verify_view() {
           "Shift End uses visual row end");
     buffer.insert("Z");
     const std::vector<swiftedit::TerminalWrappedRow> &edited = view.frame(buffer, 4, 2);
-    check(edited[0].display.caret_column == 1, "An edit invalidates old wrap spans");
+    check(edited.size() == 2 && edited[1].display.caret_column == 1,
+          "An edit invalidates old wrap spans while preserving the caret's screen row");
+    check(buffer.undo(), "Undo the reflow edit");
+    const std::vector<swiftedit::TerminalWrappedRow> &undone = view.frame(buffer, 4, 2);
+    check(undone.size() == 2 && undone[1].display.caret_column.has_value(),
+          "Undo retains the caret's screen row with rebuilt geometry");
+    const std::vector<swiftedit::TerminalWrappedRow> &shorter = view.frame(buffer, 4, 1);
+    check(shorter.size() == 1 && shorter[0].display.caret_column.has_value(),
+          "Height reduction keeps the caret visible within the new viewport");
     buffer.reset(true);
     const std::vector<swiftedit::TerminalWrappedRow> &empty = view.frame(buffer, 4, 2);
     check(empty.size() == 1 && empty[0].display.caret_column == 0,
