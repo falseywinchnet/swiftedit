@@ -81,7 +81,7 @@ private:
             const std::chrono::duration<double> elapsed =
                 std::chrono::steady_clock::now() - started_;
             const double cpu = static_cast<double>(cpu_end - cpu_start_) / CLOCKS_PER_SEC;
-            const char *labels[] = {"focused", "focus-cleared", "hidden"};
+            const char *labels[] = {"focused", "focus-cleared"};
             std::cout << "idle-probe|phase=" << labels[phase_] << "|elapsed=" << elapsed.count()
                       << "|cpu_seconds=" << cpu
                       << "|one_core_percent=" << 100.0 * cpu / elapsed.count() << '\n';
@@ -98,10 +98,6 @@ private:
             if (phase_ == 1) {
                 if (!(*observed_[0].model).request_focus({}))
                     throw std::runtime_error("Could not clear document focus.");
-            } else if (phase_ == 2) {
-                const gf::HostServiceStatus hidden = main_handle_.hide();
-                if (!hidden.accepted())
-                    throw std::runtime_error("Could not hide the owned main window.");
             } else {
                 complete_ = true;
                 (*timer_).stop();
