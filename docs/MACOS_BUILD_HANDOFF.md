@@ -63,3 +63,11 @@ by a mandatory lock. Common tests cover exact raw bytes, EOF, offsets, budget an
 Windows full 15-suite run passed (2.43s); standalone core/readers 2/2 passed.
 CI now compiles both adapters on their actual runners. Mac/Linux result pending
 for this commit; native application save adapter/SDK/package still unfinished.
+
+Verified cross-platform follow-up: commit 27ffbfc passed run 36848596407 on
+Windows-2022, macOS-26 and Ubuntu-24.04. Both CSV/formula and paged-reader tests
+compiled and executed on each runner. POSIX-specific changed-file, symlink and
+FIFO checks passed on macOS/Linux. Evidence:
+https://github.com/falseywinchnet/swiftedit/actions/runs/36848596407
+This proves the tested file-reader component, not a native app or downloadable
+Mac bundle. Next: POSIX save/conflict semantics and installed macOS SDK packaging.
