@@ -218,3 +218,22 @@ reports `cadence exceeded declared lateness bound`. Its ABBA header alone is not
 an accepted four-interval result. No performance attribution or optimization
 conclusion is drawn from this attempt. The coordinator received the rejection
 and raw evidence. This remains separate from the successful native build/tests.
+
+## Continued baseline: b4b6462
+
+Native run 36890043148 passed on all three platforms; portable run 36890043097
+also passed. With unchanged SDK 0322371, the Mac blank document observed
+1.5718% of one core (0.079482 CPU seconds / 5.05675 elapsed) while focused and
+0.0253201% (0.001283 / 5.06711) with text focus cleared. All 18 window rows were
+parsed: each of the eight hidden dialogs remained occluded, with zero paints,
+frame deadlines and scheduler wakes in both phases. The main window recorded
+nine paints/deadlines/wakes while focused and zero after focus was cleared.
+Focused painted damage area was 342; total measured presentation wall time was
+3,070,167 ns. Raw rows are retained in baseline-b4b6462-controlled.txt.
+
+This is another individual CI observation of the existing baseline, not a fix,
+a statistical comparison, or a reproduction of the owner's approximately 7%.
+The focus association persists. It does not establish which rendering or native
+presentation stage consumes the remaining CPU, and clearing model text focus
+is not an operating-system application switch. The owner confirmed the report
+is for a blank document; the focused-idle defect remains open.
