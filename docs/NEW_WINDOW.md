@@ -1,0 +1,55 @@
+# Independent document windows
+
+File > New Window and Ctrl/Cmd+Shift+N launch a blank, independent SwiftEdit
+process. File > New continues to replace the current document after its existing
+unsaved-work review. New Window does not ask to save, clear selection, change
+source, or share document history. Each process owns its normal editor and
+dialogs. Launch acceptance does not prove that later GUI startup succeeded.
+
+The coordinating provider chat reconciled this consumer-only boundary on
+2026-10-01. Independent windows are the owner requirement; an in-process
+implementation was an earlier implementation preference, not an owner mandate.
+There is no new shared provider API and the installed SDK stays pinned.
+
+## Source and ownership review
+
+`new_window.cpp` resolves the actual executable independently of working
+directory and argv[0]. Windows uses GetModuleFileNameW; macOS uses
+_NSGetExecutablePath followed by canonical resolution, including the executable
+inside a relocated application bundle. Linux resolves /proc/self/exe. The
+editor owns a named callback containing only that absolute path, not an editor
+reference. Launch errors go through the existing error dialog.
+
+Windows supplies the absolute executable separately from its quoted mutable
+command line to CreateProcessW, passes no document arguments, disables handle
+inheritance, and releases both returned process handles. No shell is involved.
+See [Microsoft's CreateProcessW contract](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessw).
+
+POSIX prepares storage and descriptor bounds before fork. The child redirects
+standard streams to /dev/null, keeps only a close-on-exec error pipe, starts a
+new session and forks the independent process. The original child is reaped;
+the final child execs the exact image and reports exec failure through the pipe.
+After fork, only prepared scalars/pointers and async-signal-safe system operations
+are used; no GUI, logging, allocation or C++ destruction runs there. Linux uses
+close_range with a descriptor-loop fallback; Darwin's kernel per-process limit
+bounds its close loop. SwiftEdit does not alter process descriptor limits.
+See [fork restrictions](https://man7.org/linux/man-pages/man2/fork.2.html) and
+[Apple's executable-path contract](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/dyld.3.html).
+
+Launch is synchronous until exec acceptance/error, with no recurring timer,
+polling thread or retained process handle. Child startup latency and actual
+packaged-app window interaction still need native dogfood measurements.
+
+## Validation scope
+
+All 20 local headless suites passed in 3.61 seconds. New editor checks verify
+dirty source/selection preservation, absence of a save prompt and failure
+reporting. The 100-file spelling audit passed; callback ownership, descriptor
+cleanup, child-only execution and error paths were reviewed separately.
+
+The opt-in native CI helper launches a copied executable with spaces, an
+ampersand and Unicode in its filename, verifies its independent completion and
+actual executable location, and checks relative/missing/non-executable path
+refusal. No local native launch was performed. CI results for this new adapter
+are pending; this helper does not exercise two real editor windows or prove
+packaged macOS application activation behavior.

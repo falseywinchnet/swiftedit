@@ -533,3 +533,15 @@ metadata construction is synchronous and GUI gestures/paged metadata are not
 implemented. All 20 local headless suites passed in 4.29 seconds; 97-file style
 spelling audit and diff check passed. No local native launch. Cross-platform
 checks for this new change are pending at this checkpoint.
+
+Selection commit b8e3e1d subsequently passed all three native jobs in run
+36884580998. New Window now has a consumer-only exact-self launch adapter and
+menu/keyboard commands; see NEW_WINDOW.md for source/ownership review, precise
+test coverage and remaining packaged native interaction checks. Local build and
+20 suites passed (3.61 s); 100-file spelling audit clean. New adapter CI pending.
+
+Provider 275a133 experiment was again rejected, not an idle-performance pass:
+cadence exceeded the unchanged lateness bound in interval 1 after three ticks
+(131070458 ns maximum lateness). Receipt exit1, accepted_marker=false. Its first
+completed interval does not establish an accepted ABBA comparison. Owner's blank
+Mac 7% report remains unresolved.

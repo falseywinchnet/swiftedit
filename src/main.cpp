@@ -1,4 +1,5 @@
 #include "editor.hpp"
+#include "new_window.hpp"
 #include <iostream>
 #ifdef _WIN32
 #include <windows.h>
@@ -39,7 +40,8 @@ int main(int argc, char **argv) {
             initial = std::filesystem::absolute(argv[1]);
 #endif
         std::shared_ptr<notepad::Editor> editor =
-            gui_forms::make_control<notepad::Editor>(gui_forms::StableId("notepad.editor"));
+            gui_forms::make_control<notepad::Editor>(gui_forms::StableId("notepad.editor"),
+                notepad::NewWindow{notepad::executable_path()});
         std::vector<gui_forms::ApplicationWindow> windows = (*editor).application_windows(initial);
         const gui_forms::ApplicationResult result = gui_forms::Application::run(std::move(windows));
         if (result.callback_exception)

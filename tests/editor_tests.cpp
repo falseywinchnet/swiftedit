@@ -417,6 +417,18 @@ void verify_grapheme_status() {
     check((*status).text().starts_with("Ln 1, Col 1 |") && (*status).text().ends_with(" | CR"),
           "Caret-only update retains the latest same-length ending change");
 }
+struct WindowLaunchProbe {
+    int calls{};
+    bool fail{};
+    struct Callback {
+        WindowLaunchProbe *owner{};
+        void operator()() const {
+            ++(*owner).calls;
+            if ((*owner).fail)
+                throw std::runtime_error("Test window launch failure");
+        }
+    };
+};
 int main() {
     try {
         verify_callback_revocation();
@@ -428,8 +440,10 @@ int main() {
         verify_conflict_fields();
         verify_grapheme_status();
         namespace gf = gui_forms;
+        WindowLaunchProbe launch{};
         const std::shared_ptr<notepad::Editor> editor =
-            gf::make_control<notepad::Editor>(gf::StableId("test.editor"));
+            gf::make_control<notepad::Editor>(gf::StableId("test.editor"),
+                                             WindowLaunchProbe::Callback{&launch});
         gf::Window window(editor, {800, 600});
         window.perform_layout();
         TestServices services{};
@@ -449,6 +463,19 @@ int main() {
         (*editor).execute("select-all");
         const std::string selected = (*text).selected_text();
         check(selected == entered, "Select all");
+        const gf::TextSelection before_window = (*text).selection();
+        const int before_dialogs = services.dialogs;
+        (*editor).execute("new-window");
+        check(launch.calls == 1 && services.dialogs == before_dialogs &&
+                  (*text).text() == entered && (*text).selection() == before_window &&
+                  (*editor).document().dirty((*text).text()),
+              "New Window leaves dirty document and selection untouched without save prompt");
+        launch.fail = true;
+        (*editor).execute("new-window");
+        check(launch.calls == 2 && services.last_message == "Test window launch failure" &&
+                  (*text).text() == entered && (*text).selection() == before_window,
+              "New Window reports launch failure without altering the document");
+        launch.fail = false;
         const gf::TextSelection count_selection = (*text).selection();
         const bool count_dirty = (*editor).document().dirty((*text).text());
         (*editor).execute("word-count");

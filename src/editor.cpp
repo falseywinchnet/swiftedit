@@ -12,7 +12,8 @@ std::string path_utf8(const std::filesystem::path &path) {
     const std::string result(reinterpret_cast<const char *>(s.data()), s.size());
     return result;
 }
-Editor::Editor(gf::StableId id) : Control(std::move(id)) {}
+Editor::Editor(gf::StableId id, std::function<void()> new_window)
+    : Control(std::move(id)), new_window_(std::move(new_window)) {}
 
 Editor::~Editor() {
     accelerators_.clear();
@@ -182,7 +183,9 @@ void Editor::initialize_control_tree() {
     (*menu_).set_items(
         {{"file",
           "&File",
-          {item("new", "&New", "Ctrl+N"), item("open", "&Open...", "Ctrl+O"),
+          {item("new", "&New", "Ctrl+N"),
+           item("new-window", "New &Window", "Ctrl+Shift+N"),
+           item("open", "&Open...", "Ctrl+O"),
            item("save", "&Save", "Ctrl+S"), item("save-as", "Save &As...", "Ctrl+Shift+S"),
            item("exit", "E&xit", "Alt+F4")}},
          {"edit",
@@ -511,6 +514,11 @@ void Editor::execute(const std::string &id) {
             show_markdown(false);
         if (id == "new")
             after_unsaved(Continuation::new_document);
+        else if (id == "new-window") {
+            if (!new_window_)
+                throw std::runtime_error("New Window is unavailable in this host.");
+            new_window_();
+        }
         else if (id == "open")
             after_unsaved(Continuation::open_document);
         else if (id == "save")
@@ -706,6 +714,8 @@ void Editor::ready(gf::Window &w, gf::ApplicationWindowHandle handle,
     for (const Shortcut &binding : shortcuts)
         shortcut(w, binding.key, M::control, binding.command);
     shortcut(w, K::s, M::control | M::shift, "save-as");
+    shortcut(w, K::n, M::control | M::shift, "new-window");
+    shortcut(w, K::n, M::meta | M::shift, "new-window");
     shortcut(w, K::f3, M::none, "find-next");
     shortcut(w, K::f1, M::none, "help");
     const Shortcut editing_shortcuts[] = {{K::c, "copy"}, {K::x, "cut"},  {K::v, "paste"},

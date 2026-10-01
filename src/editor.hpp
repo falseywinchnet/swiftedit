@@ -35,7 +35,7 @@ private:
 };
 class Editor final : public gf::Control {
 public:
-    explicit Editor(gf::StableId id);
+    explicit Editor(gf::StableId id, std::function<void()> new_window = {});
     ~Editor() override;
     static constexpr bool initialize_tree_after_construction = true;
     void initialize_control_tree();
@@ -60,6 +60,8 @@ public:
     }
 
 private:
+    // Owns the launch callback; it must not retain the editor or its document.
+    std::function<void()> new_window_{};
     struct Dialog;
     enum class Continuation { none, new_document, open_document, close_window };
     enum class WindowKind {
