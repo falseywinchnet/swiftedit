@@ -40,3 +40,12 @@ and scroll, cancel/restart with unchanged source, hover updates and final result
 An opt-in native CSV fixture requires actual host frame callbacks to finish the
 queue without calling on_frame directly. Native validation is recorded by CI;
 local tests do not launch the desktop.
+
+Source ed04eda passed native run 36881623545 on macOS, Windows and Linux.
+The owned Windows CSV fixture completed through native scheduling in 0.11 s;
+that duration is a fixture runtime, not an interaction-latency measurement.
+A follow-up adds a no-op guard for late callbacks after completion and extends
+native validation with a focus-cleared, settled 200 ms observation. That check
+requires zero new scheduled frame requests and frame deadlines after the queue
+finishes; native paint metrics are retained diagnostically. It does not measure
+focused caret CPU or substitute for the separate Mac idle investigation.

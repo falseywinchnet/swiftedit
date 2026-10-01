@@ -194,6 +194,8 @@ void CsvView::prepare_view() {
     advance_view();
 }
 void CsvView::on_frame(gf::FrameTime) {
+    if (!calculations_pending())
+        return;
     try {
         advance_view();
     } catch (const std::exception &failure) {

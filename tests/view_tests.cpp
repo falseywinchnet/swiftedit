@@ -144,6 +144,10 @@ void verify_cooperative_formulas() {
           "Scrolling replaces pending work with only the new viewport");
     window.reset_activity_metrics();
     check(!(*grid).calculations_pending(), "Completed view retains no calculation work");
+    (*grid).on_frame(gf::FrameClock::now());
+    const gf::MetricsSnapshot idle = window.metrics().snapshot();
+    check(idle.dirty_marks == 0 && idle.scheduled_frame_requests == 0,
+          "A late frame after completion does not repaint or schedule more work");
 }
 int main() {
     try {
