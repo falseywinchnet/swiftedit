@@ -46,8 +46,11 @@ def main() -> None:
             shutil.copy2(item, target)
             files.append(str(target))
     notes: Path = staging / 'notes.md'
+    changes_path: Path = Path('docs/releases') / (tag + '.md')
+    changes: str = changes_path.read_text(encoding='utf-8') + '\n\n' if changes_path.is_file() else ''
     notes.write_text(
         'SwiftEdit ' + tag + ' for Windows, macOS and Linux, from commit `' + revision + '`.\n\n'
+        + changes +
         'All three native build/test jobs and packaged startup checks passed before publication. '
         'Download the archive for your platform and extract it completely.\n\n'
         '- **macOS:** Apple silicon, macOS 26. Ad-hoc signed; not notarized.\n'
