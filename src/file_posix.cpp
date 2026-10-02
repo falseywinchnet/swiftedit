@@ -1,4 +1,5 @@
 #include "document.hpp"
+#include "new_file_writer.hpp"
 #include <atomic>
 #include <array>
 #include <cerrno>
@@ -193,6 +194,85 @@ struct Temporary {
     Temporary &operator=(const Temporary &) = delete;
 };
 } // namespace
+class NewFileWriterState final {
+public:
+    explicit NewFileWriterState(const std::filesystem::path &path)
+        : parent(open_parent(path)), name(path.filename().native()) {
+        struct stat existing{};
+        if (fstatat(parent.value, name.c_str(), &existing, AT_SYMLINK_NOFOLLOW) == 0)
+            throw std::runtime_error("Text copy destination already exists.");
+        if (errno != ENOENT)
+            fail("Cannot inspect text copy destination");
+        static std::atomic<unsigned long> sequence{};
+        for (int attempt = 0; attempt < 100; ++attempt) {
+            const unsigned long ordinal = ++sequence;
+            temporary = ".swiftedit-copy-" + std::to_string(getpid()) + "-" +
+                        std::to_string(ordinal) + ".tmp";
+            prepared.value = openat(parent.value, temporary.c_str(),
+                                    O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+            if (prepared.value >= 0)
+                return;
+            if (errno != EEXIST)
+                fail("Cannot create text copy temporary");
+        }
+        fail("Cannot reserve text copy temporary");
+    }
+    ~NewFileWriterState() {
+        if (prepared.value < 0)
+            return;
+        struct stat owned{}, named{};
+        if (fstat(prepared.value, &owned) == 0 &&
+            fstatat(parent.value, temporary.c_str(), &named, AT_SYMLINK_NOFOLLOW) == 0 &&
+            owned.st_dev == named.st_dev && owned.st_ino == named.st_ino)
+            unlinkat(parent.value, temporary.c_str(), 0);
+    }
+    Descriptor parent;
+    std::string name{}, temporary{};
+    Descriptor prepared{-1};
+    bool published{}, failed{};
+};
+NewFileWriter::NewFileWriter(const std::filesystem::path &path)
+    : state_(std::make_unique<NewFileWriterState>(path)) {}
+NewFileWriter::~NewFileWriter() = default;
+void NewFileWriter::append(const std::string_view bytes) {
+    NewFileWriterState &state = *state_;
+    if (state.published || state.failed)
+        throw std::runtime_error("Text copy writer is no longer writable.");
+    if (bytes.size() > 65539)
+        throw std::runtime_error("Text copy output chunk exceeds its bounded size.");
+    std::size_t offset = 0;
+    while (offset < bytes.size()) {
+        const ssize_t count = write(state.prepared.value, bytes.data() + offset, bytes.size() - offset);
+        if (count < 0 && errno == EINTR)
+            continue;
+        if (count <= 0) {
+            state.failed = true;
+            fail("Cannot write text copy temporary");
+        }
+        offset += static_cast<std::size_t>(count);
+    }
+}
+void NewFileWriter::publish() {
+    NewFileWriterState &state = *state_;
+    if (state.published || state.failed)
+        throw std::runtime_error("Text copy writer cannot publish again.");
+    state.failed = true;
+    if (fsync(state.prepared.value) != 0)
+        fail("Cannot flush text copy temporary");
+    struct stat owned{}, named{};
+    if (fstat(state.prepared.value, &owned) != 0 ||
+        fstatat(state.parent.value, state.temporary.c_str(), &named, AT_SYMLINK_NOFOLLOW) != 0)
+        fail("Cannot validate text copy temporary");
+    if (owned.st_dev != named.st_dev || owned.st_ino != named.st_ino || !S_ISREG(named.st_mode))
+        throw std::runtime_error("Text copy temporary changed before publication.");
+    if (linkat(state.parent.value, state.temporary.c_str(), state.parent.value, state.name.c_str(), 0) != 0)
+        fail("Cannot publish text copy without overwriting");
+    state.published = true;
+    if (unlinkat(state.parent.value, state.temporary.c_str(), 0) != 0)
+        throw std::runtime_error("Text copy was published, but temporary cleanup failed.");
+    if (fsync(state.parent.value) != 0)
+        throw std::runtime_error("Text copy was published, but directory flush failed.");
+}
 FileSnapshot read_file(const std::filesystem::path &path) {
     const Descriptor parent(open_parent(path));
     const FileSnapshot result = read_at(parent.value, path.filename().native());

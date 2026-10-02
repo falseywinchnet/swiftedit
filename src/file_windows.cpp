@@ -1,5 +1,8 @@
 #include "document.hpp"
+#include "new_file_writer.hpp"
 #include <atomic>
+#include <cstddef>
+#include <cstring>
 #include <stdexcept>
 #include <vector>
 #include <windows.h>
@@ -99,6 +102,86 @@ void validate_path(const std::filesystem::path &path) {
     }
 }
 } // namespace
+class NewFileWriterState final {
+public:
+    explicit NewFileWriterState(const std::filesystem::path &path) : destination(path) {
+        validate_path(path);
+        const DWORD attributes = GetFileAttributesW(path.c_str());
+        if (attributes != INVALID_FILE_ATTRIBUTES)
+            throw std::runtime_error("Text copy destination already exists.");
+        const DWORD error = GetLastError();
+        if (error != ERROR_FILE_NOT_FOUND)
+            fail("Cannot inspect text copy destination", error);
+        static std::atomic<unsigned long> sequence{};
+        for (int attempt = 0; attempt < 100; ++attempt) {
+            const unsigned long ordinal = ++sequence;
+            const std::wstring filename = L".swiftedit-copy-" + std::to_wstring(GetCurrentProcessId()) +
+                                          L"-" + std::to_wstring(ordinal) + L".tmp";
+            const std::filesystem::path temporary = path.parent_path() / filename;
+            prepared.value = CreateFileW(temporary.c_str(), GENERIC_WRITE | DELETE, 0, nullptr,
+                                         CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+            if (prepared.value != INVALID_HANDLE_VALUE)
+                return;
+            const DWORD create_error = GetLastError();
+            if (create_error != ERROR_FILE_EXISTS && create_error != ERROR_ALREADY_EXISTS)
+                fail("Cannot create text copy temporary", create_error);
+        }
+        throw std::runtime_error("Cannot reserve text copy temporary.");
+    }
+    ~NewFileWriterState() {
+        if (!published && prepared.value != INVALID_HANDLE_VALUE) {
+            FILE_DISPOSITION_INFO disposition{TRUE};
+            SetFileInformationByHandle(prepared.value, FileDispositionInfo, &disposition, sizeof(disposition));
+        }
+    }
+    std::filesystem::path destination{};
+    Handle prepared{INVALID_HANDLE_VALUE};
+    bool published{}, failed{};
+};
+NewFileWriter::NewFileWriter(const std::filesystem::path &path)
+    : state_(std::make_unique<NewFileWriterState>(path)) {}
+NewFileWriter::~NewFileWriter() = default;
+void NewFileWriter::append(const std::string_view bytes) {
+    NewFileWriterState &state = *state_;
+    if (state.published || state.failed)
+        throw std::runtime_error("Text copy writer is no longer writable.");
+    if (bytes.size() > 65539)
+        throw std::runtime_error("Text copy output chunk exceeds its bounded size.");
+    std::size_t offset = 0;
+    while (offset < bytes.size()) {
+        DWORD written = 0;
+        const DWORD requested = static_cast<DWORD>(bytes.size() - offset);
+        if (!WriteFile(state.prepared.value, bytes.data() + offset, requested, &written, nullptr) || !written) {
+            state.failed = true;
+            fail("Cannot write text copy temporary");
+        }
+        offset += written;
+    }
+}
+void NewFileWriter::publish() {
+    NewFileWriterState &state = *state_;
+    if (state.published || state.failed)
+        throw std::runtime_error("Text copy writer cannot publish again.");
+    const std::wstring &name = state.destination.native();
+    if (name.size() > (MAXDWORD - sizeof(FILE_RENAME_INFO)) / sizeof(wchar_t))
+        throw std::runtime_error("Text copy destination name is too long.");
+    const std::size_t name_bytes = name.size() * sizeof(wchar_t);
+    const std::size_t storage_bytes = sizeof(FILE_RENAME_INFO) + name_bytes;
+    const std::size_t words = (storage_bytes + sizeof(std::max_align_t) - 1) / sizeof(std::max_align_t);
+    std::vector<std::max_align_t> storage(words);
+    FILE_RENAME_INFO &rename = *reinterpret_cast<FILE_RENAME_INFO *>(storage.data());
+    rename.ReplaceIfExists = FALSE;
+    rename.RootDirectory = nullptr;
+    rename.FileNameLength = static_cast<DWORD>(name_bytes);
+    std::memcpy(rename.FileName, name.data(), name_bytes);
+    state.failed = true;
+    if (!FlushFileBuffers(state.prepared.value))
+        fail("Cannot flush text copy temporary");
+    if (!SetFileInformationByHandle(state.prepared.value, FileRenameInfo, &rename,
+                                    static_cast<DWORD>(storage_bytes)))
+        fail("Cannot publish text copy without overwriting");
+    state.published = true;
+}
 FileSnapshot read_file(const std::filesystem::path &path) {
     validate_path(path);
     const HANDLE opened =

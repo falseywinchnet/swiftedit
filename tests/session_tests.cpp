@@ -1,4 +1,5 @@
 #include "session.hpp"
+#include "new_file_writer.hpp"
 #include "text_copy_stream.hpp"
 #include <fstream>
 #include <iostream>
@@ -72,6 +73,49 @@ int main() {
                 std::filesystem::remove_all(dir, ec);
             }
         } cleanup{dir};
+        const std::filesystem::path copy_target = dir / "streamed.txt";
+        {
+            notepad::NewFileWriter cancelled(copy_target);
+            cancelled.append("unfinished");
+            check(!std::filesystem::exists(copy_target), "Streaming output remains unpublished");
+        }
+        check(std::filesystem::is_empty(dir), "Cancelling removes the owned temporary");
+        {
+            notepad::NewFileWriter writer(copy_target);
+            const std::string chunk(65536, 'q');
+            for (std::size_t index = 0; index < 257; ++index)
+                writer.append(chunk);
+            writer.append("tail");
+            writer.publish();
+            bool repeat_refused = false;
+            try { writer.publish(); }
+            catch (const std::exception &) { repeat_refused = true; }
+            check(repeat_refused, "Published writers reject repeated publication");
+        }
+        {
+            PagedFile copied(copy_target);
+            check(copied.size() == 257 * 65536 + 4 &&
+                  copied.page(copied.size() - 4, 4).bytes == "tail" && copied.page(0, 4).bytes == "qqqq",
+                  "Streaming publication supports copies larger than the editable limit");
+        }
+        bool existing_refused = false;
+        try { notepad::NewFileWriter existing(copy_target); }
+        catch (const std::exception &) { existing_refused = true; }
+        check(existing_refused, "Streaming writer refuses an existing destination");
+        const std::filesystem::path raced_target = dir / "raced.txt";
+        {
+            notepad::NewFileWriter raced(raced_target);
+            raced.append("candidate");
+            raw(raced_target, "winner");
+            bool race_refused = false;
+            try { raced.publish(); }
+            catch (const std::exception &) { race_refused = true; }
+            check(race_refused, "Publication refuses a destination created after preparation");
+        }
+        check(notepad::read_file(raced_target).bytes == "winner", "Raced destination remains unchanged");
+        for (const std::filesystem::directory_entry &entry : std::filesystem::directory_iterator(dir))
+            check(entry.path() == copy_target || entry.path() == raced_target,
+                  "Successful and refused publication leave no temporary files");
         const std::filesystem::path file = dir / "sample.txt";
         raw(file, "before old after\r\nsecond old after");
         Session s{};

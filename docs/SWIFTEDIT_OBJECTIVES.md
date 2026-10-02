@@ -204,3 +204,24 @@ paged Save Text Copy command: remaining work is a sibling temporary streaming
 writer with atomic no-overwrite publication, source-stamped cancellable task,
 terminal/CLI wiring and cross-platform failure/cancellation tests. The existing
 16 MiB snapshot writer is not suitable for arbitrarily large copies.
+
+The streaming copy writer is now implemented for Windows and POSIX in
+NewFileWriter. It owns a sibling temporary, accepts bounded output chunks, and
+publishes only to an absent destination. Windows renames the owned open handle
+with replacement disabled; cancellation marks that handle for deletion. POSIX
+retains the parent directory descriptor, validates temporary identity, links the
+new name without replacement, removes the temporary, and flushes the directory.
+Write/publication failure prevents further writes or publication. Final flush is
+synchronous and is not yet an end-to-end responsiveness claim. Cancellation
+cleanup is best effort in destructors; explicit publication/flush failures report
+whether the new name was already installed.
+
+Windows tests published 16 MiB + 64 KiB + 4 bytes, confirmed cancellation cleanup,
+existing-name refusal, a destination created after preparation remaining intact,
+repeated-publication refusal and absence of temporary leftovers. Full local
+suite: 23 passed in 11.80 seconds. Final Windows path-size overflow guard passed
+the session test again in 0.45 seconds. House-style audit: 120 files, no spelling
+findings. Native POSIX validation is pending this push. The preceding Home/End
+checkpoint 828dfb7 passed native run 36962515925 and portable run 36962515920.
+The paged Save Text Copy command remains disabled until the source-stamped task
+and terminal/CLI orchestration are connected and verified.
