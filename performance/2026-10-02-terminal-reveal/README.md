@@ -53,3 +53,31 @@ swiftedit-terminal-reveal-bench NEW_REUSED_DIRECTORY
 The checked-in summaries retain every case. Gzip-compressed CSV files retain
 90,444 fresh and 45,236 reused raw step measurements with fixture, caret, trial,
 step index and milliseconds. Fixtures are deterministic and are not checked in.
+
+## Off-screen ASCII prefix follow-up
+
+After the reuse checkpoint at 0da6631, the width-only path skips proven
+standalone ASCII units outside the visible slice without creating glyph strings
+or segmenting an entire ASCII prefix. It retains the final ASCII byte before
+non-ASCII or an unfinished chunk, allowing combining/variation suffixes to reach
+normal grapheme segmentation. Visible content still follows the normal renderer.
+The width-only policy is checked against rendered output for all 128 ASCII
+bytes at all four tab-stop positions (and a repeated stop cycle).
+
+`ascii-prefix-summary.csv` and `ascii-prefix-samples.csv.gz` preserve a subsequent
+run of the same benchmark and fixtures, with 45,236 raw steps. Initial distant
+ASCII reveals measured 95.569–95.605 ms, versus 740.959–813.822 ms at the reuse
+checkpoint; control-line reveals measured 92.694–94.116 ms, versus
+751.999–753.039 ms. The worst individual step was 0.7038 ms. These sequential
+local observations are not a hard guarantee or controlled cache-isolated ratio.
+
+The optimization does not accelerate arbitrary Unicode clusters, cold storage,
+native presentation or the remaining full GUI migration. Initial view discovery
+still reads long logical lines to find their ends. The cancellation architecture
+and source/grapheme refusal bounds remain unchanged. A regression specifically
+checks an ASCII base plus combining mark split across the 8192-byte read edge,
+including refusal of a source caret inside that cluster.
+
+The full local Release build and 26/26 headless tests passed after this follow-up
+(19.21 seconds), with the 138-file spelling audit clean. Native validation of
+this latest change is pending.

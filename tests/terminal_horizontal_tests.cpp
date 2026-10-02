@@ -484,6 +484,38 @@ void check_reused_reveal(const Fixture &fixture) {
     }
     require(refused, "Reuse cannot admit metadata from an older source");
 }
+void check_ascii_prefix(const Fixture &fixture) {
+    std::string ascii{};
+    for (std::size_t value = 0; value < 128; ++value) {
+        const unsigned char byte = static_cast<unsigned char>(value);
+        const std::string source(1, static_cast<char>(byte));
+        ascii += source;
+        for (std::size_t column = 0; column < 8; ++column) {
+            const swiftedit::TerminalGlyph glyph = swiftedit::terminal_glyph(source, column);
+            require(swiftedit::terminal_ascii_cells(byte, column) == glyph.cells,
+                    "Width-only ASCII policy matches the rendered glyph for every byte");
+        }
+    }
+    compare_rows(fixture, ascii);
+    swiftedit::Session session{};
+    session.open(fixture.write("ascii-boundary.txt", std::string(8191, 'x') + "e\xcc\x81z"));
+    swiftedit::TerminalLogicalPage page(session, 0, 1);
+    finish_logical(page, session);
+    swiftedit::TerminalHorizontalLine valid(session, page, 0, 8190, 8, 8194);
+    require(!valid.step(session) && valid.step(session), "Prefix scan retains the last unfinished base byte");
+    const swiftedit::TerminalHorizontalFrame &frame = valid.result(session);
+    require(frame.source_caret_column == 8192 && frame.runs.size() == 3 &&
+                frame.runs[1].text == "e\xcc\x81" && frame.runs[1].source_length == 3,
+            "Combining sequence spanning an ASCII read boundary stays atomic");
+    swiftedit::TerminalHorizontalLine invalid(session, page, 0, 0, 1, 8192);
+    bool refused = false;
+    try {
+        while (!invalid.step(session)) {}
+    } catch (const std::runtime_error &) {
+        refused = true;
+    }
+    require(refused, "Off-screen prefix optimization cannot admit a split combining caret");
+}
 } // namespace
 int main() {
     try {
@@ -501,6 +533,7 @@ int main() {
         check_reveal(fixture);
         check_logical_movement(fixture);
         check_reused_reveal(fixture);
+        check_ascii_prefix(fixture);
         std::cout << "Bounded horizontal rendering matches source, width and inert-control policies.\n";
         return 0;
     } catch (const std::exception &failure) {

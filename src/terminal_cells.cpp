@@ -44,6 +44,17 @@ char32_t scalar_at(std::string_view source, std::size_t offset, std::size_t leng
     return scalar;
 }
 } // namespace
+std::size_t terminal_ascii_cells(const unsigned char byte, const std::size_t column) {
+    if (byte > 127)
+        throw std::runtime_error("ASCII width requires a standalone ASCII source unit.");
+    if (byte == '\t') {
+        const std::size_t cells = 4 - column % 4;
+        return cells;
+    }
+    if (byte < 32 || byte == 127)
+        return 8; // [U+0000] through [U+007F], matching terminal_glyph labels.
+    return 1;
+}
 TerminalGlyph terminal_glyph(std::string_view source, std::size_t column) {
     if (source.empty() || source.size() > maximum_page)
         throw std::runtime_error("Terminal glyph must contain 1..65536 source bytes.");

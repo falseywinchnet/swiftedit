@@ -138,3 +138,13 @@ No previous task is borrowed after construction. Reuse and stale-source tests
 pass; native validation of this optimization is pending. Raw comparisons and
 the remaining slow initial-jump limitation are recorded in
 `performance/2026-10-02-terminal-reveal`.
+
+Native run 36990927326 at 0da6631 passed all three platforms and packaging for
+the reuse optimization. A later width-only off-screen ASCII scan reduces initial
+distant-reveal work in the recorded long ASCII/control fixtures from roughly
+741–814 ms to 93–96 ms. It deliberately keeps a trailing ASCII base for normal
+segmentation before non-ASCII or an unfinished read. Exhaustive ASCII width
+comparisons and an 8 KiB combining-boundary regression pass. Raw follow-up
+samples are preserved alongside the earlier measurements. Arbitrary Unicode,
+cold I/O, native presentation and final responsiveness remain separate work;
+native validation of this prefix optimization is pending.

@@ -46,6 +46,10 @@ void TerminalHorizontalLine::retain_caret(const std::uint64_t offset,
         frame_.carets.push_back({offset, column});
 }
 void TerminalHorizontalLine::prepare() {
+    skip_offscreen_ascii();
+    finish_preparation();
+    if (complete_)
+        return;
     const bool line_end = read_offset_ == end_;
     std::string metadata = source_;
     for (std::size_t index = 0; index < metadata.size();) {
@@ -116,6 +120,46 @@ void TerminalHorizontalLine::prepare() {
     }
     offset_ += consumed;
     source_.erase(0, consumed);
+    finish_preparation();
+    if (!complete_ && source_.size() == maximum_page)
+        throw std::runtime_error("A complete grapheme exceeds the terminal page context limit. Source is unchanged.");
+}
+void TerminalHorizontalLine::skip_offscreen_ascii() {
+    std::size_t consumed = 0;
+    while (consumed < source_.size()) {
+        const unsigned char byte = static_cast<unsigned char>(source_[consumed]);
+        if (byte > 127)
+            break;
+        // Printable ASCII can acquire a combining/variation suffix. Keep the
+        // last byte before non-ASCII or an unfinished read for full segmentation.
+        if (consumed + 1 < source_.size()) {
+            if (static_cast<unsigned char>(source_[consumed + 1]) > 127)
+                break;
+        } else if (read_offset_ != end_) {
+            break;
+        }
+        const std::size_t cells = terminal_ascii_cells(byte, static_cast<std::size_t>(column_ % 4));
+        if (cells > std::numeric_limits<std::uint64_t>::max() - column_)
+            throw std::runtime_error("Logical line display width exceeds the supported range.");
+        const std::uint64_t following = column_ + cells;
+        if (column_ < right_ && following > left_)
+            break;
+        const std::uint64_t source_start = offset_ + consumed;
+        if (source_caret_) {
+            if (*source_caret_ == source_start)
+                frame_.source_caret_column = column_;
+            else if (*source_caret_ == source_start + 1)
+                frame_.source_caret_column = following;
+        }
+        column_ = following;
+        ++consumed;
+        if (column_ >= right_ && (!source_caret_ || frame_.source_caret_column))
+            break;
+    }
+    offset_ += consumed;
+    source_.erase(0, consumed);
+}
+void TerminalHorizontalLine::finish_preparation() {
     if (source_caret_ && *source_caret_ == end_ && offset_ == end_)
         frame_.source_caret_column = column_;
     complete_ = (column_ >= right_ && (!source_caret_ || frame_.source_caret_column)) || offset_ == end_;
@@ -126,8 +170,6 @@ void TerminalHorizontalLine::prepare() {
         }
         frame_.clipped_left = left_ > 0 && column_ > 0;
         frame_.clipped_right = column_ > right_ || offset_ < end_;
-    } else if (source_.size() == maximum_page) {
-        throw std::runtime_error("A complete grapheme exceeds the terminal page context limit. Source is unchanged.");
     }
 }
 bool TerminalHorizontalLine::step(const Session &session, const std::size_t budget) {

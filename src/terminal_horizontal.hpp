@@ -36,6 +36,8 @@ private:
     friend class TerminalHorizontalPage;
     void validate(const Session &) const;
     void retain_caret(std::uint64_t offset, std::uint64_t column);
+    void skip_offscreen_ascii();
+    void finish_preparation();
     void prepare();
     DocumentStamp stamp_{};
     std::uint64_t size_{}, offset_{}, read_offset_{}, end_{}, column_{}, left_{}, right_{};
