@@ -96,5 +96,39 @@ submission. Native dialog ownership, cancellation, page-range/settings fidelity
 and observed spool acceptance each need their own evidence. Do not print physical
 test pages without a coordinated fixture destination.
 
-Status: consumer semantic direction accepted with the counters above; no source
-adapter, native preview, print job or installed print service is implemented here.
+## Owned source checkpoint, 2026-10-02
+
+`SourceSnapshot` and `SnapshotCapture` now provide the Session-side owned copy
+strategy discussed above. A capture checks ordered, disjoint source ranges and
+caller-supplied byte, part and chunk quotas before allocating metadata. Stepping
+copies at most the requested 1..65536 bytes into owned 64 KiB chunks, checking
+document identity, revision and size. Only a completed, revalidated capture can
+transfer its immutable owner. Failed reads, stale publication and cancellation
+release unpublished storage. Explicit part boundaries retain discontiguous
+selections without inserting or inventing source bytes.
+
+Completed snapshots retain provenance and support bounded reads independently of
+Session lifetime and subsequent file replacement. Capture executes on the Session
+executor; only the completed immutable owner may be handed to workers through a
+properly synchronized publication boundary. No live Session or file handle is
+retained by the result. The owner must remain alive during concurrent reads.
+
+These quotas count logical bytes and metadata slots, not allocator committed
+memory. Metadata reservation, allocation, file reads and releasing accumulated
+chunks are synchronous; a byte budget is not a wall-clock latency guarantee.
+Paged capture relies on the source adapter's consistency checks. In particular,
+POSIX metadata checks cannot establish a filesystem-atomic snapshot against all
+uncooperative writers. Completed storage is immutable; capture must not advertise
+a stronger external-file consistency guarantee than its adapter provides.
+
+Tests cover exact controls, malformed bytes and line endings; multiple separate
+parts and empty parts; quota/range refusal; stale revision and identity; partial
+publication refusal; cancellation; and an actual 16 MiB paged source whose
+completed snapshot survives closing Session and replacing the file. A POSIX-only
+test additionally changes the backing file during capture and requires failure
+without publication. Native CI must exercise that platform-specific branch.
+
+Status: the Session source-copy foundation is implemented. GUI Document capture,
+projection, native preview, print jobs and an installed print service remain
+unfinished. This checkpoint does not make printing available or close the full
+large-document printing requirement.
