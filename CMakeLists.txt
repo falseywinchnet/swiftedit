@@ -151,6 +151,8 @@ if(NOTEPAD_BUILD_UI)
   # Opt-in because this creates self-closing owned native dialogs.
   option(NOTEPAD_NATIVE_TESTS "Run coordinated native window smoke" OFF)
   if(NOTEPAD_NATIVE_TESTS)
+    add_test(NAME picker-file-links COMMAND notepad-editor-tests --picker-file-links)
+    set_tests_properties(picker-file-links PROPERTIES TIMEOUT 30)
     add_test(NAME independent-window-launch COMMAND swiftedit-window-tests --parent)
     set_tests_properties(independent-window-launch PROPERTIES TIMEOUT 20)
     add_test(NAME independent-window-native COMMAND swiftedit-window-native-tests --parent)

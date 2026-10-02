@@ -1,18 +1,18 @@
 {
-  "release": "sdk-gui-forms-0322371",
-  "provider_revision": "032237152148ff76ca125eb382f43d589d3baeb9",
+  "release": "sdk-gui-forms-723cd7f",
+  "provider_revision": "723cd7f9f8016d854f667f41e0c5dbcbe4cc0adf",
   "archives": {
     "macos-arm64": {
-      "name": "gui-forms-picker-macos-arm64-032237152148ff76ca125eb382f43d589d3baeb9.zip",
-      "sha256": "20373329f5ead2f46e9a3c24a3f7875833bd60a61e3d746103745cbfbf24e749"
+      "name": "gui-forms-picker-macos-arm64-723cd7f9f8016d854f667f41e0c5dbcbe4cc0adf.zip",
+      "sha256": "98829397055a92642d2e710a9701a896af6331e092008c4a86a094f4e6a7bd73"
     },
     "windows-x64": {
-      "name": "gui-forms-picker-windows-x64-032237152148ff76ca125eb382f43d589d3baeb9.zip",
-      "sha256": "426320f9e5230639f003fe61027ebef43afcb4671baa0e2c4fe154cbae95588c"
+      "name": "gui-forms-picker-windows-x64-723cd7f9f8016d854f667f41e0c5dbcbe4cc0adf.zip",
+      "sha256": "d0a953ea13df458725b677ca79b68abe6cba249d2f57e5a5a36dd03011a05b5d"
     },
     "linux-x64": {
-      "name": "gui-forms-picker-linux-x64-032237152148ff76ca125eb382f43d589d3baeb9.zip",
-      "sha256": "0cfc8692e6c6dda48ed5486dfce1cdf58a06e43836c84bc61a0f521c49d7a037"
+      "name": "gui-forms-picker-linux-x64-723cd7f9f8016d854f667f41e0c5dbcbe4cc0adf.zip",
+      "sha256": "02e4d7fa5175824d1a0baa02ad1ef6c6084de3128eb6ab89978c3ea508f075bf"
     }
   }
 }

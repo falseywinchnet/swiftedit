@@ -679,3 +679,15 @@ commands directly. Exact Unicode cross-process text and surviving-window
 independence assertions remain unchanged. This covers toolkit key routing,
 not physical keyboard event translation. Windows compilation and101-file style
 audit passed; native execution pending. No local desktop launched.
+
+SDK723cd7f adoption: provider native36945290227 passed all3, picker model/view
+logs had no skips. All archive sidecars and internal SDK hashes verified;
+GitHub mirrored asset digests match. Mirror sdk-gui-forms-723cd7f preserves older
+releases. Pin updated and actual picker-file-links probe enabled under native
+CTest. Fresh local Release build against installed723 passed20suites5.51s;
+101-file style clean. Extracted archive timestamps were future-dated locally,
+causing Ninja regeneration; normalized only extracted files' future timestamps,
+then build succeeded. Archive bytes remain unchanged. Native consumer alias
+execution and new Mac download are still pending; no CPU fix or prepared-text
+availability claim. c968ae8 native36946000203/core36946000230 passed; Mac routed
+clipboard/lifecycle raw evidence is .build/native-c968ae8-evidence/mac.

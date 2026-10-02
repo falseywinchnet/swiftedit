@@ -1,12 +1,14 @@
 # File-link picker adoption probe
 
-The installed0322371 SDK supports directory-link navigation but not file-link
-opening. Provider candidate2d04310 failed native validation; do not advance the
-pin or claim this capability until its corrected candidate is verified.
+The SDK pin now targets723cd7f9f8016d854f667f41e0c5dbcbe4cc0adf. Provider native
+run36945290227 passed on all three platforms, including picker model/view cases
+without skips. All archive receipts and internal content hashes were verified.
+The previous0322371 SDK supports directory links but not file-link opening.
 
 `notepad-editor-tests --picker-file-links` is an explicit consumer adoption
-probe. It is compiled against installed public headers, uses the retained picker
-controls, and is intentionally not yet registered in the ordinary CTest suite.
+probe. It is compiled against installed public headers and uses the retained picker
+controls. It is now registered as picker-file-links when NOTEPAD_NATIVE_TESTS
+is enabled, so coordinated native CI must execute it before a release claim.
 It creates one uniquely owned disposable directory containing a relative file
 symlink and its target. It then:
 
@@ -17,13 +19,11 @@ symlink and its target. It then:
 4. Checks the target's exact bytes, clean document state and preserved symlink.
 
 The probe requires actual symlink creation and never reports a skipped fixture
-as a pass. Local Windows compilation succeeds, but this desktop's symlink
-privilege limitation and the old SDK mean execution evidence is still missing.
-The ordinary20 local suites passed in3.52s; this result does not cover the probe.
+as a pass. A fresh local Windows Release build against723cd7f passed all20
+ordinary suites in5.51s. This desktop's symlink privilege limitation means the
+actual alias probe must run in native CI; those integration results are pending.
 
-After provider native fixtures and archive receipts pass, verify the downloaded
-SDK contents, update the dependency pin, and register this probe in CTest on
-hosts that can execute real links. Run it on macOS and Linux and in the native
-Windows runner before publishing the picker fix. The provider's own cases
+Run the registered probe on macOS and Linux and in the native Windows runner
+before publishing the picker fix. The provider's own cases
 remain responsible for profile/filter/root policy, broken/cyclic/stale aliases
 and unchanged Save/Export refusal; this probe verifies SwiftEdit integration.
