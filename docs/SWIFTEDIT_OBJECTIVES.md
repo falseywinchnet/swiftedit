@@ -567,3 +567,19 @@ review confirmed private preparation before publication and bounded query size.
 The GUI QueryField has the same old matching heuristic and remains an open bug:
 its string-only notification needs edit provenance and query undo reconciliation.
 This is a terminal correction, not a claim that GUI wildcard editing is complete.
+
+GUI wildcard follow-through: QueryField now maps flags through the routed edit's
+selection and operation, including duplicate insertion, forward/backward deletion
+and clipboard replacement. It owns a bounded 64-entry history of text, flags and
+selection; Ctrl/Command undo and redo restore them together, and wildcard toggles
+are undoable. Programmatic set_text starts a literal query and clears query
+history. Combining edits clear flags on changed graphemes. The 4096 UTF-8 byte
+budget now also applies to interactive insertion, preserving the prior query and
+history on refusal. Headless tests cover routed typing, duplicate deletion,
+clipboard insertion/identical replacement, combining edits, undo/redo and byte
+budget refusal. The full local run passed 22/23; the remaining view test used
+set_text to simulate typing and was corrected to route actual text input.
+Editor and views then passed together (2.34 seconds), covering all 23 suites
+across these checks. No native GUI launch or physical responsiveness claim.
+House-style audit passed 124 files; source review checked bounded history,
+owned snapshots, literal reset semantics and rollback of failed routed edits.

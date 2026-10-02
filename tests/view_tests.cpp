@@ -345,7 +345,10 @@ int main() {
         check(right_click.handled && !unflagged.slots()[1].wildcard,
               "Right-click toggles the hit character back to literal");
         (*query).toggle_slot(1);
-        (*query).set_text("a?cd");
+        (*query).select(gf::Utf8Offset(3), gf::Utf8Offset(3));
+        gf::TextInputEvent appended{"d"};
+        (*query).on_text_input(appended);
+        check(appended.handled && (*query).text() == "a?cd", "Query append routes through text input");
         const swiftedit::SearchPattern extended = (*query).pattern();
         check(extended.slots()[1].wildcard && !extended.slots()[3].wildcard,
               "Typing outside a flagged position retains its flag");

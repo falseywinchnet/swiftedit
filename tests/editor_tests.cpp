@@ -630,6 +630,79 @@ void verify_file_shortcuts() {
     check(services.dialogs == 0, "Shortcut operations do not spuriously prompt");
     host.shutdown();
 }
+void verify_query_occurrence_history() {
+    const std::shared_ptr<notepad::QueryField> query =
+        gf::make_control<notepad::QueryField>(gf::StableId("query.history"));
+    gf::Window window(query, {400, 80});
+    TestServices services{};
+    gf::HostSession host(window, capabilities(), &services);
+    check(host.dispatch({1, 0, gf::HostAttachEvent{{400, 80}, 1}}).accepted(),
+          "Query test host attached");
+    check(window.request_focus(query), "Query fixture accepts focus");
+    (*query).set_text("aa");
+    (*query).toggle_slot(0);
+    (*query).select(gf::Utf8Offset(0), gf::Utf8Offset(0));
+    check(window.dispatch_text({"a"}), "Query duplicate insertion handled");
+    check((*query).text() == "aaa" && !(*query).pattern().slots()[0].wildcard &&
+              (*query).pattern().slots()[1].wildcard && !(*query).pattern().slots()[2].wildcard,
+          "GUI insertion preserves original wildcard occurrence");
+    gf::KeyEvent key{};
+    key.physical_key = gf::PhysicalKey::delete_forward;
+    check(window.dispatch_key(key) && (*query).text() == "aa" &&
+              !(*query).pattern().slots()[0].wildcard && !(*query).pattern().slots()[1].wildcard,
+          "GUI deletion removes only the flagged occurrence");
+    key.physical_key = gf::PhysicalKey::z;
+    key.modifiers = gf::Modifier::control;
+    check(window.dispatch_key(key) && (*query).text() == "aaa" &&
+              (*query).pattern().slots()[1].wildcard,
+          "Query undo restores text and the correct wildcard occurrence");
+    key.modifiers = gf::Modifier::meta | gf::Modifier::shift;
+    check(window.dispatch_key(key) && (*query).text() == "aa" &&
+              !(*query).pattern().slots()[0].wildcard && !(*query).pattern().slots()[1].wildcard,
+          "Command Shift Z redoes query text and flags together");
+    (*query).set_text("a");
+    (*query).toggle_slot(0);
+    (*query).select(gf::Utf8Offset(1), gf::Utf8Offset(1));
+    check(window.dispatch_text({"\xcc\x81"}) && !(*query).pattern().slots()[0].wildcard,
+          "Combining edit clears changed GUI grapheme flag");
+    key.modifiers = gf::Modifier::control;
+    check(window.dispatch_key(key) && (*query).text() == "a" && (*query).pattern().slots()[0].wildcard,
+          "Undo restores pre-combination text and flag");
+    check(window.dispatch_key(key) && !(*query).pattern().slots()[0].wildcard,
+          "Wildcard toggle itself is undoable");
+    (*query).set_text("aa");
+    (*query).toggle_slot(1);
+    (*query).select(gf::Utf8Offset(1), gf::Utf8Offset(1));
+    key.physical_key = gf::PhysicalKey::backspace;
+    key.modifiers = gf::Modifier::none;
+    check(window.dispatch_key(key) && (*query).text() == "a" && (*query).pattern().slots()[0].wildcard,
+          "Backspace on duplicate preserves surviving flagged occurrence");
+    (*query).select(gf::Utf8Offset(0), gf::Utf8Offset(1));
+    check(window.dispatch_text({"a"}) && !(*query).pattern().slots()[0].wildcard,
+          "Retyping selected flagged text makes a literal query character");
+    (*query).set_text("aa");
+    (*query).toggle_slot(0);
+    (*query).select(gf::Utf8Offset(0), gf::Utf8Offset(0));
+    services.clipboard = "a";
+    key.physical_key = gf::PhysicalKey::v;
+    key.modifiers = gf::Modifier::control;
+    check(window.dispatch_key(key) && (*query).text() == "aaa" &&
+              !(*query).pattern().slots()[0].wildcard && (*query).pattern().slots()[1].wildcard,
+          "Clipboard insertion preserves original wildcard occurrence");
+    (*query).select(gf::Utf8Offset(1), gf::Utf8Offset(2));
+    check(window.dispatch_key(key) && !(*query).pattern().slots()[1].wildcard,
+          "Pasting identical literal text over a flag removes the flag");
+    (*query).set_text(std::string(4095, 'a'));
+    (*query).toggle_slot(0);
+    (*query).select(gf::Utf8Offset(4095), gf::Utf8Offset(4095));
+    static_cast<void>(window.dispatch_text({"\xc3\xa9"}));
+    check((*query).text().size() == 4095 && (*query).pattern().slots()[0].wildcard,
+          "UTF-8 query byte budget refusal preserves text and flags");
+    key.physical_key = gf::PhysicalKey::z;
+    check(window.dispatch_key(key) && !(*query).pattern().slots()[0].wildcard,
+          "Refused oversized insertion does not add undo history");
+    host.shutdown();
+}
 int main(const int argc, char **const argv) {
     try {
         if (argc == 2 && std::string_view(argv[1]) == "--picker-file-links") {
@@ -638,6 +711,7 @@ int main(const int argc, char **const argv) {
             return 0;
         }
         verify_view_menu_state();
+        verify_query_occurrence_history();
         verify_callback_revocation();
         verify_file_shortcuts();
         verify_picker_home();

@@ -1,11 +1,14 @@
 #pragma once
 #include "search.hpp"
 #include <gui_forms/gui_forms.hpp>
+#include <deque>
 
 namespace notepad {
 namespace gf = gui_forms;
 // The private child supplies standard text editing/clipboard behavior. This
 // control owns focus, hit testing and the visible, flagged-grapheme rendering.
+// It also owns 64 query-history snapshots (4096 UTF-8 bytes each), so flags and
+// selection are restored with text instead of relying on text-only child undo.
 class QueryField final : public gf::Control {
 public:
     static constexpr bool initialize_tree_after_construction = true;
@@ -27,18 +30,24 @@ protected:
     void on_dispose() noexcept override;
 
 private:
-    struct TextListener {
-        std::weak_ptr<QueryField> owner{};
-        void operator()(const std::string &) const;
+    struct Snapshot {
+        std::string text{};
+        std::vector<bool> flags{};
+        gf::TextSelection selection{};
     };
-    void synchronize();
+    Snapshot snapshot() const;
+    void restore(const Snapshot &);
+    void synchronize(const Snapshot &, bool backward, bool deletion, bool replacement);
+    void remember(const Snapshot &);
+    bool history(bool redo);
+    void changed();
     std::size_t hit(double) const;
     std::shared_ptr<gf::TextBox> edit_{};
     gf::TextStore store_{};
     std::vector<swiftedit::SearchSlot> slots_{};
     std::vector<double> edges_{};
     std::vector<std::string> labels_{};
-    gf::SubscriptionToken changed_{};
+    std::deque<Snapshot> undo_{}, redo_{};
     std::optional<std::size_t> hovered_{};
     double scroll_{};
     std::uint64_t revision_{1};

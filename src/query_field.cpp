@@ -12,52 +12,128 @@ void QueryField::initialize_control_tree() {
     (*edit_).set_maximum_length(4096);
     (*edit_).set_visible(false);
     add_child(edit_);
-    const std::shared_ptr<QueryField> self =
-        std::static_pointer_cast<QueryField>(shared_from_this());
-    changed_ = (*edit_).text_changed().subscribe(*this, TextListener{self});
 }
 void QueryField::on_dispose() noexcept {
-    changed_.disconnect();
     (*edit_).on_focus_changed(false);
     Control::on_dispose();
 }
-void QueryField::TextListener::operator()(const std::string &) const {
-    const std::shared_ptr<QueryField> self = owner.lock();
-    if (self && (*self).is_alive())
-        (*self).synchronize();
+QueryField::Snapshot QueryField::snapshot() const {
+    Snapshot result{};
+    result.text = store_.utf8();
+    result.selection = (*edit_).selection();
+    for (const swiftedit::SearchSlot &slot : slots_)
+        result.flags.push_back(slot.wildcard);
+    return result;
 }
-void QueryField::set_text(std::string value) {
-    if (value.size() > 4096)
-        throw std::runtime_error("Search text exceeds 4096 bytes.");
-    (*edit_).set_text(std::move(value));
-}
-std::string_view QueryField::text() const { return store_.utf8(); }
-void QueryField::synchronize() {
-    gf::TextStore next((*edit_).text());
-    std::vector<swiftedit::SearchSlot> slots{};
-    if (!(*edit_).text().empty()) {
-        const swiftedit::SearchPattern parsed((*edit_).text());
-        slots = parsed.slots();
-    }
-    std::size_t prefix = 0;
-    while (prefix < slots.size() && prefix < slots_.size() &&
-           slots[prefix].literal == slots_[prefix].literal) {
-        slots[prefix].wildcard = slots_[prefix].wildcard;
-        ++prefix;
-    }
-    std::size_t old_end = slots_.size(), new_end = slots.size();
-    while (old_end > prefix && new_end > prefix &&
-           slots[new_end - 1].literal == slots_[old_end - 1].literal) {
-        slots[new_end - 1].wildcard = slots_[old_end - 1].wildcard;
-        --old_end;
-        --new_end;
-    }
-    store_ = std::move(next);
-    slots_ = std::move(slots);
+void QueryField::changed() {
     ++revision_;
     hovered_.reset();
     layout_dirty_ = true;
     invalidate(gf::Dirty::paint);
+}
+void QueryField::restore(const Snapshot &value) {
+    gf::TextStore next(value.text);
+    std::vector<swiftedit::SearchSlot> slots{};
+    if (!value.text.empty()) {
+        const swiftedit::SearchPattern parsed(value.text);
+        slots = parsed.slots();
+    }
+    for (std::size_t index = 0; index < slots.size() && index < value.flags.size(); ++index)
+        slots[index].wildcard = value.flags[index];
+    (*edit_).set_text(value.text);
+    (*edit_).select(value.selection.anchor, value.selection.caret);
+    (*edit_).clear_undo_history();
+    store_ = std::move(next);
+    slots_ = std::move(slots);
+    changed();
+}
+void QueryField::remember(const Snapshot &before) {
+    undo_.push_back(before);
+    if (undo_.size() > 64)
+        undo_.pop_front();
+    redo_.clear();
+}
+bool QueryField::history(bool redo) {
+    std::deque<Snapshot> &source = redo ? redo_ : undo_;
+    std::deque<Snapshot> &destination = redo ? undo_ : redo_;
+    if (source.empty())
+        return false;
+    const Snapshot current = snapshot();
+    destination.push_back(current);
+    try {
+        restore(source.back());
+    } catch (...) {
+        destination.pop_back();
+        throw;
+    }
+    source.pop_back();
+    return true;
+}
+void QueryField::set_text(std::string value) {
+    if (value.size() > 4096)
+        throw std::runtime_error("Search text exceeds 4096 bytes.");
+    Snapshot next{};
+    next.text = std::move(value);
+    restore(next);
+    undo_.clear();
+    redo_.clear();
+}
+std::string_view QueryField::text() const { return store_.utf8(); }
+void QueryField::synchronize(const Snapshot &before, bool backward, bool deletion, bool replacement) {
+    const std::string value((*edit_).text());
+    (*edit_).clear_undo_history();
+    if (value == before.text && !replacement)
+        return;
+    if (value.size() > 4096) {
+        restore(before);
+        return;
+    }
+    std::size_t start = before.selection.start().value();
+    std::size_t removed = before.selection.length();
+    if (deletion && !removed) {
+        removed = before.text.size() - value.size();
+        if (backward)
+            start -= removed;
+    }
+    const std::size_t retained = before.text.size() - removed;
+    if (value.size() < retained) {
+        restore(before);
+        throw std::runtime_error("Query edit did not match its source selection.");
+    }
+    const std::size_t inserted = value.size() - retained;
+    if (value.substr(0, start) != before.text.substr(0, start) ||
+        value.substr(start + inserted) != before.text.substr(start + removed)) {
+        restore(before);
+        throw std::runtime_error("Query edit changed text outside its source selection.");
+    }
+    gf::TextStore next(value);
+    std::vector<swiftedit::SearchSlot> slots{};
+    if (!value.empty()) {
+        const swiftedit::SearchPattern parsed(value);
+        slots = parsed.slots();
+    }
+    for (std::size_t index = 0; index < slots_.size(); ++index) {
+        if (!slots_[index].wildcard)
+            continue;
+        const gf::Utf8Range range = store_.grapheme_range(gf::GraphemeIndex(index));
+        const std::size_t begin = range.start.value();
+        const std::size_t end = range.end.value();
+        std::size_t mapped = begin;
+        if (begin >= start + removed)
+            mapped = begin - removed + inserted;
+        else if (end > start)
+            continue;
+        if (!next.is_grapheme_boundary(gf::Utf8Offset(mapped)) ||
+            !next.is_grapheme_boundary(gf::Utf8Offset(mapped + end - begin)))
+            continue;
+        const std::size_t target = next.grapheme_index(gf::Utf8Offset(mapped)).value();
+        if (target < slots.size() && slots[target].literal == slots_[index].literal)
+            slots[target].wildcard = true;
+    }
+    remember(before);
+    store_ = std::move(next);
+    slots_ = std::move(slots);
+    changed();
 }
 swiftedit::SearchPattern QueryField::pattern() const {
     swiftedit::SearchPattern result(store_.utf8());
@@ -73,6 +149,8 @@ void QueryField::select(gf::Utf8Offset anchor, gf::Utf8Offset caret) {
 void QueryField::toggle_slot(std::size_t slot) {
     if (slot >= slots_.size())
         return;
+    const Snapshot before = snapshot();
+    remember(before);
     slots_[slot].wildcard = !slots_[slot].wildcard;
     ++revision_;
     layout_dirty_ = true;
@@ -157,11 +235,38 @@ void QueryField::on_key(gf::KeyEvent &event) {
         event.handled = true;
         return;
     }
-    (*edit_).on_key(event);
+    const bool command = gf::has_modifier(event.modifiers, gf::Modifier::control) ||
+                         gf::has_modifier(event.modifiers, gf::Modifier::meta);
+    if (command && (event.physical_key == gf::PhysicalKey::z || event.physical_key == gf::PhysicalKey::y)) {
+        const bool redo = event.physical_key == gf::PhysicalKey::y ||
+                          gf::has_modifier(event.modifiers, gf::Modifier::shift);
+        static_cast<void>(history(redo));
+        event.handled = true;
+        return;
+    }
+    const Snapshot before = snapshot();
+    try {
+        (*edit_).on_key(event);
+        const bool backward = event.physical_key == gf::PhysicalKey::backspace;
+        const bool deletion = backward || event.physical_key == gf::PhysicalKey::delete_forward;
+        const bool replacement = command && event.physical_key == gf::PhysicalKey::v &&
+                                 event.handled && !before.selection.empty();
+        synchronize(before, backward, deletion, replacement);
+    } catch (...) {
+        restore(before);
+        throw;
+    }
     invalidate(gf::Dirty::paint);
 }
 void QueryField::on_text_input(gf::TextInputEvent &event) {
-    (*edit_).on_text_input(event);
+    const Snapshot before = snapshot();
+    try {
+        (*edit_).on_text_input(event);
+        synchronize(before, false, false, event.handled && !before.selection.empty());
+    } catch (...) {
+        restore(before);
+        throw;
+    }
     invalidate(gf::Dirty::paint);
 }
 void QueryField::on_pointer(gf::PointerEvent &event) {
