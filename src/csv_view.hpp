@@ -1,5 +1,6 @@
 #pragma once
 #include "csv.hpp"
+#include "csv_calculator.hpp"
 #include <gui_forms/gui_forms.hpp>
 #include <map>
 #include <set>
@@ -10,6 +11,7 @@ class CsvView final : public gf::Control {
 public:
     static constexpr bool initialize_tree_after_construction = true;
     explicit CsvView(gf::StableId);
+    ~CsvView() override;
     void initialize_control_tree();
     void set_source(std::string_view);
     void set_context_command(const std::shared_ptr<gf::Command> &);
@@ -57,7 +59,9 @@ private:
     void clear_hover();
     void publish(std::string);
     std::optional<swiftedit::CellAddress> hit(gf::Point) const;
-    std::unique_ptr<swiftedit::Csv> table_{};
+    std::shared_ptr<const swiftedit::Csv> table_{};
+    std::unique_ptr<swiftedit::CsvCalculator> calculator_{};
+    bool calculation_requested_{};
     std::string source_{};
     std::shared_ptr<gf::TextBox> entry_{};
     std::shared_ptr<gf::VScrollBar> vertical_{};

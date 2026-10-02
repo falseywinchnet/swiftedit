@@ -22,6 +22,7 @@ std::string cell_label(std::string_view value) {
 }
 } // namespace
 CsvView::CsvView(gf::StableId id) : Control(std::move(id)) { set_focusable(true); }
+CsvView::~CsvView() = default;
 std::weak_ptr<CsvView> CsvView::observe() {
     const std::shared_ptr<CsvView> self = std::static_pointer_cast<CsvView>(shared_from_this());
     const std::weak_ptr<CsvView> observer = self;
@@ -55,6 +56,7 @@ void CsvView::initialize_control_tree() {
 }
 void CsvView::on_dispose() noexcept {
     cancel_calculations();
+    calculator_.reset();
     subscriptions_.clear();
     tooltip_.reset();
     if (context_)
@@ -62,6 +64,9 @@ void CsvView::on_dispose() noexcept {
     Control::on_dispose();
 }
 void CsvView::cancel_calculations() {
+    if (calculator_)
+        (*calculator_).cancel();
+    calculation_requested_ = false;
     calculation_frame_.disconnect();
     calculations_.clear();
     formula_sources_.clear();
@@ -77,7 +82,7 @@ void CsvView::set_source(std::string_view source) {
         prepare_view();
         return;
     }
-    std::unique_ptr<swiftedit::Csv> next = std::make_unique<swiftedit::Csv>(source);
+    std::shared_ptr<const swiftedit::Csv> next = std::make_shared<const swiftedit::Csv>(source);
     std::string retained(source);
     std::size_t columns = 0;
     for (const std::vector<swiftedit::Cell> &row : (*next).rows())
@@ -162,6 +167,9 @@ void CsvView::prepare_view() {
     cells_dirty_ = true;
     top_ = top;
     left_ = left;
+    if (calculator_)
+        (*calculator_).cancel();
+    calculation_requested_ = false;
     calculation_frame_.disconnect();
     calculations_.clear();
     formula_sources_.clear();
@@ -190,6 +198,7 @@ void CsvView::prepare_view() {
     cached_columns_ = visible_columns_;
     cells_dirty_ = false;
     advance_view();
+    invalidate(gf::Dirty::paint);
 }
 void CsvView::on_frame(gf::FrameTime) {
     if (!calculations_pending())
@@ -197,6 +206,9 @@ void CsvView::on_frame(gf::FrameTime) {
     try {
         advance_view();
     } catch (const std::exception &failure) {
+        if (calculator_)
+            (*calculator_).cancel();
+        calculation_requested_ = false;
         calculation_frame_.disconnect();
         for (std::size_t index = next_calculation_; index < calculations_.size(); ++index) {
             const swiftedit::CellAddress address = calculations_[index];
@@ -215,11 +227,24 @@ void CsvView::advance_view() {
     calculation_frame_.disconnect();
     const gf::FrameTime started = gf::FrameClock::now();
     std::size_t evaluated = 0;
-    // One formula keeps its existing depth/reference bounds. Yield between
-    // formulas after two milliseconds; this is not a deadline within a formula.
-    // Source/viewport changes replace this queue and its owned cache together.
+    bool updated = false;
+    if (calculations_pending() && !calculation_requested_) {
+        if (!calculator_)
+            calculator_ = std::make_unique<swiftedit::CsvCalculator>();
+        (*calculator_).request(table_, calculations_);
+        calculation_requested_ = true;
+    }
+    // Formula evaluation runs against immutable owned source on one worker.
+    // Only pending work schedules completion checks; idle retains no timer.
     while (calculations_pending()) {
         const swiftedit::CellAddress address = calculations_[next_calculation_];
+        std::optional<swiftedit::CsvCompletion> completion = (*calculator_).take();
+        if (!completion)
+            break;
+        if (!((*completion).address == address))
+            throw std::runtime_error("CSV calculation completion does not match its viewport.");
+        updated = true;
+        const swiftedit::CsvCalculated &calculated = *(*completion).result;
         const swiftedit::Cell &cell = (*table_).cell(address);
         CellDisplay &display = cells_.at({address.row, address.column});
         const std::map<std::string, swiftedit::CellAddress>::const_iterator found =
@@ -230,7 +255,10 @@ void CsvView::advance_view() {
         } else {
             ++evaluated;
             try {
-                const swiftedit::Calculation value = swiftedit::calculate_cell(*table_, address);
+                if (calculated.failed)
+                    throw std::runtime_error(calculated.error.empty()
+                        ? "Formula calculation failed." : calculated.error);
+                const swiftedit::Calculation &value = calculated.value;
                 display.text = cell_label(value.result);
                 display.detail = display.formula ? cell.value + " | References:" : "";
                 std::size_t shown = 0;
@@ -268,11 +296,13 @@ void CsvView::advance_view() {
         const gf::FrameTime deadline = gf::FrameClock::now() + std::chrono::milliseconds(1);
         calculation_frame_ = (*window()).schedule_paint(shared_from_this(), deadline);
     } else if (!calculations_pending()) {
+        calculation_requested_ = false;
         formula_sources_.clear();
         calculations_.clear();
         next_calculation_ = 0;
     }
-    invalidate(gf::Dirty::paint);
+    if (updated)
+        invalidate(gf::Dirty::paint);
 }
 void CsvView::update_field() {
     if (!table_)

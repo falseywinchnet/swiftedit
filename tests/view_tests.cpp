@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <iostream>
 #include <stdexcept>
+#include <thread>
 
 namespace gf = gui_forms;
 class ObservingPainter final : public gf::Painter {
@@ -154,10 +155,11 @@ void verify_duplicate_formulas() {
           "Repairing formula source clears all previous errors");
 }
 void settle_formulas(notepad::CsvView &grid) {
-    std::size_t steps = 0;
+    const gf::FrameTime deadline = gf::FrameClock::now() + std::chrono::seconds(5);
     while (grid.calculations_pending()) {
         grid.on_frame(gf::FrameClock::now());
-        check(++steps <= 4096, "Calculation queue makes bounded progress");
+        check(gf::FrameClock::now() < deadline, "Calculation worker completes within test timeout");
+        std::this_thread::yield();
     }
 }
 void verify_cooperative_formulas() {

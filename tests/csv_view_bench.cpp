@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <thread>
 
 namespace gf = gui_forms;
 class ResultPainter final : public gf::Painter {
@@ -61,7 +62,9 @@ int main(int argc, char **argv) {
         std::size_t setup_slices = 0;
         while ((*view).calculations_pending()) {
             (*view).on_frame(gf::FrameClock::now());
-            if (++setup_slices > 4097)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            ++setup_slices;
+            if (std::chrono::steady_clock::now() - setup_start > std::chrono::seconds(5))
                 throw std::runtime_error("Initial viewport calculation failed to complete.");
         }
         const std::chrono::duration<double, std::milli> setup_source = source_ready - setup_start;
@@ -87,7 +90,8 @@ int main(int argc, char **argv) {
                     std::chrono::steady_clock::now() - slice_start;
                 worst_slice = std::max(worst_slice, slice_time.count());
                 ++slices;
-                if (slices > 4097)
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                if (std::chrono::steady_clock::now() - start > std::chrono::seconds(5))
                     throw std::runtime_error("Viewport calculation failed to complete.");
             }
             const std::chrono::duration<double, std::milli> elapsed =
