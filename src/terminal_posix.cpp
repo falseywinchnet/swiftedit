@@ -3,6 +3,7 @@
 #include <array>
 #include <cerrno>
 #include <csignal>
+#include <chrono>
 #include <poll.h>
 #include <sys/ioctl.h>
 #include <sys/select.h>
@@ -118,14 +119,40 @@ public:
         }
     }
     bool input_ready() const override {
-        if (pending_ || decoder_.ready() || offset_ < count_ || interrupted || resized)
-            return true;
-        struct pollfd descriptor{STDIN_FILENO, POLLIN, 0};
-        const int result = poll(&descriptor, 1, 0);
-        if (result < 0 && errno != EINTR)
-            throw std::runtime_error("Cannot inspect terminal input.");
-        const bool available = result != 0;
-        return available;
+        // Raw bytes are not necessarily a complete event. Decode a bounded
+        // available batch without entering the blocking read path during work.
+        for (std::size_t consumed = 0; consumed < bytes_.size(); ++consumed) {
+            if (pending_ || decoder_.ready() || interrupted || resized || input_closed_)
+                return true;
+            if (offset_ == count_) {
+                struct pollfd descriptor{STDIN_FILENO, POLLIN, 0};
+                const int result = poll(&descriptor, 1, 0);
+                if (result < 0) {
+                    if (errno == EINTR)
+                        return interrupted || resized;
+                    throw std::runtime_error("Cannot inspect terminal input.");
+                }
+                if (!result) {
+                    if (escape_deadline_ && std::chrono::steady_clock::now() >= *escape_deadline_) {
+                        decoder_.expire();
+                        escape_deadline_.reset();
+                    }
+                    return decoder_.ready();
+                }
+                const ssize_t received = ::read(STDIN_FILENO, bytes_.data(), bytes_.size());
+                if (received < 0 && errno == EINTR)
+                    return interrupted || resized;
+                if (received <= 0) {
+                    input_closed_ = true;
+                    return true;
+                }
+                offset_ = 0;
+                count_ = static_cast<std::size_t>(received);
+            }
+            feed_byte(bytes_[offset_]);
+            ++offset_;
+        }
+        return decoder_.ready();
     }
     swiftedit::TerminalInput read() const override {
         if (pending_) {
@@ -136,6 +163,8 @@ public:
         for (;;) {
             if (interrupted)
                 throw std::runtime_error("Terminal interrupted; restoring terminal state.");
+            if (input_closed_)
+                throw std::runtime_error("Terminal input closed; restoring terminal state.");
             if (resized) {
                 resized = 0;
                 swiftedit::TerminalInput result{};
@@ -147,7 +176,7 @@ public:
                 return result;
             }
             if (offset_ < count_) {
-                decoder_.feed(bytes_[offset_]);
+                feed_byte(bytes_[offset_]);
                 ++offset_;
                 continue;
             }
@@ -156,6 +185,7 @@ public:
                 continue;
             if (wake == InputWake::timeout) {
                 decoder_.expire();
+                escape_deadline_.reset();
                 continue;
             }
             const ssize_t received = ::read(STDIN_FILENO, bytes_.data(), bytes_.size());
@@ -180,6 +210,13 @@ public:
         return false;
     }
 private:
+    void feed_byte(const unsigned char byte) const {
+        decoder_.feed(byte);
+        if (decoder_.escape_pending())
+            escape_deadline_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(50);
+        else
+            escape_deadline_.reset();
+    }
     InputWake wait_input() const {
         const SignalBlock blocked(signals_);
         if (interrupted || resized)
@@ -187,8 +224,19 @@ private:
         fd_set input{};
         FD_ZERO(&input);
         FD_SET(STDIN_FILENO, &input);
-        const struct timespec escape_timeout{0, 50000000};
-        const struct timespec *timeout = decoder_.escape_pending() ? &escape_timeout : nullptr;
+        struct timespec escape_timeout{};
+        const struct timespec *timeout = nullptr;
+        if (escape_deadline_) {
+            const std::chrono::steady_clock::duration remaining =
+                *escape_deadline_ - std::chrono::steady_clock::now();
+            if (remaining > std::chrono::steady_clock::duration::zero()) {
+                const std::chrono::nanoseconds nanoseconds =
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(remaining);
+                escape_timeout.tv_sec = static_cast<time_t>(nanoseconds.count() / 1000000000);
+                escape_timeout.tv_nsec = static_cast<long>(nanoseconds.count() % 1000000000);
+            }
+            timeout = &escape_timeout;
+        }
         const int ready = pselect(STDIN_FILENO + 1, &input, nullptr, nullptr,
                                   timeout, &blocked.previous());
         if (ready < 0 && errno == EINTR)
@@ -204,6 +252,8 @@ private:
     struct termios original_{};
     bool active_{}, wrap_cancel_{true};
     mutable swiftedit::TerminalInputDecoder decoder_{};
+    mutable std::optional<std::chrono::steady_clock::time_point> escape_deadline_{};
+    mutable bool input_closed_{};
     mutable std::array<unsigned char, 4096> bytes_{};
     mutable std::size_t offset_{}, count_{};
     mutable std::optional<swiftedit::TerminalInput> pending_{};

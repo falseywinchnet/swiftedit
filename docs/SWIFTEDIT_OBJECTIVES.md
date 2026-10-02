@@ -303,3 +303,15 @@ input_ready can report raw partial input, after which read waits for a complete
 UTF-8/escape/paste event. During a background publication this can delay displaying
 completion until more input arrives. A bounded nonblocking decode path and native
 partial-input completion tests are the next fix; no idle polling is desired.
+
+POSIX active-work readiness now decodes at most 4096 available bytes and reports
+only a complete event, lifecycle signal or closed input. Incomplete UTF-8/paste
+input returns control to background work rather than entering blocking read.
+Escape-sequence deadlines survive both nonblocking probes and blocking waits;
+the idle terminal continues using its ordinary indefinite input wait without
+polling. Owned native PTY regressions withhold the remainder of an emoji and a
+bracketed paste until a 16 MiB copy reports completion, then verify exact copy
+contents, exit and terminal restoration. These POSIX-only edits passed source
+review, the 123-file spelling audit and Python syntax validation. Native build
+and runtime verification are pending; no Windows test is claimed as proof of the
+POSIX behavior. The preceding native signal/benchmark run is still active.

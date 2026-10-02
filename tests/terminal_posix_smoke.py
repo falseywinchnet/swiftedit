@@ -130,6 +130,40 @@ def exercise_publication_signal(executable: Path, path: Path) -> None:
         os.close(slave)
 
 
+
+def exercise_partial_copy(executable: Path, path: Path, partial: bytes, remainder: bytes) -> None:
+    master: int
+    slave: int
+    master, slave = pty.openpty()
+    child: subprocess.Popen[bytes] | None = None
+    try:
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 24, 80, 0, 0))
+        original: list[object] = terminal_mode(slave)
+        child = subprocess.Popen([str(executable), str(path)], stdin=slave, stdout=slave,
+                                 stderr=slave, start_new_session=True)
+        await_bytes(master, child, b'\x1b[?2004h')
+        keys: bytes = b'\x14\r' + partial
+        if os.write(master, keys) != len(keys):
+            raise RuntimeError('Incomplete partial-copy input write')
+        # No more input is supplied until the copy reports completion. A raw-byte
+        # readiness implementation blocks inside read and times out here.
+        await_bytes(master, child, b'Text copy saved; open document unchanged')
+        ending: bytes = remainder + b'\x18'
+        if os.write(master, ending) != len(ending):
+            raise RuntimeError('Incomplete partial-copy finishing input write')
+        if finish(master, child) != 0 or terminal_mode(slave) != original:
+            raise RuntimeError('Partial-copy test did not exit and restore the terminal')
+        target: Path = path.with_name(path.stem + '.1' + path.suffix)
+        if target.read_bytes() != path.read_bytes():
+            raise RuntimeError('Partial terminal input altered the text copy')
+    finally:
+        if child is not None and child.poll() is None:
+            child.kill()
+            child.wait()
+        os.close(master)
+        os.close(slave)
+
+
 def main() -> None:
     parser: argparse.ArgumentParser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--executable', type=Path, required=True)
@@ -149,8 +183,17 @@ def main() -> None:
         with publication_source.open('wb') as source:
             source.truncate(16777216)
         exercise_publication_signal(executable, publication_source)
+        partial_cases: list[tuple[bytes, bytes]] = [
+            (b'\xf0', b'\x9f\x98\x80'),
+            (b'\x1b[200~unfinished', b'\x1b[201~')]
+        index: int
+        for index, (partial, remainder) in enumerate(partial_cases):
+            copy_source: Path = Path(directory) / ('partial-copy-' + str(index) + '.txt')
+            with copy_source.open('wb') as source:
+                source.truncate(16777216)
+            exercise_partial_copy(executable, copy_source, partial, remainder)
     print('POSIX terminal: atomic Unicode/control paste, undo/redo, save, exit, resize and '
-          'mode restoration across 16 signal/partial-input cases and publication interruption passed.')
+          'mode restoration across 16 signal cases, publication interruption and partial-input copies passed.')
 
 
 if __name__ == '__main__':
