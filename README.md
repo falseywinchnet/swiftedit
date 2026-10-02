@@ -4,14 +4,26 @@ A native C++20 text editor built with the installed GUI.Forms and File Manager
 Document Picker packages. Traditional dropdown menus, owned dialogs, plain-text
 clipboard, no ribbon, browser runtime or persistent recovery files.
 
-**Mac download:** [SwiftEdit 0.2.0 dogfood for Apple silicon, macOS 26](https://github.com/falseywinchnet/swiftedit/releases/tag/v0.2.0-dogfood.20261001).
-Download the ZIP, extract it and open SwiftEdit.app. This private-repository
-release requires GitHub sign-in. It is ad-hoc signed, not notarized; the release
-notes include first-launch instructions and current limits.
+**Downloads:** [SwiftEdit releases](https://github.com/falseywinchnet/swiftedit/releases).
+Choose a cross-platform dogfood prerelease and download the archive for your
+platform. These are public downloads; GitHub sign-in is not required.
+
+| Platform | Archive | Launch after extracting completely |
+|---|---|---|
+| Apple silicon, macOS 26 | `SwiftEdit-macos-arm64-*.zip` | Open `SwiftEdit.app` |
+| Windows x64 | `SwiftEdit-windows-x64-*.zip` | Open `SwiftEdit/SwiftEdit.exe` |
+| Linux x64, Ubuntu 24.04-compatible runtime, X11 | `SwiftEdit-linux-x64-*.tar.gz` | Run `SwiftEdit/SwiftEdit` |
+
+Mac builds are ad-hoc signed and not notarized; Windows builds are unsigned.
+Each release includes SHA-256 checksums and source/SDK manifests. The terminal
+editor is included on all three platforms; Windows and Linux also include the CLI.
 
 Native CI builds and tests Windows x64, macOS ARM64 and Linux x64 on every push.
 It consumes the matching installed SDK archives pinned in
-`ci/native-sdk-lock.json` and uploads a verified Mac app archive. The
+`ci/native-sdk-lock.json`. After all three native jobs and packaged startup checks
+pass on a master push, CI publishes an immutable `dogfood-<commit>` prerelease
+containing all three archives. Pull requests build and test without publishing.
+The
 [first release evidence](docs/DOGFOOD_2026-10-01.md) records the exact checks.
 
 This development checkpoint adds the SwiftEdit identity, separate as-opened
@@ -62,7 +74,11 @@ owns interpretation, session behavior and publication. See
 
 ## MacBook and cross-platform builds
 
-Cross-platform CSV/formula core CI now runs on Windows, macOS and Linux.
-A native downloadable SwiftEdit Mac application is still being implemented;
-the core test artifacts are not application downloads. See
-[MacBook build status and remaining work](docs/MACOS_BUILD_HANDOFF.md).
+Native GUI and terminal builds, tests and packaging run on Windows, macOS and
+Linux in [the native workflow](.github/workflows/native-builds.yml). Download
+applications from Releases; CI diagnostic artifacts contain additional test and
+performance evidence. Older Mac-only releases remain available.
+
+These are development prereleases. The reported blank-window Mac CPU issue is
+still open, and the expanded feature set is not complete. See the
+[objective ledger](docs/SWIFTEDIT_OBJECTIVES.md) for remaining work.
