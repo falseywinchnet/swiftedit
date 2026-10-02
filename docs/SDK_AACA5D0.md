@@ -53,6 +53,11 @@ Python syntax check and PowerShell parse check passed. No local native window
 was launched. Source review checked title ownership/caching, lifecycle access,
 failed-title preservation, explicit pointer mode and layout consistency.
 
-Consumer native tests, revised Mac capture inspection and cross-platform
-application packaging are pending. Provider success alone is not consumer
-acceptance and does not close the final physical responsiveness audit.
+Consumer run 36985848443 at 497f77a passed native tests and application packaging
+on Windows, macOS and Linux. Core run 36985848589 also passed. Inspection of the
+Mac View-menu and source captures confirms the Markdown active checkmark,
+no pointer-opened selected row, removal of the filename row, and inset status
+border. Exact native title transitions passed the AppKit assertions; the content
+captures do not include native window chrome. Images and provenance are in
+`docs/visual/2026-10-02-gui-polish`. This does not close the final physical
+responsiveness audit.

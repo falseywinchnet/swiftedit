@@ -56,8 +56,9 @@ import and column resizing are not implemented.
   directories may block that owned dialog; this is provider-owned work.
 - Development source now uses the reviewed aaca5d0 SDK for dynamic document
   titles and pointer/keyboard menu opening. The filename row is removed and its
-  space returned to the document. Consumer native validation and inclusion in a
-  new application release remain pending; v0.3.2 retains the old row/menu focus.
+  space returned to the document. Consumer native tests and packaging passed on
+  all three systems in run 36985848443; Mac captures were inspected. These fixes
+  are prepared for v0.3.3; v0.3.2 retains the old row/menu focus.
 
 The owner interview now provides direction. These gaps remain implementation
 work, not claims of a finished Malkuth release.
