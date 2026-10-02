@@ -253,3 +253,12 @@ publish, one-byte reads across an emoji and illegal/truncated UTF-8, ready-state
 cancellation, failed replacement start and source identity invalidation. The CLI
 integration passed in 1.44 seconds; the 122-file spelling audit passed. This closes
 the earlier cooperative-protocol gap; final flush/publication remains synchronous.
+
+Text-copy timing now has a reproducible headless benchmark and retained local
+raw evidence in performance/2026-10-01-text-copy. Conversion/write steps were
+sub-millisecond in this sample, but final flush/publication reached 62.3312 ms.
+This is an identified remaining interactive pause, not a completed lag audit.
+Next implementation must move final publication off the interactive thread
+without weakening destination refusal, cancellation boundaries or ownership.
+The b5d0a88 paged-copy integration passed native run 36963297860 and portable
+run 36963297895; cooperative CLI changes and this benchmark await their next run.

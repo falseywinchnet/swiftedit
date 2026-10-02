@@ -244,3 +244,6 @@ if(NOTEPAD_BUILD_UI)
   install(FILES third_party/unicode/LICENSE.txt DESTINATION licenses RENAME Unicode.txt)
   install(FILES third_party/md4c/LICENSE.md DESTINATION licenses RENAME MD4C.md)
 endif()
+
+add_executable(swiftedit-text-copy-bench tests/text_copy_bench.cpp)
+target_link_libraries(swiftedit-text-copy-bench PRIVATE notepad_document)
