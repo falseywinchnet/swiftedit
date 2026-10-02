@@ -136,6 +136,24 @@ int main() {
         check(paged_copy_source.identity() == copy_stamp.identity &&
               paged_copy_source.revision() == copy_stamp.revision && !paged_copy_source.dirty(),
               "Copy publication preserves the source session");
+        const std::filesystem::path background_target = dir / "background-copy.txt";
+        {
+            SessionTextCopy task(paged_copy_source, background_target);
+            while (!task.step(paged_copy_source)) {}
+            task.begin_publication(paged_copy_source);
+            check(task.state() == TextCopyState::publishing, "Publication transfers to owned worker");
+            while (!task.publication_ready(std::chrono::milliseconds(8))) {}
+            task.finish_publication();
+            check(task.state() == TextCopyState::published && std::filesystem::exists(background_target),
+                  "Background publication reports a completed file");
+        }
+        const std::filesystem::path joined_target = dir / "joined-copy.txt";
+        {
+            SessionTextCopy task(paged_copy_source, joined_target);
+            while (!task.step(paged_copy_source)) {}
+            task.begin_publication(paged_copy_source);
+        }
+        check(std::filesystem::exists(joined_target), "Publication owner joins work before destruction");
         const std::filesystem::path stale_target = dir / "stale-copy.txt";
         {
             Session changing{};

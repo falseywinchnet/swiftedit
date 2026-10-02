@@ -14,7 +14,8 @@ public:
     mutable std::size_t found_count{};
     mutable bool three_copy_seen{}, two_copy_seen{}, caret_completed{};
     mutable bool line_pending{}, line_completed{};
-    bool wait_for_line{}, wait_for_text_copy{};
+    bool wait_for_line{}, wait_for_text_copy{}, wait_for_publication{};
+    mutable bool publication_seen{};
     mutable bool text_copy_pending{}, text_copy_saved{};
     bool started{};
     void start() override { started = true; }
@@ -23,6 +24,8 @@ public:
         if (text.empty() || !started)
             throw std::runtime_error("Unexpected empty or premature terminal frame.");
         ++writes;
+        if (text.find("Publishing text copy...") != std::string_view::npos)
+            publication_seen = true;
         if (text.find("Saving text copy...") != std::string_view::npos)
             text_copy_pending = true;
         if (text.find("Text copy saved; open document unchanged") != std::string_view::npos) {
@@ -66,7 +69,7 @@ public:
     }
     bool input_ready() const override {
         const bool ready = cursor < inputs.size() && (!wait_for_end || end_seen) &&
-                           (!wait_for_text_copy || !text_copy_pending) && (!wait_for_line || !line_pending) && (!wait_for_copy || copy_seen) && (!wait_for_previous || !previous_pending) &&
+                           (!wait_for_publication || publication_seen) && (!wait_for_text_copy || !text_copy_pending) && (!wait_for_line || !line_pending) && (!wait_for_copy || copy_seen) && (!wait_for_previous || !previous_pending) &&
                            (!wait_for_search || !search_pending);
         return ready;
     }
@@ -238,6 +241,16 @@ int main() {
         if (cancelled_copy_terminal.run(large_path) != 0 || cancelled_copy.text_copy_saved ||
             std::filesystem::exists(cancelled_copy_path))
             throw std::runtime_error("Read-only text copy cancellation published output.");
+        ScriptConsole exit_during_copy{};
+        exit_during_copy.wait_for_publication = true;
+        exit_during_copy.press('T', 0, true);
+        exit_during_copy.press(swiftedit::terminal_key::enter);
+        exit_during_copy.press('X', 0, true);
+        swiftedit::Terminal exit_copy_terminal(exit_during_copy);
+        if (exit_copy_terminal.run(large_path) != 0 || !exit_during_copy.publication_seen ||
+            !std::filesystem::exists(cancelled_copy_path) ||
+            exit_during_copy.cursor != exit_during_copy.inputs.size())
+            throw std::runtime_error("Exit during publication did not retain the worker to completion.");
         ScriptConsole end_navigation{};
         end_navigation.wait_for_end = true;
         end_navigation.wait_for_copy = true;

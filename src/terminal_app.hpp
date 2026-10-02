@@ -99,14 +99,26 @@ public:
             }
             try {
                 if (text_copy_) {
-                    if ((*text_copy_).state() == swiftedit::TextCopyState::ready) {
-                        if (!console_.input_ready()) {
-                            (*text_copy_).publish(buffer_.session());
+                    if ((*text_copy_).state() == swiftedit::TextCopyState::publishing) {
+                        const std::chrono::milliseconds wait(console_.input_ready() ? 0 : 8);
+                        if ((*text_copy_).publication_ready(wait)) {
+                            (*text_copy_).finish_publication();
                             text_copy_.reset();
 #ifdef SWIFTEDIT_TERMINAL_SMOKE
                             ++text_copy_saves_;
 #endif
                             status_ = "Text copy saved; open document unchanged";
+                            if (exit_after_publication_)
+                                done_ = true;
+                            redraw = true;
+                            continue;
+                        }
+                        if (!console_.input_ready())
+                            continue;
+                    } else if ((*text_copy_).state() == swiftedit::TextCopyState::ready) {
+                        if (!console_.input_ready()) {
+                            (*text_copy_).begin_publication(buffer_.session());
+                            status_ = "Publishing text copy... Ctrl+X exits after completion";
                             redraw = true;
                             continue;
                         }
@@ -241,6 +253,7 @@ public:
                 ending_.reset();
                 line_boundary_.reset();
                 text_copy_.reset();
+                exit_after_publication_ = false;
                 status_ = failure.what();
                 redraw = true;
                 continue;
@@ -542,6 +555,13 @@ private:
         const bool alt = event.alt;
         const bool shift = event.shift;
         const std::uint32_t key = event.key;
+        if (text_copy_ && (*text_copy_).state() == swiftedit::TextCopyState::publishing) {
+            if (ctrl && !alt && key == 'X')
+                exit_after_publication_ = true;
+            status_ = exit_after_publication_ ? "Finishing text copy before exit..."
+                                             : "Text copy publication has started; waiting for completion";
+            return;
+        }
         if (text_copy_) {
             text_copy_.reset();
             status_ = "Text copy cancelled; destination unchanged";
@@ -914,6 +934,7 @@ private:
     std::unique_ptr<swiftedit::SessionCopy> copying_{};
     std::unique_ptr<swiftedit::TerminalPageEnd> ending_{};
     std::unique_ptr<swiftedit::SessionTextCopy> text_copy_{};
+    bool exit_after_publication_{};
     std::unique_ptr<swiftedit::TerminalLineBoundary> line_boundary_{};
     bool line_extend_{};
     bool end_extend_{};

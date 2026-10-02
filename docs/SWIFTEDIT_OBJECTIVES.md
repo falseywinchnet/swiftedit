@@ -262,3 +262,16 @@ Next implementation must move final publication off the interactive thread
 without weakening destination refusal, cancellation boundaries or ownership.
 The b5d0a88 paged-copy integration passed native run 36963297860 and portable
 run 36963297895; cooperative CLI changes and this benchmark await their next run.
+
+The terminal's final text-copy publication now runs on one owned background
+thread. Source validation and the final cancel opportunity precede dispatch;
+after dispatch the copy finishes and reports its result. Ctrl+X defers exit,
+while failure cancels the deferred exit and keeps the terminal open. Worker state
+owns the prepared writer and completion synchronization, never Session/UI
+borrows. Destruction joins any outstanding publication. Only active publication
+uses short condition-variable waits, so no idle polling is added. CLI publication
+remains synchronous to preserve command response semantics. Local dispatch and
+completion timings and limitations are in performance/2026-10-01-text-copy.
+Full 23-test suite passed in 18.83 seconds; the added exit-during-publication
+shared-loop test passed in a final terminal-app run of 5.09 seconds. Native
+validation and physical input latency remain pending.

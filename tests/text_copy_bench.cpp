@@ -64,7 +64,7 @@ void measure(const std::filesystem::path &directory, const std::string &name,
     swiftedit::Session session{};
     session.open(source);
     const swiftedit::DocumentStamp stamp = session.stamp();
-    std::vector<double> steps{}, publication{}, cancellation{}, preparation{};
+    std::vector<double> steps{}, publication{}, cancellation{}, preparation{}, dispatch{}, completion{};
     for (std::size_t trial = 0; trial < 3; ++trial) {
         const std::filesystem::path output = directory / (name + "-" + std::to_string(trial) + ".copy");
         Clock::time_point started = Clock::now();
@@ -87,7 +87,16 @@ void measure(const std::filesystem::path &directory, const std::string &name,
         }
         const double cpu_start = process_cpu_ms();
         started = Clock::now();
-        (*task).publish(session);
+        (*task).begin_publication(session);
+        const double dispatch_ms = milliseconds(started);
+        dispatch.push_back(dispatch_ms);
+        raw << name << ',' << trial << ",dispatch,0," << dispatch_ms << ",\n";
+        while (!(*task).publication_ready(std::chrono::milliseconds(8))) {}
+        const Clock::time_point finishing = Clock::now();
+        (*task).finish_publication();
+        const double finish_ms = milliseconds(finishing);
+        completion.push_back(finish_ms);
+        raw << name << ',' << trial << ",completion,0," << finish_ms << ",\n";
         const double publish_ms = milliseconds(started);
         const double cpu_ms = process_cpu_ms() - cpu_start;
         publication.push_back(publish_ms);
@@ -118,6 +127,8 @@ void measure(const std::filesystem::path &directory, const std::string &name,
     report(name, "step-wall-ms", steps);
     report(name, "prepare-wall-ms", preparation);
     report(name, "publish-wall-ms", publication);
+    report(name, "dispatch-wall-ms", dispatch);
+    report(name, "completion-wall-ms", completion);
     report(name, "cancel-wall-ms", cancellation);
 }
 } // namespace

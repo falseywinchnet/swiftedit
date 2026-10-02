@@ -18,3 +18,22 @@ latency bound follows from these uncontrolled local observations. OS flush and
 publication should be moved off the interactive thread with explicit lifetime,
 cancellation-before-publication and completion ownership. Cross-platform
 measurements and interaction latency remain pending.
+
+
+## Asynchronous publication follow-up
+
+The terminal now transfers a fully prepared writer to one owned publication
+thread after final source validation. It waits on a condition variable for at
+most a requested 8 ms only while this operation is active, checks input between
+waits, and collects the result when complete. Cancellation ends at publication
+start. Ctrl+X defers exit until success; failures leave the terminal open. Worker
+destruction joins outstanding work, and no worker borrows Session or terminal
+state. There is no idle publication timer or detached thread.
+
+The retained async-local run measured dispatch worst 0.2441 ms and completion
+collection worst 0.1019 ms across nine copies. Total publication still reached
+49.5776 ms. This is evidence that dispatch/collection avoid the earlier blocking
+flush in this run, not proof that disk IO became faster. The runs were not paired;
+background load and caches were uncontrolled. Step worst reached 1.0518 ms.
+Only three publication samples per fixture were taken. Physical input latency,
+native Mac/Linux timing and the full application lag audit remain pending.

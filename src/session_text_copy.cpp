@@ -1,6 +1,62 @@
 #include "session_text_copy.hpp"
 #include <stdexcept>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
 namespace swiftedit {
+class TextCopyPublication final {
+public:
+    explicit TextCopyPublication(std::unique_ptr<notepad::NewFileWriter> writer)
+        : writer_(std::move(writer)), worker_(run, this) {}
+    ~TextCopyPublication() {
+        if (worker_.joinable())
+            worker_.join();
+    }
+    bool ready(const std::chrono::milliseconds maximum_wait) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (!complete_ && maximum_wait.count() > 0)
+            completed_.wait_for(lock, maximum_wait, Completed{this});
+        return complete_;
+    }
+    void finish() {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (!complete_)
+                throw std::runtime_error("Text copy publication is still running.");
+        }
+        if (worker_.joinable())
+            worker_.join();
+        if (failure_)
+            std::rethrow_exception(failure_);
+    }
+private:
+    struct Completed {
+        TextCopyPublication *owner{};
+        bool operator()() const { return (*owner).complete_; }
+    };
+    static void run(TextCopyPublication *owner) noexcept {
+        TextCopyPublication &work = *owner;
+        std::exception_ptr failure{};
+        try { (*work.writer_).publish(); }
+        catch (...) { failure = std::current_exception(); }
+        work.writer_.reset();
+        {
+            std::lock_guard<std::mutex> lock(work.mutex_);
+            work.failure_ = failure;
+            work.complete_ = true;
+        }
+        work.completed_.notify_one();
+    }
+    std::unique_ptr<notepad::NewFileWriter> writer_{};
+    std::mutex mutex_{};
+    std::condition_variable completed_{};
+    std::exception_ptr failure_{};
+    bool complete_{};
+    // Constructed last: the worker can observe only fully initialized members.
+    std::thread worker_{};
+};
+SessionTextCopy::~SessionTextCopy() = default;
+
 SessionTextCopy::SessionTextCopy(const Session &session, const std::filesystem::path &path)
     : stamp_(session.stamp()), size_(session.size()),
       writer_(std::make_unique<notepad::NewFileWriter>(std::filesystem::absolute(path))) {}
@@ -31,20 +87,45 @@ bool SessionTextCopy::step(const Session &session, const std::size_t budget) {
         throw;
     }
 }
-void SessionTextCopy::publish(const Session &session) {
+void SessionTextCopy::begin_publication(const Session &session) {
     if (state_ != TextCopyState::ready)
         throw std::runtime_error("Text copy is not ready to publish.");
     try {
         validate(session);
-        // Paged sources also validate their retained file metadata at this read.
         static_cast<void>(session.page(size_, 1));
-        (*writer_).publish();
-        state_ = TextCopyState::published;
-        writer_.reset();
+        publication_ = std::make_unique<TextCopyPublication>(std::move(writer_));
+        state_ = TextCopyState::publishing;
     } catch (...) {
         state_ = TextCopyState::failed;
         writer_.reset();
         throw;
     }
+}
+bool SessionTextCopy::publication_ready(const std::chrono::milliseconds maximum_wait) {
+    if (state_ != TextCopyState::publishing)
+        throw std::runtime_error("Text copy publication has not started.");
+    if (maximum_wait.count() < 0 || maximum_wait > std::chrono::milliseconds(1000))
+        throw std::runtime_error("Text copy completion wait must be 0..1000 milliseconds.");
+    return (*publication_).ready(maximum_wait);
+}
+void SessionTextCopy::finish_publication() {
+    if (state_ != TextCopyState::publishing)
+        throw std::runtime_error("Text copy publication has not started.");
+    if (!(*publication_).ready(std::chrono::milliseconds(0)))
+        throw std::runtime_error("Text copy publication is still running.");
+    try {
+        (*publication_).finish();
+        publication_.reset();
+        state_ = TextCopyState::published;
+    } catch (...) {
+        publication_.reset();
+        state_ = TextCopyState::failed;
+        throw;
+    }
+}
+void SessionTextCopy::publish(const Session &session) {
+    begin_publication(session);
+    while (!publication_ready(std::chrono::milliseconds(1000))) {}
+    finish_publication();
 }
 } // namespace swiftedit
