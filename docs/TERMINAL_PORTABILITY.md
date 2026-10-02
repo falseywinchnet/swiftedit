@@ -196,7 +196,9 @@ an actual 16 MiB read-only file, reaches EOF, exhausts the row history and
 finishes Shift+Page Up cooperatively. Native validation is pending.
 
 Local reconstruction validation: all 22 tests passed in 8.14 s; source spelling
-audit passed all 113 files. Native reconstruction validation is pending.
+audit passed all 113 files. Source c05031b (including reconstruction 1648b12)
+passed native run 36958634172 and portable-core run 36958634241 on all three
+platforms. The earlier 1648b12 runs were superseded, not successful evidence.
 
 
 ## Resize invalidation
