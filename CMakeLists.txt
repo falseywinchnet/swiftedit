@@ -248,3 +248,5 @@ endif()
 
 add_executable(swiftedit-text-copy-bench tests/text_copy_bench.cpp)
 target_link_libraries(swiftedit-text-copy-bench PRIVATE notepad_document)
+add_executable(swiftedit-terminal-navigation-bench tests/terminal_navigation_bench.cpp)
+target_link_libraries(swiftedit-terminal-navigation-bench PRIVATE notepad_document)

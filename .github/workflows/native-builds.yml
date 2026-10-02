@@ -77,6 +77,9 @@ jobs:
             .build/native-${{ matrix.platform }}/text-copy-evidence/summary.txt
             .build/native-${{ matrix.platform }}/text-copy-evidence/receipt.json
             .build/native-${{ matrix.platform }}/text-copy-evidence/fixtures/samples.csv
+            .build/native-${{ matrix.platform }}/navigation-evidence/summary.txt
+            .build/native-${{ matrix.platform }}/navigation-evidence/receipt.json
+            .build/native-${{ matrix.platform }}/navigation-evidence/fixtures/samples.csv
           if-no-files-found: ignore
 
   release:

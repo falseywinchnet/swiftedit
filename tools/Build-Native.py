@@ -180,6 +180,33 @@ def main() -> None:
         raise
     finally:
         (copy_evidence / 'receipt.json').write_text(json.dumps(copy_receipt, indent=2) + '\n', encoding='utf-8')
+    navigation_benchmark: Path = build / ('swiftedit-terminal-navigation-bench.exe' if os.name == 'nt'
+                                          else 'swiftedit-terminal-navigation-bench')
+    navigation_evidence: Path = build / 'navigation-evidence'
+    navigation_evidence.mkdir()
+    navigation_receipt: dict[str, object] = {
+        'source_revision': revision, 'provider_revision': lock['provider_revision'],
+        'platform': arguments.platform, 'executable_sha256': sha256(navigation_benchmark),
+        'status': 'started', 'trials_per_fixture': 5, 'viewport': [80, 24],
+        'repeated_moves_each_direction': 1000, 'maximum_moves_per_slice': 16,
+        'scope': 'headless shared-loop navigation to screen-string submission; excludes OS input delivery and physical presentation',
+        'clock': 'steady_clock wall time; sample-vector insertion excluded',
+        'percentiles': 'nearest rank, pooled slices across trials and both directions',
+        'cache_state': 'uncontrolled; sequential ASCII, Unicode, control/invalid-byte fixtures',
+        'performance_threshold': 'none'}
+    try:
+        with (navigation_evidence / 'summary.txt').open('w', encoding='utf-8') as summary:
+            measured = subprocess.run(
+                [str(navigation_benchmark), str(navigation_evidence / 'fixtures')],
+                check=False, timeout=120, stdout=summary, stderr=subprocess.STDOUT)
+        navigation_receipt['exit_code'] = measured.returncode
+        navigation_receipt['status'] = 'completed' if measured.returncode == 0 else 'failed'
+        measured.check_returncode()
+    except subprocess.TimeoutExpired:
+        navigation_receipt['status'] = 'timed_out'
+        raise
+    finally:
+        (navigation_evidence / 'receipt.json').write_text(json.dumps(navigation_receipt, indent=2) + '\n', encoding='utf-8')
     if arguments.platform == 'macos-arm64':
         run([sys.executable, '-B', 'tools/Package-Mac.py', '--build', str(build), '--sdk', str(sdk)])
     else:
