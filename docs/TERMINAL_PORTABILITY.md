@@ -85,3 +85,10 @@ packaged executable with library-path overrides removed. This addition remains
 unvalidated until the new native run passes. It is not included in the existing
 v0.2.6 dogfood download. Portable-core CI only covers newline, CSV and file-reader
 tests; its success does not establish terminal or GUI availability.
+
+Validation completed at `6fbdecc3f78c783ac93c695a7a80dc47d6e89f2e`: native run
+36953195677 passed all three platforms, including all 30 Mac tests and the
+packaged terminal PTY smoke. Portable run 36953195651 also passed all three.
+The resulting verified archive is published as v0.2.7-dogfood.20261001. Normal
+and interrupted exits passed the exact mode comparison after the queue query;
+no production restoration change or ignored mode bits were required.
