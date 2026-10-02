@@ -14,24 +14,36 @@ std::optional<std::uint64_t> terminal_page_target(
     // Resolve shared source boundaries in the same order as caret rendering.
     // This bounded frame index avoids rescanning every run for every candidate.
     std::map<std::uint64_t, TerminalPageCaret> positions{};
+    bool next_known = false;
     for (const TerminalPageRun &run : frame.runs) {
-        if (run.starts_grapheme)
+        if ((run.starts_grapheme && run.source_offset == frame.next.offset) ||
+            (run.ends_grapheme && run.source_offset + run.source_length == frame.next.offset))
+            next_known = true;
+        if (run.starts_grapheme && (run.row == row || positions.contains(run.source_offset)))
             positions[run.source_offset] = {run.row, run.column};
         if (run.ends_grapheme) {
             const std::size_t end = run.column + run.cells;
-            positions[run.source_offset + run.source_length] =
-                end == width ? TerminalPageCaret{run.row + 1, 0}
-                             : TerminalPageCaret{run.row, end};
+            const TerminalPageCaret position = end == width ? TerminalPageCaret{run.row + 1, 0}
+                                                            : TerminalPageCaret{run.row, end};
+            const std::uint64_t offset = run.source_offset + run.source_length;
+            if (position.row == row || positions.contains(offset))
+                positions[offset] = position;
         }
     }
     for (std::size_t index = 0; index < frame.row_starts.size(); ++index) {
         const TerminalPageCursor start = frame.row_starts[index];
-        if (!start.label_cell)
+        if (!start.label_cell && start.offset == frame.next.offset)
+            next_known = true;
+        if (!start.label_cell && (index == row || positions.contains(start.offset)))
             positions[start.offset] = {index, 0};
     }
-    for (const TerminalPageNewlineCaret boundary : frame.newline_carets)
-        positions[boundary.offset] = {boundary.row, boundary.column};
-    if (!frame.more && !frame.row_starts.empty() && !positions.contains(frame.next.offset))
+    for (const TerminalPageNewlineCaret boundary : frame.newline_carets) {
+        if (boundary.offset == frame.next.offset)
+            next_known = true;
+        if (boundary.row == row || positions.contains(boundary.offset))
+            positions[boundary.offset] = {boundary.row, boundary.column};
+    }
+    if (!frame.more && !frame.row_starts.empty() && !next_known)
         positions[frame.next.offset] = {frame.row_starts.size() - 1, 0};
     std::optional<std::uint64_t> before{}, first{};
     std::size_t before_column = 0;

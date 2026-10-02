@@ -18,9 +18,21 @@ public:
     mutable bool publication_seen{};
     mutable bool text_copy_pending{}, text_copy_saved{};
     bool started{};
+    std::size_t inspect_after{};
+    std::string expected_cursor{};
+    mutable bool cursor_checked{};
+    std::string expected_copy{};
+    mutable bool expected_copy_seen{};
     void start() override { started = true; }
     swiftedit::TerminalSize size() const override { return {80, 24}; }
     void write(std::string_view text) const override {
+        if (!expected_copy.empty() && text.find(expected_copy) != std::string_view::npos)
+            expected_copy_seen = true;
+        if (inspect_after && cursor == inspect_after) {
+            if (text.find(expected_cursor + "\x1b[?25h") == std::string_view::npos)
+                throw std::runtime_error("Read-only vertical navigation displayed the wrong caret.");
+            cursor_checked = true;
+        }
         if (text.empty() || !started)
             throw std::runtime_error("Unexpected empty or premature terminal frame.");
         ++writes;
@@ -216,6 +228,43 @@ int main() {
             output.put('z');
         }
         const std::filesystem::path saved_copy = swiftedit::versioned_name(large_path);
+        const std::filesystem::path vertical_path = directory / "vertical-read-only.txt";
+        {
+            std::ofstream output(vertical_path, std::ios::binary);
+            output << "abcdef\nx\nabcdef\n";
+            for (std::size_t row = 0; row < 30; ++row)
+                output << "abcdef\n";
+            output.seekp(swiftedit::editable_limit - 1);
+            output.put('z');
+        }
+        for (const std::size_t moves : {std::size_t{2}, std::size_t{23}}) {
+            ScriptConsole vertical{};
+            for (std::size_t column = 0; column < 3; ++column)
+                vertical.press(swiftedit::terminal_key::right);
+            for (std::size_t row = 0; row < moves; ++row)
+                vertical.press(swiftedit::terminal_key::down);
+            vertical.inspect_after = 3 + moves;
+            vertical.expected_cursor = moves == 2 ? "\x1b[4;4H" : "\x1b[21;4H";
+            vertical.press('X', 0, true);
+            swiftedit::Terminal vertical_terminal(vertical);
+            if (vertical_terminal.run(vertical_path) != 0 || !vertical.cursor_checked)
+                throw std::runtime_error("Read-only desired column was not restored after short lines or scrolling.");
+        }
+        ScriptConsole vertical_return{};
+        for (std::size_t column = 0; column < 3; ++column)
+            vertical_return.press(swiftedit::terminal_key::right);
+        for (std::size_t row = 0; row < 23; ++row)
+            vertical_return.press(swiftedit::terminal_key::down);
+        for (std::size_t row = 0; row < 23; ++row)
+            vertical_return.press(swiftedit::terminal_key::up, 0, false, true);
+        vertical_return.inspect_after = 49;
+        vertical_return.expected_cursor = "\x1b[2;4H";
+        vertical_return.expected_copy = "Copied 156 bytes";
+        vertical_return.press('C', 0, true);
+        vertical_return.press('X', 0, true);
+        swiftedit::Terminal return_terminal(vertical_return);
+        if (return_terminal.run(vertical_path) != 0 || !vertical_return.cursor_checked || !vertical_return.expected_copy_seen)
+            throw std::runtime_error("Upward scrolling lost the desired column or selection caret.");
         ScriptConsole copy_navigation{};
         copy_navigation.wait_for_text_copy = true;
         copy_navigation.press('T', 0, true);

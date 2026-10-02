@@ -348,3 +348,18 @@ Five focused regressions passed, together with all six terminal test targets
 (8.50 seconds); a final rebuilt terminal target passed in 2.28 seconds. The
 123-file house-style spelling audit passed. This is navigation groundwork, not
 a claim that the reported behavior is fixed.
+
+Read-only Up/Down now uses that mapping and retains the desired display column
+through short lines and viewport scrolling. Shift retains the original source
+anchor. Exhausted upward history uses the existing cancellable reconstruction
+task before publishing the new caret; other commands and changed viewport
+dimensions reset the desired column. The row mapping indexes only candidate-row
+boundaries while applying canonical wrap/newline overrides from the full frame.
+Shared-loop tests verify short-line column restoration, scrolling down and back
+up, and the exact 156-byte Shift selection. All 23 local tests passed in 57.07
+seconds; the 123-file spelling audit passed. Native validation is pending.
+The existing 32768-arrow history stress case now makes terminal-app take 49.01
+seconds locally versus roughly five seconds before caret-aware movement; these
+are whole-test timings, not per-key latency. Repeated-key scheduling and frame
+mapping need explicit measurement in the remaining lag audit. Page Up/Down still
+use their older viewport-start semantics and remain a separate navigation task.

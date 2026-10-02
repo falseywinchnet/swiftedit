@@ -28,7 +28,7 @@ inline void status_line(std::string &output, std::size_t row, std::string_view s
     const std::string safe = swiftedit::escape_field(source);
     output.append(safe, 0, std::min(width, safe.size()));
 }
-enum class PageNavigation { end, previous, left };
+enum class PageNavigation { end, previous, left, up };
 enum class Prompt { none, save_path, text_copy_path, open_path, exit_choice, paste_choice, find, replacement };
 class Terminal {
 public:
@@ -64,6 +64,7 @@ public:
         text_copy_.reset();
         page_anchor_ = 0;
         page_caret_ = 0;
+        page_column_.reset();
         buffer_.open(path);
         pager_.reset(buffer_.session());
         top_ = 0;
@@ -166,9 +167,15 @@ public:
                             pager_.reveal(buffer_.session(), *left_target);
                         page_caret_ = page_navigation_ == PageNavigation::left ? *left_target
                                      : page_navigation_ == PageNavigation::previous ? pager_.source_offset() : buffer_.session().size();
+                        if (page_navigation_ == PageNavigation::up) {
+                            const swiftedit::TerminalPageFrame &frame = pager_.frame(buffer_.session(), width_, rows_);
+                            const std::optional<std::uint64_t> target = swiftedit::terminal_page_target(
+                                frame, 0, page_column_.value_or(0), width_, rows_);
+                            page_caret_ = target.value_or(end_caret_);
+                        }
                         page_anchor_ = end_extend_ ? end_anchor_ : page_caret_;
                         ending_.reset();
-                        status_ = page_navigation_ == PageNavigation::left ? "Read-only caret moved"
+                        status_ = page_navigation_ == PageNavigation::left || page_navigation_ == PageNavigation::up ? "Read-only caret moved"
                                   : page_navigation_ == PageNavigation::previous ? "Earlier read-only page" : "End of read-only document";
                         redraw = true;
                         continue;
@@ -303,10 +310,14 @@ private:
     void draw() {
         console_.allow_wrap_cancel(prompt_ == Prompt::none);
         const TerminalSize size = console_.size();
+        const std::size_t old_width = width_;
+        const std::size_t old_rows = rows_;
         width_ = std::min<std::size_t>(std::max<std::size_t>(size.columns, 1), 1000);
         const std::size_t height =
             std::min<std::size_t>(std::max<std::size_t>(size.rows, 1), 300);
         rows_ = height > 4 ? height - 4 : 1;
+        if (width_ != old_width || rows_ != old_rows)
+            page_column_.reset();
         std::string screen = "\x1b[?25l\x1b[0m\x1b[2J";
         const std::u8string path = buffer_.session().path().u8string();
         std::string title = "SwiftEdit  ";
@@ -516,6 +527,48 @@ private:
         buffer_.insert(prepared.text);
         status_ = "Pasted as one edit";
     }
+    void page_vertical(const bool down, const bool extend) {
+        const swiftedit::TerminalPageFrame &initial = pager_.frame(buffer_.session(), width_, rows_);
+        std::optional<swiftedit::TerminalPageCaret> position =
+            swiftedit::terminal_page_caret(initial, page_caret_, width_, rows_);
+        if (!position) {
+            pager_.reveal(buffer_.session(), page_caret_);
+            const swiftedit::TerminalPageFrame &visible = pager_.frame(buffer_.session(), width_, rows_);
+            position = swiftedit::terminal_page_caret(visible, page_caret_, width_, rows_);
+        }
+        if (!position)
+            throw std::runtime_error("Read-only caret has no visible source boundary.");
+        if (!page_column_)
+            page_column_ = (*position).column;
+        std::size_t target_row = (*position).row;
+        if (down) {
+            if (target_row + 1 < rows_)
+                ++target_row;
+            else
+                pager_.down();
+        } else if (target_row) {
+            --target_row;
+        } else {
+            ending_ = pager_.prepare_previous(buffer_.session(), false);
+            if (ending_) {
+                page_navigation_ = PageNavigation::up;
+                end_extend_ = extend;
+                end_anchor_ = page_anchor_;
+                end_caret_ = page_caret_;
+                status_ = "Finding previous grapheme... Any key cancels";
+                return;
+            }
+            pager_.up();
+        }
+        const swiftedit::TerminalPageFrame &frame = pager_.frame(buffer_.session(), width_, rows_);
+        const std::optional<std::uint64_t> target = swiftedit::terminal_page_target(
+            frame, target_row, *page_column_, width_, rows_);
+        if (target)
+            page_caret_ = *target;
+        if (!extend)
+            page_anchor_ = page_caret_;
+        status_ = "Read-only caret moved";
+    }
     void page_horizontal(const bool right, const bool extend) {
         std::optional<std::uint64_t> target{};
         if (!extend && page_anchor_ != page_caret_)
@@ -555,6 +608,8 @@ private:
         const bool alt = event.alt;
         const bool shift = event.shift;
         const std::uint32_t key = event.key;
+        if (key != terminal_key::up && key != terminal_key::down)
+            page_column_.reset();
         if (text_copy_ && (*text_copy_).state() == swiftedit::TextCopyState::publishing) {
             if (ctrl && !alt && key == 'X')
                 exit_after_publication_ = true;
@@ -719,6 +774,10 @@ private:
             return;
         }
         if (buffer_.session().read_only()) {
+            if (!ctrl && !alt && (key == terminal_key::up || key == terminal_key::down)) {
+                page_vertical(key == terminal_key::down, shift);
+                return;
+            }
             if (!ctrl && !alt && (key == terminal_key::home || key == terminal_key::end)) {
                 line_boundary_ = std::make_unique<swiftedit::TerminalLineBoundary>(
                     buffer_.session(), page_caret_, key == terminal_key::end);
@@ -941,6 +1000,7 @@ private:
     PageNavigation page_navigation_{PageNavigation::end};
     std::uint64_t end_anchor_{}, end_caret_{};
     std::uint64_t page_anchor_{}, page_caret_{};
+    std::optional<std::size_t> page_column_{};
     bool replace_query_{};
     swiftedit::TerminalQuery query_{};
     Prompt prompt_{Prompt::none};
