@@ -113,6 +113,22 @@ measurement. Windows compilation and the 129-file spelling audit pass; native
 execution remains pending. The reviewed provider title/menu patch has its final
 receipt and const correction handed back for coordinator CI and SDK export.
 
+Native follow-up c7b81ed, run 36981694678: all 32 Mac tests and Linux passed.
+The Mac log records Find visible after 257.114 ms, followed by successful
+synthetic AppKit wildcard toggle, matching search and toggle-back. Command
+admission passed. The earlier one-timer-turn assumption was insufficient;
+the observation does not establish physical keyboard latency or a production
+host visibility defect. Windows was still running when recorded.
+
+The next native editor revision adds CSV entry through Window key dispatch,
+formula preservation on Enter, the declared CSV menu command and cell context
+command, single-step Undo for both conversions, and formula-preserving Save.
+Its disposable fixture uses a .csv extension; it adds a Mac formula-view capture
+after bounded calculation readiness. This is native-window integration using
+synthetic framework input and semantic command invocation, not physical mouse
+or keyboard dogfood. Windows compilation and the spelling audit pass; execution
+and inspection of the new capture remain pending.
+
 Read-only source copying now has a shared cooperative task and command interface.
 It reserves one clipboard buffer, reads at most 64 KiB per step, rejects stale
 source identities/revisions and transfers the completed result without another

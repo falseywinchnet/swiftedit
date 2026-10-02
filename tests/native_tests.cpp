@@ -61,6 +61,7 @@ public:
     bool passed{};
     bool find_open_requested{};
     std::chrono::steady_clock::time_point find_requested_at{};
+    std::chrono::steady_clock::time_point csv_submitted_at{};
     int stage{};
     std::exception_ptr test_failure{};
     std::unique_ptr<gf::Timer> timer{};
@@ -312,14 +313,82 @@ public:
                 (*editor).execute("markdown-view");
                 break;
             }
-            case 14:
+            case 14: {
 #ifdef __APPLE__
                 capture_native_view("SwiftEdit", "editor-source-status");
 #endif
+                (*(*editor).text_control()).set_text("2,3\r\n4,5");
+                (*editor).execute("csv-view");
+                const std::shared_ptr<notepad::CsvView> grid = (*editor).csv_control();
+                require((*grid).visible(), "Native CSV editor view opened");
+                (*grid).select_cell({0, 1});
+                const std::shared_ptr<gf::TextBox> entry =
+                    std::dynamic_pointer_cast<gf::TextBox>(find_control(grid, "csv.entry"));
+                require(static_cast<bool>(entry), "Native CSV formula entry exists");
+                (*entry).set_text("=A1*4");
+                (*main).request_focus(entry);
+                csv_submitted_at = std::chrono::steady_clock::now();
+                const bool submitted = (*main).dispatch_key(
+                    {gf::KeyAction::down, gf::PhysicalKey::enter});
+                require(submitted && (*(*editor).text_control()).text() == "2,=A1*4\r\n4,5",
+                        "Enter through the native window retains formula source");
+                break;
+            }
+            case 15: {
+                const std::shared_ptr<notepad::CsvView> grid = (*editor).csv_control();
+                if ((*grid).calculations_pending()) {
+                    const std::chrono::steady_clock::duration elapsed =
+                        std::chrono::steady_clock::now() - csv_submitted_at;
+                    require(elapsed < std::chrono::seconds(2),
+                            "Native CSV formula work completes within the readiness bound");
+                    --stage;
+                    return;
+                }
+#ifdef __APPLE__
+                capture_native_view("SwiftEdit", "editor-csv-formula");
+#endif
+                const std::shared_ptr<gf::MenuStrip> menu =
+                    std::dynamic_pointer_cast<gf::MenuStrip>(find_control(editor, "notepad.menus"));
+                require(static_cast<bool>(menu), "Native CSV menu strip exists");
+                bool menu_converted = false;
+                for (const gf::MenuStripItemSpec &group : (*menu).items()) {
+                    if (group.stable_id != "csv")
+                        continue;
+                    for (const gf::MenuItemSpec &item : group.items) {
+                        if (item.stable_id == "csv-convert-value" && item.command)
+                            menu_converted = (*item.command).execute("native.csv-menu");
+                    }
+                }
+                require(menu_converted && (*(*editor).text_control()).text() == "2,8\r\n4,5",
+                        "Native editor CSV menu converts formula to exact result");
+                (*editor).execute("undo");
+                require((*(*editor).text_control()).text() == "2,=A1*4\r\n4,5",
+                        "Native conversion undo restores formula");
+                const gf::Rect bounds = (*grid).absolute_bounds();
+                gf::PointerEvent context_press{};
+                context_press.action = gf::PointerAction::down;
+                context_press.button = gf::PointerButton::secondary;
+                context_press.position = {bounds.x + 56 + 144 + 12, bounds.y + 68 + 12};
+                (*grid).on_pointer(context_press);
+                require((*grid).context_menu().is_open(), "Native cell context menu opens");
+                const std::vector<gf::MenuItemSpec> &items = (*grid).context_menu().items();
+                require(items.size() == 1 && items[0].text == "Convert to Value",
+                        "Native cell menu exposes conversion");
+                const bool converted = (*items[0].command).execute("csv.context");
+                require(converted && (*(*editor).text_control()).text() == "2,8\r\n4,5",
+                        "Native cell context command converts formula");
+                (*grid).context_menu().close();
+                (*editor).execute("undo");
+                require((*(*editor).text_control()).text() == "2,=A1*4\r\n4,5",
+                        "Native context conversion undo restores formula");
+                (*editor).execute("save");
+                require(notepad::read_file(path).bytes == "2,=A1*4\r\n4,5",
+                        "Native CSV save preserves formula source");
                 passed = true;
                 (*timer).stop();
                 static_cast<void>(main_handle.request_close());
                 break;
+            }
             }
 
         } catch (const std::exception &failure) {
@@ -356,7 +425,7 @@ int main() {
     try {
         const std::filesystem::path path =
             std::filesystem::temp_directory_path() /
-            ("notepad-native-" + std::to_string(test_process_id()) + ".txt");
+            ("notepad-native-" + std::to_string(test_process_id()) + ".csv");
         const bool observed_2 = std::filesystem::exists(path);
         require(!observed_2, "Unique native fixture");
         struct Cleanup {
@@ -374,7 +443,7 @@ int main() {
         smoke.path = path;
         smoke.run();
         std::cout << "Native smoke passed: save, Find/Replace/undo, owned dialogs, picker "
-                     "cancel/reopen and clean shutdown.\n";
+                     "cancel/reopen, CSV Enter/formula/conversion/undo/save and clean shutdown.\n";
         return 0;
     } catch (const std::exception &failure) {
         std::cerr << failure.what() << '\n';
