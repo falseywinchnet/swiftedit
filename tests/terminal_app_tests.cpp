@@ -7,6 +7,8 @@ class ScriptConsole final : public swiftedit::TerminalConsole {
 public:
     std::vector<swiftedit::TerminalInput> inputs{};
     mutable std::size_t cursor{}, writes{};
+    mutable bool end_seen{}, copy_seen{};
+    bool wait_for_end{}, wait_for_copy{};
     bool started{};
     void start() override { started = true; }
     swiftedit::TerminalSize size() const override { return {80, 24}; }
@@ -14,9 +16,14 @@ public:
         if (text.empty() || !started)
             throw std::runtime_error("Unexpected empty or premature terminal frame.");
         ++writes;
+        if (text.find("End of read-only document") != std::string_view::npos)
+            end_seen = true;
+        if (text.find("Copied 16777216 bytes") != std::string_view::npos)
+            copy_seen = true;
     }
     bool input_ready() const override {
-        const bool ready = cursor < inputs.size();
+        const bool ready = cursor < inputs.size() && (!wait_for_end || end_seen) &&
+                           (!wait_for_copy || copy_seen);
         return ready;
     }
     swiftedit::TerminalInput read() const override {
@@ -28,11 +35,12 @@ public:
     }
     bool cancel_requested() override { return false; }
     void allow_wrap_cancel(bool) override {}
-    void press(std::uint32_t key, char16_t text = 0, bool control = false) {
+    void press(std::uint32_t key, char16_t text = 0, bool control = false, bool shift = false) {
         swiftedit::TerminalInput input{};
         input.key = key;
         input.text_unit = text;
         input.control = control;
+        input.shift = shift;
         input.pressed = true;
         inputs.push_back(input);
     }
@@ -154,6 +162,30 @@ int main() {
         if (threshold_terminal.run(path) != 0 || threshold.cursor != threshold.inputs.size() ||
             notepad::read_file(path).bytes != large.paste + std::string(500001, 'x') + original)
             throw std::runtime_error("Exactly 500000 paste bytes incorrectly required confirmation.");
+        const std::filesystem::path large_path = directory / "large-read-only.txt";
+        {
+            std::ofstream output(large_path, std::ios::binary);
+            output.seekp(swiftedit::editable_limit - 1);
+            output.put('z');
+        }
+        ScriptConsole end_navigation{};
+        end_navigation.wait_for_end = true;
+        end_navigation.wait_for_copy = true;
+        end_navigation.press(swiftedit::terminal_key::end, 0, true, true);
+        end_navigation.press('C', 0, true);
+        end_navigation.press('X', 0, true);
+        swiftedit::Terminal end_terminal(end_navigation);
+        if (end_terminal.run(large_path) != 0 || !end_navigation.end_seen || !end_navigation.copy_seen ||
+            end_navigation.cursor != end_navigation.inputs.size())
+            throw std::runtime_error("Read-only Ctrl+End failed to finish cooperatively.");
+        ScriptConsole cancelled_end{};
+        cancelled_end.press(swiftedit::terminal_key::end, 0, true);
+        cancelled_end.press(swiftedit::terminal_key::escape);
+        cancelled_end.press('X', 0, true);
+        swiftedit::Terminal cancelled_end_terminal(cancelled_end);
+        if (cancelled_end_terminal.run(large_path) != 0 || cancelled_end.end_seen ||
+            cancelled_end.cursor != cancelled_end.inputs.size())
+            throw std::runtime_error("Read-only Ctrl+End did not cancel on the next key.");
         std::cout << "Shared terminal loop: Unicode, undo/redo, navigation, save, recovery and large paste passed.\n";
         return 0;
     } catch (const std::exception &failure) {

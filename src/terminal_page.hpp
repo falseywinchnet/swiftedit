@@ -27,6 +27,24 @@ struct TerminalPageFrame {
 // as complete. Source-independent labels may continue across rows/pages.
 [[nodiscard]] TerminalPageFrame terminal_page(const Session &, TerminalPageCursor,
                                               std::size_t width, std::size_t rows);
+// Advances at most one 64 KiB source page per step, retaining the final
+// viewport and at most 32768 preceding row cursors for backward navigation.
+// The caller owns cancellation by dropping this task.
+class TerminalPageEnd final {
+public:
+    TerminalPageEnd(const Session &, std::size_t width, std::size_t rows);
+    [[nodiscard]] bool step(const Session &);
+    [[nodiscard]] TerminalPageCursor result(const Session &) const;
+private:
+    friend class TerminalPager;
+    void validate(const Session &) const;
+    DocumentStamp stamp_{};
+    std::uint64_t size_{};
+    std::size_t width_{}, rows_{};
+    TerminalPageCursor cursor_{};
+    std::deque<TerminalPageCursor> tail_{};
+    bool complete_{};
+};
 class TerminalPager {
 public:
     void reset(const Session &);
@@ -36,6 +54,7 @@ public:
     void down();
     void up();
     void first();
+    void finish_end(const Session &, const TerminalPageEnd &);
     [[nodiscard]] std::uint64_t source_offset() const { return cursor_.offset; }
 
 private:

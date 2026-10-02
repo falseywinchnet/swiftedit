@@ -279,6 +279,24 @@ int main() {
         pager.up();
         check(pager.frame(paged_source, 4, 3).runs[0].text == "[U+0",
               "Reverse row scrolling restores the first label fragment");
+        swiftedit::TerminalPageEnd label_end(paged_source, 4, 2);
+        check(label_end.step(paged_source), "Small end scan completes in one bounded step");
+        pager.finish_end(paged_source, label_end);
+        const swiftedit::TerminalPageFrame end_labels = pager.frame(paged_source, 4, 2);
+        check(!end_labels.more && end_labels.runs.front().text == "01B]" &&
+                  end_labels.runs.back().text == "Z",
+              "Final viewport retains label continuation and last source character");
+        pager.up();
+        check(pager.frame(paged_source, 4, 2).runs.front().text == "[U+0",
+              "End navigation retains preceding rows for Up");
+        paged_source.replace_ranges({{0, 0}}, "changed", paged_source.stamp());
+        bool stale_end_refused = false;
+        try {
+            pager.finish_end(paged_source, label_end);
+        } catch (const std::exception &) {
+            stale_end_refused = true;
+        }
+        check(stale_end_refused, "Completed end scan cannot publish against changed source");
         const std::filesystem::path large_path = dir / "large.txt";
         {
             std::ofstream file(large_path, std::ios::binary);
@@ -308,6 +326,31 @@ int main() {
         const swiftedit::TerminalPageFrame &large_second = large_pager.frame(large, 1000, 300);
         check(large_second.runs[0].text == "e\xcc\x81",
               "Next bounded read reconstructs full combining grapheme");
+        swiftedit::TerminalPageEnd large_end(large, 1000, 20);
+        const std::uint64_t before_end = large_pager.source_offset();
+        check(!large_end.step(large) && large_pager.source_offset() == before_end,
+              "Pending end scan leaves the visible page unchanged");
+        bool premature_end_refused = false;
+        try {
+            large_pager.finish_end(large, large_end);
+        } catch (const std::exception &) {
+            premature_end_refused = true;
+        }
+        check(premature_end_refused && large_pager.source_offset() == before_end,
+              "Incomplete end scan cannot publish a partial destination");
+        std::size_t end_steps = 1;
+        while (!large_end.step(large)) {
+            ++end_steps;
+            check(end_steps < 10000, "Bounded end scan must make forward progress");
+        }
+        large_pager.finish_end(large, large_end);
+        const swiftedit::TerminalPageFrame final_page = large_pager.frame(large, 1000, 20);
+        check(!final_page.more && final_page.runs.back().text == "z" &&
+                  final_page.next.offset == large.size() && !large.dirty(),
+              "Actual large-file end scan reaches final byte without source mutation");
+        large_pager.previous();
+        check(large_pager.source_offset() < final_page.row_starts.front().offset,
+              "Page Up works immediately after end navigation");
         const std::filesystem::path huge_cluster_path = dir / "huge-cluster.txt";
         {
             std::ofstream file(huge_cluster_path, std::ios::binary);

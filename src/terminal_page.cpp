@@ -5,9 +5,9 @@
 #include <stdexcept>
 namespace swiftedit {
 namespace gf = gui_forms;
-TerminalPageFrame terminal_page(const Session &session, TerminalPageCursor cursor,
-                                std::size_t width, std::size_t rows) {
-    if (!width || width > 1000 || !rows || rows > 300)
+static TerminalPageFrame build_terminal_page(const Session &session, TerminalPageCursor cursor,
+                                             std::size_t width, std::size_t rows, const bool paint_runs) {
+    if (!width || width > 1000 || !rows || rows > 32768)
         throw std::runtime_error("Terminal page dimensions exceed their bounded range.");
     const Page source = session.page(cursor.offset, maximum_page);
     const bool eof = source.next == source.size;
@@ -38,7 +38,8 @@ TerminalPageFrame terminal_page(const Session &session, TerminalPageCursor curso
         throw std::runtime_error(
             "A complete grapheme exceeds the terminal page context limit. Source is unchanged.");
     TerminalPageFrame result{};
-    result.runs.reserve(std::min<std::size_t>(metadata.size(), width * rows));
+    if (paint_runs)
+        result.runs.reserve(std::min<std::size_t>(metadata.size(), width * rows));
     result.next = cursor;
     result.row_starts.push_back(cursor);
     std::size_t row = 0;
@@ -82,13 +83,15 @@ TerminalPageFrame terminal_page(const Session &session, TerminalPageCursor curso
         while (consumed < glyph.cells && row < rows) {
             const std::size_t available = width - column;
             const std::size_t take = std::min(available, glyph.cells - consumed);
-            TerminalPageRun run{};
-            run.row = row;
-            run.column = column;
-            run.source_offset = cursor.offset + offset;
-            run.source_length = length;
-            run.text = glyph.label ? glyph.text.substr(consumed, take) : glyph.text;
-            result.runs.push_back(std::move(run));
+            if (paint_runs) {
+                TerminalPageRun run{};
+                run.row = row;
+                run.column = column;
+                run.source_offset = cursor.offset + offset;
+                run.source_length = length;
+                run.text = glyph.label ? glyph.text.substr(consumed, take) : glyph.text;
+                result.runs.push_back(std::move(run));
+            }
             consumed += take;
             column += take;
             if (consumed == glyph.cells)
@@ -106,6 +109,67 @@ TerminalPageFrame terminal_page(const Session &session, TerminalPageCursor curso
     }
     result.more = result.next.offset < source.size || result.next.label_cell != 0;
     return result;
+}
+TerminalPageFrame terminal_page(const Session &session, TerminalPageCursor cursor,
+                                std::size_t width, std::size_t rows) {
+    if (!rows || rows > 300)
+        throw std::runtime_error("Terminal page dimensions exceed their bounded range.");
+    TerminalPageFrame result = build_terminal_page(session, cursor, width, rows, true);
+    return result;
+}
+TerminalPageEnd::TerminalPageEnd(const Session &session, const std::size_t width,
+                               const std::size_t rows)
+    : stamp_(session.stamp()), size_(session.size()), width_(width), rows_(rows) {
+    if (!width_ || width_ > 1000 || !rows_ || rows_ > 300)
+        throw std::runtime_error("Terminal page dimensions exceed their bounded range.");
+}
+void TerminalPageEnd::validate(const Session &session) const {
+    const DocumentStamp current = session.stamp();
+    if (current.identity != stamp_.identity || current.revision != stamp_.revision ||
+        session.size() != size_)
+        throw std::runtime_error("End navigation belongs to an older document.");
+}
+bool TerminalPageEnd::step(const Session &session) {
+    validate(session);
+    if (complete_)
+        return true;
+    // Avoid re-decoding the same 64 KiB for narrow/control-heavy rows. The scan
+    // uses the same geometry but does not construct per-run paint strings.
+    const TerminalPageFrame frame = build_terminal_page(session, cursor_, width_, 32768, false);
+    if (frame.more && frame.next == cursor_)
+        throw std::runtime_error("End navigation made no source progress.");
+    for (const TerminalPageCursor start : frame.row_starts) {
+        if (start.offset == size_ && size_ != 0)
+            continue;
+        if (!tail_.empty() && tail_.back() == start)
+            continue;
+        tail_.push_back(start);
+        if (tail_.size() > 32768 + rows_)
+            tail_.pop_front();
+    }
+    cursor_ = frame.next;
+    complete_ = !frame.more;
+    return complete_;
+}
+TerminalPageCursor TerminalPageEnd::result(const Session &session) const {
+    validate(session);
+    if (!complete_)
+        throw std::runtime_error("End navigation is not complete.");
+    const std::size_t first = tail_.size() > rows_ ? tail_.size() - rows_ : 0;
+    const TerminalPageCursor result = tail_.empty() ? TerminalPageCursor{} : tail_[first];
+    return result;
+}
+void TerminalPager::finish_end(const Session &session, const TerminalPageEnd &task) {
+    const TerminalPageCursor target = task.result(session);
+    std::deque<TerminalPageCursor> history{};
+    for (const TerminalPageCursor start : task.tail_) {
+        if (start == target)
+            break;
+        history.push_back(start);
+    }
+    reset(session);
+    cursor_ = target;
+    history_.swap(history);
 }
 void TerminalPager::reset(const Session &session) {
     stamp_ = session.stamp();

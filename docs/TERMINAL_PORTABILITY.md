@@ -131,3 +131,23 @@ to a clean document, redo and exact saved bytes. Source
 native run 36954678518 on Windows/macOS/Linux, and portable-core run 36954678433
 on all three platforms. This verifies the shared-loop behavior on each platform;
 physical terminal-emulator clipboard interaction still needs broader dogfooding.
+
+## Cancellable read-only end navigation
+
+Ctrl+End now scans to the final viewport of a read-only file. Shift+Ctrl+End
+extends the source selection to EOF; Ctrl+C uses the existing cooperative copy
+task. The scan reads at most 64 KiB per step, checks document identity/revision
+and size, and retains at most 32768 preceding row cursors plus the final viewport.
+Any key cancels between steps, and resize cancels the old-width scan. Incomplete
+or stale work cannot publish a destination. Source bytes are never modified.
+Up/Page Up work after completion within the retained history; unbounded backward
+navigation, horizontal read-only caret motion and large-file search remain work.
+
+The scan shares page geometry but skips off-screen paint strings and processes
+more rows per source chunk than the visible viewport. The initial control-heavy
+16 MiB shared-loop regression took 12.82 s locally; eliminating repeated decoding
+reduced the same test to 1.44 s. These are single local test durations, not a
+native latency distribution or a general performance guarantee. The final local
+suite passed all 22 tests in 6.92 s, including Shift+Ctrl+End/full-file copy,
+Escape cancellation, stale/incomplete refusal, label continuation and Page Up.
+Cross-platform native validation remains pending for this change.

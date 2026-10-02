@@ -57,6 +57,7 @@ public:
         replacement_.cancel();
         counting_.reset();
         copying_.reset();
+        ending_.reset();
         page_anchor_ = 0;
         page_caret_ = 0;
         buffer_.open(path);
@@ -93,6 +94,19 @@ public:
                 redraw = false;
             }
             try {
+                if (ending_) {
+                    if ((*ending_).step(buffer_.session())) {
+                        pager_.finish_end(buffer_.session(), *ending_);
+                        page_caret_ = buffer_.session().size();
+                        page_anchor_ = end_extend_ ? end_anchor_ : page_caret_;
+                        ending_.reset();
+                        status_ = "End of read-only document";
+                        redraw = true;
+                        continue;
+                    }
+                    if (!console_.input_ready())
+                        continue;
+                }
                 if (copying_) {
                     if ((*copying_).state() == swiftedit::CopyState::running)
                         (*copying_).step(buffer_.session(), swiftedit::maximum_page);
@@ -161,6 +175,7 @@ public:
                 replacement_.cancel();
                 counting_.reset();
                 copying_.reset();
+                ending_.reset();
                 status_ = failure.what();
                 redraw = true;
                 continue;
@@ -173,6 +188,10 @@ public:
                 continue;
             }
             if (input.resized) {
+                if (ending_) {
+                    ending_.reset();
+                    status_ = "End navigation cancelled because the terminal resized";
+                }
                 redraw = true;
                 continue;
             }
@@ -416,6 +435,12 @@ private:
         const bool alt = event.alt;
         const bool shift = event.shift;
         const std::uint32_t key = event.key;
+        if (ending_) {
+            ending_.reset();
+            status_ = "End navigation cancelled";
+            if (key == terminal_key::escape)
+                return;
+        }
         const bool preserving_command =
             ctrl && !alt && (key == 'X' || key == 'S' || key == 'R' || key == 'T');
         if (key != terminal_key::escape && prompt_ == Prompt::none && !preserving_command)
@@ -550,6 +575,13 @@ private:
             return;
         }
         if (buffer_.session().read_only()) {
+            if (ctrl && !alt && key == terminal_key::end) {
+                ending_ = std::make_unique<swiftedit::TerminalPageEnd>(buffer_.session(), width_, rows_);
+                end_extend_ = shift;
+                end_anchor_ = page_anchor_;
+                status_ = "Finding final page... Any key cancels";
+                return;
+            }
             if (ctrl && !alt && key == 'A') {
                 page_anchor_ = 0;
                 page_caret_ = buffer_.session().size();
@@ -568,7 +600,7 @@ private:
             }
             if (key == terminal_key::down || key == terminal_key::up || key == terminal_key::page_down || key == terminal_key::page_up ||
                 (key == terminal_key::home && ctrl)) {
-                const std::uint64_t before = pager_.source_offset();
+                const std::uint64_t before = page_caret_;
                 if (key == terminal_key::down)
                     pager_.down();
                 else if (key == terminal_key::up)
@@ -734,6 +766,9 @@ private:
     swiftedit::TerminalReplace replacement_{};
     std::unique_ptr<swiftedit::SessionWordCount> counting_{};
     std::unique_ptr<swiftedit::SessionCopy> copying_{};
+    std::unique_ptr<swiftedit::TerminalPageEnd> ending_{};
+    bool end_extend_{};
+    std::uint64_t end_anchor_{};
     std::uint64_t page_anchor_{}, page_caret_{};
     bool replace_query_{};
     swiftedit::TerminalQuery query_{};
