@@ -9,6 +9,7 @@ from pathlib import Path
 import platform
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from typing import BinaryIO, Protocol
@@ -160,6 +161,8 @@ def main() -> None:
     stage: Path = Path(tempfile.mkdtemp(prefix='mac-package-', dir=build))
     app: Path = stage / 'SwiftEdit.app'
     shutil.copytree(build / 'SwiftEdit.app', app, symlinks=True)
+    terminal: Path = app / 'Contents/MacOS/SwiftEdit-terminal'
+    shutil.copy2(build / 'swiftedit-terminal', terminal)
     resources: Path = app / 'Contents/Resources'
     notices: Path = resources / 'licenses'
     shutil.copytree(sdk / 'gui-forms-sdk/share/licenses', notices, dirs_exist_ok=True)
@@ -168,19 +171,28 @@ def main() -> None:
     shutil.copy2('third_party/unicode/LICENSE.txt', notices / 'Unicode.txt')
     fixup: Path = stage / 'fixup.cmake'
     fixup.write_text('include(BundleUtilities)\nfixup_bundle("' + app.as_posix() +
-                     '" "" "' + (sdk / 'gui-forms-sdk/lib').as_posix() + '")\n', encoding='utf-8')
+                     '" "' + terminal.as_posix() + '" "' +
+                     (sdk / 'gui-forms-sdk/lib').as_posix() + '")\n', encoding='utf-8')
     run(['cmake', '-P', str(fixup)])
     executable: Path = app / 'Contents/MacOS/SwiftEdit'
     verify_load_paths(executable, executable, app)
+    verify_load_paths(terminal, terminal, app)
     frameworks: Path = app / 'Contents/Frameworks'
     library: Path
     for library in frameworks.iterdir():
         if library.is_file() and not library.is_symlink():
             verify_load_paths(library, executable, app)
             run(['codesign', '--force', '--sign', '-', str(library)])
+    run(['codesign', '--force', '--sign', '-', str(terminal)])
     run(['codesign', '--force', '--deep', '--sign', '-', str(app)])
     run(['codesign', '--verify', '--deep', '--strict', str(app)])
     idle_cpu: dict[str, object] = verify_startup(executable, stage)
+    terminal_environment: dict[str, str] = dict(os.environ)
+    variable: str
+    for variable in ['GUI_FORMS_FONT_DIR', 'DYLD_LIBRARY_PATH', 'DYLD_FALLBACK_LIBRARY_PATH']:
+        terminal_environment.pop(variable, None)
+    subprocess.run([sys.executable, '-B', 'tests/terminal_posix_smoke.py',
+                    '--executable', str(terminal)], env=terminal_environment, check=True, timeout=45)
     manifest: dict[str, object] = {
         'product': 'SwiftEdit', 'source_revision': revision,
         'platform': platform.platform(), 'architecture': platform.machine(),
@@ -188,13 +200,18 @@ def main() -> None:
         'packaged_startup': 'remained running for five seconds on a disposable text fixture',
         'idle_cpu_observation': idle_cpu,
         'sdk': json.loads((sdk / 'manifest.json').read_text(encoding='utf-8')),
-        'executable_sha256': sha256(executable)}
+        'executable_sha256': sha256(executable),
+        'terminal_sha256': sha256(terminal),
+        'terminal_validation': 'packaged executable passed owned PTY paste/save and mode restoration smoke'}
     (output / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
     (output / 'README.txt').write_text(
         'SwiftEdit development build for Apple silicon\n\n'
         'Extract the ZIP, then open SwiftEdit.app. The app includes its required private '
         'libraries, fonts and license notices. This build is ad-hoc signed, not notarized.\n'
         'Built and tested on macOS 26; Intel Macs and older macOS versions are not validated.\n\n'
+        'Interactive terminal: run ./SwiftEdit.app/Contents/MacOS/SwiftEdit-terminal [file] '
+        'from Terminal. Use --help for shortcuts. The terminal clipboard is private; '
+        'ordinary terminal-emulator paste is supported through bracketed paste.\n\n'
         'This is an early dogfood build. The expanded feature set is still in development. '
         'The GUI currently uses its older editor path, limited to 1 MiB of UTF-8 text '
         'and 4096 UTF-8 bytes per logical line; '

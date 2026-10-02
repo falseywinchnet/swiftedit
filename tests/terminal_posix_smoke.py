@@ -14,6 +14,16 @@ import termios
 import time
 
 
+def terminal_mode(slave: int) -> list[object]:
+    # Darwin sets transient PENDIN when restoring ICANON. FIONREAD processes
+    # pending input through the restored discipline without consuming/flushing it.
+    # Compare every mode field after that kernel transition, without masking bits.
+    # See apple-oss-distributions/xnu bsd/kern/tty.c: ttioctl and ttnread.
+    fcntl.ioctl(slave, termios.FIONREAD, struct.pack('i', 0))
+    mode: list[object] = termios.tcgetattr(slave)
+    return mode
+
+
 def await_bytes(master: int, child: subprocess.Popen[bytes], marker: bytes) -> None:
     deadline: float = time.monotonic() + 8.0
     observed: bytes = b''
@@ -50,7 +60,7 @@ def exercise(executable: Path, path: Path, interrupt: bool) -> None:
     child: subprocess.Popen[bytes] | None = None
     try:
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 24, 80, 0, 0))
-        original: list[object] = termios.tcgetattr(slave)
+        original: list[object] = terminal_mode(slave)
         child = subprocess.Popen([str(executable), str(path)], stdin=slave, stdout=slave,
                                  stderr=slave, start_new_session=True)
         await_bytes(master, child, b'\x1b[?2004h')
@@ -67,7 +77,7 @@ def exercise(executable: Path, path: Path, interrupt: bool) -> None:
         result: int = finish(master, child)
         if (interrupt and result == 0) or (not interrupt and result != 0):
             raise RuntimeError('Unexpected terminal exit status: ' + str(result))
-        restored: list[object] = termios.tcgetattr(slave)
+        restored: list[object] = terminal_mode(slave)
         if restored != original:
             print('Terminal original mode:', repr(original), flush=True)
             print('Terminal restored mode:', repr(restored), flush=True)

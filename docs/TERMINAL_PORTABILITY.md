@@ -66,3 +66,22 @@ its own child on failure. Native compilation and this PTY smoke remain pending
 CI; no POSIX interactive availability or packaging is yet claimed from the
 Windows headless results. The prior extraction passed native/core tests on all
 three platforms (runs36951475029 and36951475071).
+
+## Native validation and Mac package checkpoint
+
+Native run 36952915521 compiled the POSIX host on macOS and Linux. Windows and
+Linux passed; macOS failed the first PTY mode comparison. Its diagnostic showed
+that only local flag 0x20000000 differed: Darwin's transient PENDIN state, set by
+the kernel when restoring ICANON. All other flags, speeds and control characters
+matched. Apple's `bsd/kern/tty.c` sets this state in `ttioctl` and processes it
+in `ttnread`, the FIONREAD path. The test now queries the input queue before both
+mode snapshots. This neither consumes nor flushes input, and the comparison
+still checks every field without masking any flags. Both normal and SIGTERM
+cases must pass native CI before packaging is accepted.
+
+The Mac packager now includes `Contents/MacOS/SwiftEdit-terminal`, resolves its
+dependencies, signs it, records its hash and runs the owned PTY smoke against the
+packaged executable with library-path overrides removed. This addition remains
+unvalidated until the new native run passes. It is not included in the existing
+v0.2.6 dogfood download. Portable-core CI only covers newline, CSV and file-reader
+tests; its success does not establish terminal or GUI availability.
