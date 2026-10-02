@@ -353,6 +353,29 @@ int main() {
                 markdown_scroll = candidate;
         }
         check(static_cast<bool>(markdown_scroll), "Markdown scrollbar exists");
+        const std::size_t before_navigation = painter.measurements;
+        gf::KeyEvent navigation{};
+        navigation.action = gf::KeyAction::down;
+        navigation.physical_key = gf::PhysicalKey::page_down;
+        (*view).on_key(navigation);
+        check(navigation.handled && (*markdown_scroll).value() > 0 && (*view).hovered_url().empty(),
+              "Page Down scrolls rendered Markdown and revokes the stale hover");
+        navigation.handled = false;
+        navigation.physical_key = gf::PhysicalKey::home;
+        navigation.modifiers = gf::Modifier::meta;
+        (*view).on_key(navigation);
+        check(navigation.handled && (*markdown_scroll).value() == 0, "Mac document Home returns to preview start");
+        navigation.physical_key = gf::PhysicalKey::end;
+        navigation.modifiers = gf::Modifier::control;
+        (*view).on_key(navigation);
+        const double preview_end = (*markdown_scroll).value();
+        check(preview_end > 0, "Document End reaches preview bottom");
+        navigation.physical_key = gf::PhysicalKey::down;
+        navigation.modifiers = gf::Modifier::none;
+        (*view).on_key(navigation);
+        check((*markdown_scroll).value() == preview_end, "Arrow scrolling clamps at preview bottom");
+        (*view).on_paint(painter, {0, 0, 640, 90});
+        check(painter.measurements == before_navigation, "Keyboard navigation reuses prepared Markdown geometry");
         (*markdown_scroll).set_value(32);
         check((*view).hovered_url().empty(), "Scrolling clears the prior link tooltip");
         link_hover.position = {26, 20}; // The old link lies behind the fixed ruler.
@@ -377,6 +400,9 @@ int main() {
         (*view).on_pointer(wheel);
         (*view).on_paint(painter, {0, 0, 640, 480});
         check(painter.translation.y == 28, "Fitting content cannot scroll into artificial range");
+        navigation.physical_key = gf::PhysicalKey::page_down;
+        (*view).on_key(navigation);
+        check((*markdown_scroll).value() == 0, "Keyboard cannot scroll fitting content into artificial range");
         (*view).arrange({0, 0, 640, 90});
         (*view).on_pointer(wheel);
         (*view).on_paint(painter, {0, 0, 640, 90});
@@ -386,6 +412,24 @@ int main() {
         (*view).on_paint(painter, {0, 0, 640, 480});
         check(painter.translation.y == 28 && painter.measurements == before_expand,
               "Height-only expansion resets scrolling without measuring text again");
+        (*view).set_source("```\n" + std::string(300, 'x') + "\n```\n");
+        (*view).on_paint(painter, {0, 0, 640, 480});
+        const std::size_t before_horizontal = painter.measurements;
+        navigation.physical_key = gf::PhysicalKey::right;
+        for (unsigned step = 0; step < 3; ++step)
+            (*view).on_key(navigation);
+        painter.labels.clear();
+        painter.origins.clear();
+        (*view).on_paint(painter, {0, 0, 640, 480});
+        check(painter.translation.x == -96 && painter.measurements == before_horizontal,
+              "Horizontal keyboard navigation scrolls code without remeasuring");
+        bool ruler_aligned = false;
+        for (std::size_t index = 0; index < painter.labels.size(); ++index) {
+            if (painter.labels[index] == "2" && painter.origins[index].x == 3)
+                ruler_aligned = true;
+        }
+        check(ruler_aligned && std::find(painter.labels.begin(), painter.labels.end(), "0") == painter.labels.end(),
+              "Ruler follows the horizontally scrolled document coordinates");
         (*view).set_source("# Recovery");
         painter.fail_measurement = true;
         painter.drawn.clear();

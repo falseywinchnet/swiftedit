@@ -13,6 +13,7 @@ public:
     void arrange(gf::Rect) override;
     void on_paint(gf::Painter &, gf::Rect) override;
     void on_pointer(gf::PointerEvent &) override;
+    void on_key(gf::KeyEvent &) override;
     [[nodiscard]] const std::string &hovered_url() const { return hovered_url_; }
     [[nodiscard]] std::size_t block_count() const {
         const std::size_t count = blocks_.size();

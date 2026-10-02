@@ -1,6 +1,7 @@
 #include "markdown_view.hpp"
 #include "display.hpp"
 #include <algorithm>
+#include <cmath>
 #include <stdexcept>
 
 namespace notepad {
@@ -276,16 +277,48 @@ void MarkdownView::on_paint(gf::Painter &painter, gf::Rect) {
     painter.restore();
     painter.fill_rect({0, 0, std::max(0.0, bounds.width - 18), ruler_height}, style.face_light);
     const gf::FontSpec ruler_font{gf::FontRole::content, 11, 400, false};
-    for (double tick = 0; tick < bounds.width - 18; tick += 48) {
-        painter.draw_line({tick, 20}, {tick, ruler_height}, style.border, 1);
+    const double first_tick = std::ceil(left / 48) * 48;
+    for (double tick = first_tick; tick < left + bounds.width - 18; tick += 48) {
+        const double position = tick - left;
+        painter.draw_line({position, 20}, {position, ruler_height}, style.border, 1);
         const std::string label = std::to_string(static_cast<unsigned>(tick / 48));
-        painter.draw_text_utf8({tick + 3, ruler_baseline_}, label, ruler_font, style.disabled_text);
+        painter.draw_text_utf8({position + 3, ruler_baseline_}, label, ruler_font, style.disabled_text);
     }
 }
 void MarkdownView::clear_hover() {
     hovered_url_.clear();
     if (tooltip_)
         (*tooltip_).hide();
+}
+void MarkdownView::on_key(gf::KeyEvent &event) {
+    if (event.phase != gf::EventPhase::target || event.action != gf::KeyAction::down ||
+        layout_dirty_ || !layout_error_.empty())
+        return;
+    const bool plain = event.modifiers == gf::Modifier::none;
+    const bool document = event.modifiers == gf::Modifier::control || event.modifiers == gf::Modifier::meta;
+    const gf::Rect bounds = arranged_bounds();
+    const double page = std::max(32.0, bounds.height - ruler_height - 18);
+    if (plain && event.physical_key == gf::PhysicalKey::up) {
+        if ((*vertical_).enabled()) (*vertical_).increment(-32);
+    } else if (plain && event.physical_key == gf::PhysicalKey::down) {
+        if ((*vertical_).enabled()) (*vertical_).increment(32);
+    } else if (plain && event.physical_key == gf::PhysicalKey::page_up) {
+        if ((*vertical_).enabled()) (*vertical_).increment(-page);
+    } else if (plain && event.physical_key == gf::PhysicalKey::page_down) {
+        if ((*vertical_).enabled()) (*vertical_).increment(page);
+    } else if ((plain || document) && event.physical_key == gf::PhysicalKey::home) {
+        (*vertical_).set_value(0);
+    } else if ((plain || document) && event.physical_key == gf::PhysicalKey::end) {
+        if ((*vertical_).enabled())
+            (*vertical_).set_value(std::max(0.0, content_height_ - bounds.height + ruler_height + 18));
+    } else if (plain && event.physical_key == gf::PhysicalKey::left) {
+        if ((*horizontal_).enabled()) (*horizontal_).increment(-32);
+    } else if (plain && event.physical_key == gf::PhysicalKey::right) {
+        if ((*horizontal_).enabled()) (*horizontal_).increment(32);
+    } else {
+        return;
+    }
+    event.handled = true;
 }
 void MarkdownView::on_pointer(gf::PointerEvent &event) {
     if (event.phase != gf::EventPhase::target)
@@ -299,6 +332,7 @@ void MarkdownView::on_pointer(gf::PointerEvent &event) {
         return;
     }
     if (event.action == gf::PointerAction::down) {
+        if (window()) (*window()).request_focus(shared_from_this());
         event.handled = true; // Links are intentionally inert, including file: URLs.
         return;
     }

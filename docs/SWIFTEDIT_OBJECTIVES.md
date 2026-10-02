@@ -496,3 +496,15 @@ lookalikes, late refusal, busy/closing, copying and charge retirement are covere
 Provider integration, allocation-failure injection, broader identity permutations,
 controller/worker/rendering/host behavior and native latency remain unverified.
 No provider commit, public SDK change, DocumentView or print availability is claimed.
+
+Rendered Markdown navigation follow-up: the preview now handles arrow keys,
+Page Up/Down and Home/End (including Ctrl/Cmd document endpoints). Clicks restore
+preview focus without activating links. Navigation is refused while layout is
+pending/failed and fitting content cannot enter the scrollbar's artificial range.
+Horizontal scrolling now moves the ruler's coordinates with the document.
+Headless editor/views tests passed in 1.97 seconds; navigation regressions verify
+clamped endpoints, stale-hover clearing, fitting content, horizontal code scrolling,
+ruler alignment and unchanged text-measurement count on warm navigation. Build
+and house-style spelling audit passed (124 files). These checks prove layout
+reuse, not an end-to-end physical keyboard latency bound; native validation is
+pending for this checkpoint.
