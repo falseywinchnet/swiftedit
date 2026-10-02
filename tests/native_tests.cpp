@@ -58,6 +58,7 @@ public:
     gf::ApplicationWindowHandle main_handle{};
     std::size_t ready_count{};
     bool passed{};
+    bool find_open_requested{};
     int stage{};
     std::exception_ptr test_failure{};
     std::unique_ptr<gf::Timer> timer{};
@@ -94,16 +95,23 @@ public:
             ++stage;
             switch (current_stage) {
             case 0: {
-                require((*(*editor).text_control()).text() == "native\r\nfixture",
-                        "Native initial file");
-                (*(*editor).text_control()).select_all();
-                (*(*editor).text_control()).replace_selection("native saved\r\n");
-                (*editor).execute("save");
-                const notepad::FileSnapshot observed_1 = notepad::read_file(path);
-                require(observed_1.bytes == "native saved\r\n", "Native save");
-                // Public lifecycle only: no global input, cursor or desktop automation.
-                (*editor).execute("find");
-                require(handles[3].active(), "Owned find window active");
+                if (!find_open_requested) {
+                    require((*(*editor).text_control()).text() == "native\r\nfixture",
+                            "Native initial file");
+                    (*(*editor).text_control()).select_all();
+                    (*(*editor).text_control()).replace_selection("native saved\r\n");
+                    (*editor).execute("save");
+                    const notepad::FileSnapshot observed_1 = notepad::read_file(path);
+                    require(observed_1.bytes == "native saved\r\n", "Native save");
+                    // Public lifecycle only: no global input, cursor or desktop automation.
+                    (*editor).execute("find");
+                    require(handles[3].active(), "Owned find window active");
+                    find_open_requested = true;
+                    // Native visibility follows the queued show request. Let
+                    // the event loop apply it before sending AppKit input.
+                    --stage;
+                    return;
+                }
                 const std::shared_ptr<notepad::QueryField> query =
                     std::dynamic_pointer_cast<notepad::QueryField>(
                         find_control((*find_window).root(), "find.query"));

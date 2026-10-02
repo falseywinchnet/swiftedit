@@ -674,3 +674,11 @@ match, and toggle-off. It sends through NSWindow's event path, not a normalized
 GUI.Forms test event or global keyboard injection. Physical keyboard layouts and
 OS event delivery remain separate dogfood evidence. The Windows native test
 executable compiles; execution of this new Mac-only path is pending native CI.
+
+AppKit shortcut validation follow-up: native run 36978612315 compiled the Mac
+helper but failed before keyboard dispatch because the owned Find window was
+not yet visible. The model smoke previously used controls in the same timer
+callback that queued show(). The test now returns to the native event loop after
+opening Find and delivers input on the next timer callback. The Windows test
+executable compiles and the style audit passes; the Mac shortcut remains
+unverified until the corrected test passes. No released application code changed.
