@@ -377,3 +377,16 @@ All 23 local tests passed in 18.40 seconds. Regression coverage includes a
 rows, and a large viewport requiring the full 64 KiB with an unfinished trailing
 grapheme. House-style audit passed (123 files). Native validation remains pending;
 the prior vertical-navigation native run 36966475497 is still in progress.
+
+Page Up/Down now retain the visible caret row and desired column across page
+changes, clamping to an available legal source boundary on a shorter final page.
+Shift preserves the source anchor, including cooperative reconstruction of
+expired backward history. The shared-loop round-trip regression verifies the
+rendered cursor and exact 140-byte selection. All 23 local tests passed in 17.48
+seconds; house-style audit passed (123 files).
+
+Native run 36966475497 at the earlier 6cd2c9c checkpoint failed its Mac terminal-app
+test at the unchanged 60-second timeout; the other 30 Mac tests passed. That
+checkpoint predates adaptive visible-page decoding. Linux passed, while Windows
+was still running when this result was inspected. The adaptive change must pass
+a fresh Mac run before the timeout regression can be considered resolved.

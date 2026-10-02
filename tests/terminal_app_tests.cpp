@@ -265,6 +265,21 @@ int main() {
         swiftedit::Terminal return_terminal(vertical_return);
         if (return_terminal.run(vertical_path) != 0 || !vertical_return.cursor_checked || !vertical_return.expected_copy_seen)
             throw std::runtime_error("Upward scrolling lost the desired column or selection caret.");
+        ScriptConsole page_return{};
+        for (std::size_t column = 0; column < 3; ++column)
+            page_return.press(swiftedit::terminal_key::right);
+        page_return.press(swiftedit::terminal_key::down);
+        page_return.press(swiftedit::terminal_key::down);
+        page_return.press(swiftedit::terminal_key::page_down);
+        page_return.press(swiftedit::terminal_key::page_up, 0, false, true);
+        page_return.inspect_after = 7;
+        page_return.expected_cursor = "\x1b[4;4H";
+        page_return.expected_copy = "Copied 140 bytes";
+        page_return.press('C', 0, true);
+        page_return.press('X', 0, true);
+        swiftedit::Terminal page_return_terminal(page_return);
+        if (page_return_terminal.run(vertical_path) != 0 || !page_return.cursor_checked || !page_return.expected_copy_seen)
+            throw std::runtime_error("Page navigation lost its screen row, desired column or selection anchor.");
         ScriptConsole copy_navigation{};
         copy_navigation.wait_for_text_copy = true;
         copy_navigation.press('T', 0, true);
