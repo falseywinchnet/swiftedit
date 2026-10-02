@@ -567,6 +567,21 @@ private:
     }
 };
 Number evaluate_cell(Evaluation &evaluation, CellAddress address) {
+    const Cell &cell = evaluation.table.cell(address);
+    // Short literals have no expensive subtree to memoize. Avoid one map node
+    // per common range operand, but keep caching long numeric strings so many
+    // references cannot repeatedly scan a large run of leading zeroes.
+    // Both paths retain identical dependency-depth admission.
+    if (!cell.value.starts_with('=') && cell.value.size() <= 32) {
+        if (evaluation.active.size() >= 64)
+            throw std::runtime_error("Formula dependency depth exceeds 64 cells.");
+        const Number literal = numeric(cell.value);
+        if (!evaluation.active.empty()) {
+            ActiveEvaluation &parent = evaluation.active.back();
+            parent.depth = std::max(parent.depth, std::size_t(2));
+        }
+        return literal;
+    }
     const std::pair<std::size_t, std::size_t> key{address.row, address.column};
     const std::map<std::pair<std::size_t, std::size_t>, CachedNumber>::const_iterator cached =
         evaluation.values.find(key);
@@ -585,7 +600,6 @@ Number evaluate_cell(Evaluation &evaluation, CellAddress address) {
             throw std::runtime_error("Circular formula reference.");
     if (evaluation.active.size() >= 64)
         throw std::runtime_error("Formula dependency depth exceeds 64 cells.");
-    const Cell &cell = evaluation.table.cell(address);
     Number result{};
     std::size_t depth = 1;
     if (cell.value.starts_with('=')) {

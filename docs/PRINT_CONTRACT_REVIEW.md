@@ -132,3 +132,8 @@ Status: the Session source-copy foundation is implemented. GUI Document capture,
 projection, native preview, print jobs and an installed print service remain
 unfinished. This checkpoint does not make printing available or close the full
 large-document printing requirement.
+
+Validation receipt: source 31acdfb passed native tests and packaging on Windows,
+Linux and Apple-silicon macOS 26 in run 36994627042. The POSIX external-write
+refusal test therefore ran on both POSIX platforms. This does not strengthen the
+filesystem consistency guarantee described above.

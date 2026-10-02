@@ -41,3 +41,28 @@ after a two-millisecond target or eight evaluations, not within a formula.
 This component audit improves coverage of the requested lag scan. Native input
 to presentation measurements and interruption within expensive individual
 formulas remain outstanding; these results do not close the full GUI audit.
+
+## Short-literal allocation reduction
+
+The subsequent implementation avoids allocating dependency-cache map nodes for
+numeric literals of at most 32 bytes. Longer literal strings remain cached so
+repeated references cannot repeatedly scan large runs of leading zeroes. Formula
+subtrees remain cached, and the reference-work and dependency-depth limits are
+unchanged. Tests retain the 64/65-cell boundary checks and additionally exercise
+repeated references to short and long numeric strings with exact reference lists.
+
+`literal-*` records the initial prototype, which bypassed caching for all numeric
+literals. Review rejected that unrestricted path because of long-string repeated
+reference cost. `short-literal-*` records the final bounded path after all 27
+local tests passed in 19.43 seconds; it is the implementation to compare here.
+
+| Final fixture | Scroll p50 ms | Scroll p95 ms | Worst scroll ms |
+|---|---:|---:|---:|
+| Distinct | 18.7139 | 19.6017 | 19.8455 |
+| Large repeated | 0.5610 | 0.7724 | 0.8930 |
+
+The final distinct run's worst slice was 2.2577 ms, with initial complete results
+at 22.58 ms. Compared with the pre-change repeat's 42.87 ms median, the measured
+median decreased about 56%. Runs were sequential on an uncontrolled host; this
+is component evidence, not a promised latency or proof that the earlier outlier
+cannot recur. Individual formulas still do not yield internally.

@@ -41,6 +41,14 @@ int main() {
     try {
         verify_dependency_depth();
         using namespace swiftedit;
+        for (const std::size_t zeros : {0U, 31U, 32U, 10000U}) {
+            const Csv literals(std::string(zeros, '0') + "2,=A1+A1");
+            const Calculation value = calculate_cell(literals, {0, 1});
+            check(value.result == "4" && value.references.size() == 2 &&
+                      value.references[0] == CellAddress{0, 0} &&
+                      value.references[1] == CellAddress{0, 0},
+                  "Short and long literal operands preserve exact repeated references");
+        }
         Csv csv("\"a,b\",\"quoted \"\"word\"\"\",\"line\r\nbreak\"\r\n1,2,3\n4,,6");
         check(csv.rows().size() == 3 && csv.cell({0, 2}).value == "line\r\nbreak",
               "embedded newlines");
