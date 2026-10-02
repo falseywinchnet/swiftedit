@@ -1,0 +1,197 @@
+#include "terminal_app.hpp"
+#include "terminal_input.hpp"
+#include <array>
+#include <cerrno>
+#include <csignal>
+#include <poll.h>
+#include <sys/ioctl.h>
+#include <termios.h>
+#include <unistd.h>
+
+namespace {
+volatile std::sig_atomic_t interrupted = 0;
+volatile std::sig_atomic_t resized = 0;
+void terminal_signal(const int signal) {
+    if (signal == SIGWINCH)
+        resized = 1;
+    else
+        interrupted = signal;
+}
+class PosixConsole final : public swiftedit::TerminalConsole {
+public:
+    PosixConsole() = default;
+    PosixConsole(const PosixConsole &) = delete;
+    PosixConsole &operator=(const PosixConsole &) = delete;
+    ~PosixConsole() { close(); }
+    void start() override {
+        if (active_ || !isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO))
+            throw std::runtime_error("Run swiftedit-terminal in an interactive terminal.");
+        if (tcgetattr(STDIN_FILENO, &original_) != 0)
+            throw std::runtime_error("Cannot read terminal mode.");
+        interrupted = 0;
+        resized = 0;
+        try {
+            struct sigaction action{};
+            action.sa_handler = terminal_signal;
+            sigemptyset(&action.sa_mask);
+            for (const int signal : signals_) {
+                if (sigaction(signal, &action, &previous_[installed_]) != 0)
+                    throw std::runtime_error("Cannot install terminal signal handler.");
+                ++installed_;
+            }
+            struct termios raw = original_;
+            cfmakeraw(&raw);
+            raw.c_cc[VMIN] = 1;
+            raw.c_cc[VTIME] = 0;
+            if (tcsetattr(STDIN_FILENO, TCSANOW, &raw) != 0)
+                throw std::runtime_error("Cannot enter terminal raw mode.");
+            active_ = true;
+            write("\x1b[?1049h\x1b[?2004h");
+        } catch (...) {
+            close();
+            throw;
+        }
+    }
+    void close() noexcept {
+        if (active_) {
+            constexpr std::string_view restore = "\x1b[0m\x1b[?25h\x1b[?2004l\x1b[?1049l";
+            std::size_t offset = 0;
+            while (offset < restore.size()) {
+                const ssize_t written = ::write(STDOUT_FILENO, restore.data() + offset,
+                                                 restore.size() - offset);
+                if (written < 0 && errno == EINTR)
+                    continue;
+                if (written <= 0)
+                    break;
+                offset += static_cast<std::size_t>(written);
+            }
+            while (tcsetattr(STDIN_FILENO, TCSANOW, &original_) != 0 && errno == EINTR) {}
+            active_ = false;
+        }
+        while (installed_) {
+            --installed_;
+            sigaction(signals_[installed_], &previous_[installed_], nullptr);
+        }
+    }
+    swiftedit::TerminalSize size() const override {
+        struct winsize dimensions{};
+        if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &dimensions) != 0)
+            throw std::runtime_error("Cannot read terminal dimensions.");
+        const swiftedit::TerminalSize result{
+            dimensions.ws_col ? dimensions.ws_col : std::size_t(80),
+            dimensions.ws_row ? dimensions.ws_row : std::size_t(24)};
+        return result;
+    }
+    void write(const std::string_view text) const override {
+        std::size_t offset = 0;
+        while (offset < text.size()) {
+            if (interrupted)
+                throw std::runtime_error("Terminal interrupted; restoring terminal state.");
+            const ssize_t written = ::write(STDOUT_FILENO, text.data() + offset, text.size() - offset);
+            if (written < 0 && errno == EINTR)
+                continue;
+            if (written <= 0)
+                throw std::runtime_error("Cannot write terminal output.");
+            offset += static_cast<std::size_t>(written);
+        }
+    }
+    bool input_ready() const override {
+        if (pending_ || decoder_.ready() || offset_ < count_ || interrupted || resized)
+            return true;
+        struct pollfd descriptor{STDIN_FILENO, POLLIN, 0};
+        const int result = poll(&descriptor, 1, 0);
+        if (result < 0 && errno != EINTR)
+            throw std::runtime_error("Cannot inspect terminal input.");
+        const bool available = result != 0;
+        return available;
+    }
+    swiftedit::TerminalInput read() const override {
+        if (pending_) {
+            swiftedit::TerminalInput result = std::move(*pending_);
+            pending_.reset();
+            return result;
+        }
+        for (;;) {
+            if (interrupted)
+                throw std::runtime_error("Terminal interrupted; restoring terminal state.");
+            if (resized) {
+                resized = 0;
+                swiftedit::TerminalInput result{};
+                result.resized = true;
+                return result;
+            }
+            if (decoder_.ready()) {
+                swiftedit::TerminalInput result = decoder_.take();
+                return result;
+            }
+            if (offset_ < count_) {
+                decoder_.feed(bytes_[offset_]);
+                ++offset_;
+                continue;
+            }
+            struct pollfd descriptor{STDIN_FILENO, POLLIN, 0};
+            const int timeout = decoder_.escape_pending() ? 50 : -1;
+            const int ready = poll(&descriptor, 1, timeout);
+            if (ready < 0 && errno == EINTR)
+                continue;
+            if (ready < 0)
+                throw std::runtime_error("Cannot wait for terminal input.");
+            if (!ready) {
+                decoder_.expire();
+                continue;
+            }
+            const ssize_t received = ::read(STDIN_FILENO, bytes_.data(), bytes_.size());
+            if (received < 0 && errno == EINTR)
+                continue;
+            if (received <= 0)
+                throw std::runtime_error("Terminal input closed; restoring terminal state.");
+            offset_ = 0;
+            count_ = static_cast<std::size_t>(received);
+        }
+    }
+    void allow_wrap_cancel(const bool enabled) override { wrap_cancel_ = enabled; }
+    bool cancel_requested() override {
+        if (!wrap_cancel_ || !input_ready())
+            return false;
+        if (!pending_)
+            pending_ = read();
+        if ((*pending_).pressed && (*pending_).key == swiftedit::terminal_key::escape) {
+            pending_.reset();
+            return true;
+        }
+        return false;
+    }
+private:
+    static constexpr std::array<int, 5> signals_{SIGWINCH, SIGINT, SIGTERM, SIGHUP, SIGTSTP};
+    std::array<struct sigaction, 5> previous_{};
+    std::size_t installed_{};
+    struct termios original_{};
+    bool active_{}, wrap_cancel_{true};
+    mutable swiftedit::TerminalInputDecoder decoder_{};
+    mutable std::array<unsigned char, 4096> bytes_{};
+    mutable std::size_t offset_{}, count_{};
+    mutable std::optional<swiftedit::TerminalInput> pending_{};
+};
+} // namespace
+int main(int argc, char **argv) {
+    try {
+        if (argc > 2 || (argc == 2 && std::string_view(argv[1]) == "--help")) {
+            std::cout << "SwiftEdit interactive terminal\nUsage: swiftedit-terminal [file]\n"
+                         "Ctrl+S Save, Ctrl+R Open, Ctrl+X Exit; Ctrl+Z/Y Undo/Redo; "
+                         "Ctrl+K Cut, Ctrl+U Paste, Ctrl+T Save Text Copy.\n"
+                         "Ctrl+W Find, Ctrl+H Replace; F2 Wrap, F5 Date/Time, F6 Word Count.\n"
+                         "Shift+arrows select when supported by the terminal; clipboard is private.\n";
+            const int exit_code = argc > 2 ? 1 : 0;
+            return exit_code;
+        }
+        PosixConsole console{};
+        swiftedit::Terminal terminal(console);
+        const std::filesystem::path path = argc == 2 ? std::filesystem::path(argv[1]) :
+                                                     std::filesystem::path{};
+        const int result = terminal.run(path);
+        return result;
+    } catch (const std::exception &failure) {
+        std::cerr << failure.what() << '\n';
+        return 1;
+    }
+}

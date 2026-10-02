@@ -166,11 +166,17 @@ public:
                 continue;
             }
             const TerminalInput input = console_.read();
+            if (!input.error.empty()) {
+                high_surrogate_ = 0;
+                status_ = input.error;
+                redraw = true;
+                continue;
+            }
             if (input.resized) {
                 redraw = true;
                 continue;
             }
-            if (!input.pressed)
+            if (!input.pressed && !input.pasted)
                 continue;
             redraw = true;
             const TerminalInput &event = input;
@@ -416,6 +422,21 @@ private:
             status_ = "Search cancelled";
             if (key == terminal_key::escape)
                 return;
+        }
+        if (event.pasted) {
+            high_surrogate_ = 0;
+            if (prompt_ == Prompt::none)
+                buffer_.insert(event.paste);
+            else if (prompt_ == Prompt::find)
+                query_.insert(event.paste);
+            else if (prompt_ == Prompt::exit_choice)
+                status_ = "Type Y or N for the exit choice; pasted text is not a command.";
+            else {
+                if (event.paste.size() > 32768 - input_.size())
+                    throw std::runtime_error("Prompt input exceeds its UTF-8 byte limit.");
+                input_ += event.paste;
+            }
+            return;
         }
         if (prompt_ != Prompt::none) {
             if (key == terminal_key::escape) {

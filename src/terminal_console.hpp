@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
+#include <string>
 
 namespace swiftedit {
 namespace terminal_key {
@@ -23,6 +24,9 @@ struct TerminalInput {
     char16_t text_unit{};
     std::size_t repeats{1};
     bool pressed{}, resized{}, control{}, alt{}, shift{};
+    // Bracketed paste is one atomic source insertion, never a command stream.
+    bool pasted{};
+    std::string paste{}, error{};
 };
 class TerminalConsole : public TerminalWrapControl {
 public:

@@ -82,6 +82,19 @@ int main() {
         swiftedit::Terminal recovered(invalid);
         if (recovered.run(path) != 0 || notepad::read_file(path).bytes != "QAbase\r\n")
             throw std::runtime_error("Invalid input recovery changed source incorrectly.");
+        ScriptConsole pasted{};
+        swiftedit::TerminalInput paste{};
+        paste.pasted = true;
+        paste.paste = "\x13\x18line\r\n";
+        pasted.inputs.push_back(paste);
+        pasted.press('Z', 0, true);
+        pasted.press('Y', 0, true);
+        pasted.press('S', 0, true);
+        pasted.press('X', 0, true);
+        swiftedit::Terminal paste_terminal(pasted);
+        if (paste_terminal.run(path) != 0 || pasted.cursor != pasted.inputs.size() ||
+            notepad::read_file(path).bytes != paste.paste + "QAbase\r\n")
+            throw std::runtime_error("Paste executed commands or failed atomic undo/redo.");
         std::cout << "Shared terminal loop: Unicode, undo/redo, navigation, save and recovery passed.\n";
         return 0;
     } catch (const std::exception &failure) {
