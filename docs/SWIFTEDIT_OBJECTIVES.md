@@ -403,3 +403,19 @@ terminal-app test passed in 17.49 seconds. The other 22 tests passed in the
 preceding full-suite run; final test-only edits split the two distinct history
 reconstruction cases. House-style audit passed across 123 files. Native validation
 is pending; these event-count bounds do not establish a wall-time latency bound.
+
+Native validation update: 11d8a9ca747a4681ed31a57828a41eb2629e5ac7 passed all
+three native jobs in run 36966883286 and portable run 36966883356. Mac terminal-app
+completed in 27.60 seconds under the unchanged 60-second timeout; all 31 Mac
+tests passed in 65.42 seconds total. This clears the earlier CI timeout for the
+adaptive decoding/page-navigation checkpoint, not the separate idle-CPU issue.
+The automated dogfood-11d8a9ca747a release is public with all nine expected
+archives/checksums/manifests. Repeat slicing at 970cd73 was pushed afterward
+and requires its own native validation.
+
+Provider ownership check: the File Manager coordinator's latest report identifies
+the multiline-text chat as idle and the multi-paragraph document view as unfinished.
+SwiftEdit requested an explicit owner and public-capability checkpoint for its
+remaining document-view/mapping, multi-selection and print dependencies. These
+must not be described as actively progressing without fresh evidence. The frozen
+SDK remains unchanged and no provider source was modified.
