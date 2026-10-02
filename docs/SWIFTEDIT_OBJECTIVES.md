@@ -536,3 +536,22 @@ validation scope. v0.3.0 remains immutable and has no bundled Mac CLI. Packaging
 tool syntax checks passed locally; actual Mach-O fixup/signing and packaged launch
 require the v0.3.1 native tag build. This checkpoint also includes the Markdown/CSV
 navigation improvements and project-version About text.
+
+Validation update: v0.3.1 at 1a0e1e9d1bd1 passed all three native platform jobs
+and release publication in run 36971134655. The public, non-prerelease GitHub
+release contains all three archives, their checksums and platform manifests
+(nine assets). Mac CLI bundle fixup, signing and packaged launch passed. The
+preceding master run 36970933135 also passed; master now includes the release
+commit. This does not close the final physical GUI responsiveness audit.
+
+GUI polish provider checkpoint: the coordinator granted bounded title/menu
+ownership. Uncommitted GUI.Forms changes implement validated dynamic native
+titles on Windows/macOS/Linux and explicit pointer-versus-keyboard menu opening.
+Pointer opening focuses the accessible menu container without selecting a row;
+keyboard opening retains first-enabled-row focus. Focused application contract
+and menu tests passed 2/2 (0.06 seconds); Windows native test executable compiled
+without a local GUI launch. The 19-file patch and proposed public contract were
+handed to the coordinator for independent review and native platform validation.
+It is not an exported SDK and is not included in v0.3.1. SwiftEdit's duplicate
+filename row remains until adoption of a reviewed public SDK. Markdown check
+state and recessed status-bar painting are already included in v0.3.1.
