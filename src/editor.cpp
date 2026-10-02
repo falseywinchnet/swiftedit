@@ -182,7 +182,9 @@ gf::MenuItemSpec Editor::item(std::string id, std::string label, std::string sho
     (*command).set_shortcut(shortcut_text);
     subscriptions_.push_back((*command).invoked().subscribe(*this, CommandListener{observe(), id}));
     commands_[id] = command;
-    const gf::MenuItemSpec result{id, gf::MenuItemKind::command, command, label};
+    const bool toggle = id == "wrap" || id == "status" || id == "csv-view" || id == "markdown-view";
+    const gf::MenuItemKind kind = toggle ? gf::MenuItemKind::check : gf::MenuItemKind::command;
+    const gf::MenuItemSpec result{id, kind, command, label};
     return result;
 }
 void Editor::initialize_control_tree() {
@@ -272,6 +274,16 @@ void Editor::arrange(gf::Rect bounds) {
     set_child_layout(markdown_, {0, 52, bounds.width, std::max(0.0, bounds.height - 52 - bottom)});
     set_child_layout(status_, {8, std::max(52.0, bounds.height - bottom),
                                std::max(0.0, bounds.width - 16), bottom});
+}
+void Editor::on_paint(gf::Painter &painter, gf::Rect) {
+    if (!show_status_)
+        return;
+    const gf::Rect bounds = committed_arranged_bounds();
+    const double top = std::max(52.0, bounds.height - 26.0);
+    const gf::BasicControlStyle &style = effective_theme().basic_style();
+    painter.fill_rect({0, top, bounds.width, 26}, style.face);
+    painter.draw_line({0, top + 0.5}, {bounds.width, top + 0.5}, style.border, 1);
+    painter.draw_line({0, top + 1.5}, {bounds.width, top + 1.5}, style.face_light, 1);
 }
 void Editor::refresh() {
     if (!text_ || !status_)

@@ -1,8 +1,9 @@
-"""Publish one immutable, all-platform prerelease after the native matrix passes."""
+"""Publish one immutable, versioned all-platform release after the native matrix passes."""
 from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -11,9 +12,17 @@ import subprocess
 def main() -> None:
     parser: argparse.ArgumentParser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--artifacts', type=Path, required=True)
+    parser.add_argument('--tag', required=True)
     arguments: argparse.Namespace = parser.parse_args()
     revision: str = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
-    tag: str = 'dogfood-' + revision[:12]
+    tag: str = arguments.tag
+    project: str = Path('CMakeLists.txt').read_text(encoding='utf-8')
+    version: re.Match[str] | None = re.search(r'project\(SwiftEdit VERSION ([0-9]+\.[0-9]+\.[0-9]+)', project)
+    if version is None or tag != 'v' + version.group(1):
+        raise RuntimeError('Release tag must match the SwiftEdit CMake project version')
+    tagged_revision: str = subprocess.check_output(['git', 'rev-parse', tag + '^{commit}'], text=True).strip()
+    if tagged_revision != revision:
+        raise RuntimeError('Release tag must point at the checked-out source revision')
     staging: Path = arguments.artifacts / 'publish'
     staging.mkdir()
     files: list[str] = []
@@ -38,7 +47,7 @@ def main() -> None:
             files.append(str(target))
     notes: Path = staging / 'notes.md'
     notes.write_text(
-        'Native SwiftEdit dogfood builds from commit `' + revision + '`.\n\n'
+        'SwiftEdit ' + tag + ' for Windows, macOS and Linux, from commit `' + revision + '`.\n\n'
         'All three native build/test jobs and packaged startup checks passed before publication. '
         'Download the archive for your platform and extract it completely.\n\n'
         '- **macOS:** Apple silicon, macOS 26. Ad-hoc signed; not notarized.\n'
@@ -48,7 +57,7 @@ def main() -> None:
         'SHA-256 sidecars and source/SDK manifests accompany the downloads.\n\n'
         'The expanded feature set is still in development. The GUI currently uses its older '
         '1 MiB UTF-8 / 4096-byte line path; large-file operations are available in the terminal. '
-        'The reported blank-window Mac CPU issue remains open. See the repository objective ledger '
+        'The owner reports that the blank-window Mac CPU issue appears resolved. See the repository objective ledger '
         'for remaining GUI, print and responsiveness work.\n', encoding='utf-8')
     observed: subprocess.CompletedProcess[str] = subprocess.run(
         ['gh', 'release', 'view', tag, '--json', 'isDraft,targetCommitish,assets'],
@@ -60,8 +69,8 @@ def main() -> None:
         if not existing['isDraft']:
             raise RuntimeError('This immutable release is already published; do not replace its assets')
     else:
-        subprocess.run(['gh', 'release', 'create', tag, '--target', revision, '--prerelease', '--draft',
-                        '--title', 'SwiftEdit cross-platform dogfood ' + revision[:12],
+        subprocess.run(['gh', 'release', 'create', tag, '--target', revision, '--draft',
+                        '--title', 'SwiftEdit ' + tag + ' — Windows, macOS and Linux',
                         '--notes-file', str(notes)], check=True)
     subprocess.run(['gh', 'release', 'upload', tag, '--clobber'] + files, check=True)
     uploaded_text: str = subprocess.check_output(['gh', 'release', 'view', tag, '--json', 'assets'], text=True)

@@ -1,7 +1,8 @@
-name: Native SwiftEdit dogfood builds
+name: Build cross-platform SwiftEdit
 on:
   push:
     branches: [master]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 permissions:
@@ -83,9 +84,9 @@ jobs:
           if-no-files-found: ignore
 
   release:
-    name: Publish validated cross-platform prerelease
+    name: Publish validated cross-platform release
     needs: native
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -98,4 +99,4 @@ jobs:
       - name: Publish immutable commit download set
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 -B tools/Publish-Release.py --artifacts release-assets
+        run: python3 -B tools/Publish-Release.py --artifacts release-assets --tag "$GITHUB_REF_NAME"

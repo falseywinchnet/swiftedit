@@ -438,3 +438,29 @@ public SDK availability, root CMake and workflows remain coordinator-owned.
 Provider commits/pushes are prohibited for this assignment; source-review and
 test evidence go back for independent integration. No workers or subagents.
 This supersedes the idle-prototype ownership statement, not the capability gaps.
+
+## Owner dogfood follow-up: GUI polish and versioned releases
+
+The owner reports that the Mac blank-window CPU issue appears cured. This is
+owner-observed improvement, not a new controlled measurement. Remaining GUI
+feedback: visible Markdown mode state, inconsistent passive menu highlighting,
+status-bar depth, and moving the filename from the client row into the native
+window title.
+
+Markdown, CSV table, Word Wrap and Status Bar commands previously set checked
+state on ordinary command items, whose renderer omits the checkmark. They now
+use check items. A headless regression exercises Markdown on/off and verifies
+all four item kinds. The status strip now has a theme-colored face and two-tone
+top edge, with no periodic work. The initial full suite passed all 23 tests in
+27.84 seconds. Native visual validation remains pending.
+
+The installed SDK exposes creation titles but no dynamic window-title update.
+The provider coordinator has been asked to own that cross-platform capability
+and the pointer/keyboard menu-focus investigation. The filename row is retained
+until its replacement can preserve document identity and dirty-state visibility.
+
+Release policy now follows versioned application tags: master builds do not
+publish commit-named releases. A matching v0.3.0 tag builds Windows x64, macOS
+ARM64 and Linux x64, then publishes one immutable release only after every
+platform passes. Archive hashes and same-source manifests remain mandatory;
+historical releases remain intact. Expanded product implementation is unfinished.

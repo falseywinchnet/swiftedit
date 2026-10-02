@@ -5,7 +5,7 @@ Document Picker packages. Traditional dropdown menus, owned dialogs, plain-text
 clipboard, no ribbon, browser runtime or persistent recovery files.
 
 **Downloads:** [SwiftEdit releases](https://github.com/falseywinchnet/swiftedit/releases).
-Choose a cross-platform dogfood prerelease and download the archive for your
+Choose a versioned cross-platform release and download the archive for your
 platform. These are public downloads; GitHub sign-in is not required.
 
 | Platform | Archive | Launch after extracting completely |
@@ -21,8 +21,9 @@ editor is included on all three platforms; Windows and Linux also include the CL
 Native CI builds and tests Windows x64, macOS ARM64 and Linux x64 on every push.
 It consumes the matching installed SDK archives pinned in
 `ci/native-sdk-lock.json`. After all three native jobs and packaged startup checks
-pass on a master push, CI publishes an immutable `dogfood-<commit>` prerelease
-containing all three archives. Pull requests build and test without publishing.
+pass for a `v<version>` tag matching the CMake project version, CI publishes one
+immutable release containing all three archives. Master pushes and pull requests
+build and test without publishing releases. Historical dogfood downloads remain available.
 The
 [first release evidence](docs/DOGFOOD_2026-10-01.md) records the exact checks.
 
@@ -79,6 +80,6 @@ Linux in [the native workflow](.github/workflows/native-builds.yml). Download
 applications from Releases; CI diagnostic artifacts contain additional test and
 performance evidence. Older Mac-only releases remain available.
 
-These are development prereleases. The reported blank-window Mac CPU issue is
-still open, and the expanded feature set is not complete. See the
+The expanded feature set is not complete. The owner reports that blank-window
+Mac CPU usage appears resolved in dogfooding; GUI polish remains in progress. See the
 [objective ledger](docs/SWIFTEDIT_OBJECTIVES.md) for remaining work.

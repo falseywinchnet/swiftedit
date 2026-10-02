@@ -71,6 +71,31 @@ gf::Control::Ptr find_control(const gf::Control::Ptr &root, std::string_view id)
     }
     return {};
 }
+void verify_view_menu_state() {
+    const std::shared_ptr<notepad::Editor> editor =
+        gf::make_control<notepad::Editor>(gf::StableId("menu-state.editor"));
+    const std::shared_ptr<gf::MenuStrip> menu =
+        std::dynamic_pointer_cast<gf::MenuStrip>(find_control(editor, "notepad.menus"));
+    check(static_cast<bool>(menu), "Editor exposes its menu strip");
+    std::size_t toggles = 0;
+    for (const gf::MenuStripItemSpec &group : (*menu).items()) {
+        for (const gf::MenuItemSpec &item : group.items) {
+            if (item.stable_id == "wrap" || item.stable_id == "status" ||
+                item.stable_id == "csv-view" || item.stable_id == "markdown-view") {
+                ++toggles;
+                check(item.kind == gf::MenuItemKind::check, "View modes must render checked state");
+            }
+            if (item.stable_id == "markdown-view") {
+                check(!(*item.command).state().checked, "Markdown begins unchecked");
+                (*editor).execute("markdown-view");
+                check((*item.command).state().checked, "Rendered Markdown is checked");
+                (*editor).execute("markdown-view");
+                check(!(*item.command).state().checked, "Source view clears Markdown check");
+            }
+        }
+    }
+    check(toggles == 4, "All four view toggles expose checkmarks");
+}
 void verify_conflict_fields() {
     const std::filesystem::path dir =
         std::filesystem::temp_directory_path() /
@@ -612,6 +637,7 @@ int main(const int argc, char **const argv) {
             std::cout << "Picker file-link open/edit/save probe passed\n";
             return 0;
         }
+        verify_view_menu_state();
         verify_callback_revocation();
         verify_file_shortcuts();
         verify_picker_home();

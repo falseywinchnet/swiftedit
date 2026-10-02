@@ -40,6 +40,7 @@ public:
     static constexpr bool initialize_tree_after_construction = true;
     void initialize_control_tree();
     void arrange(gf::Rect bounds) override;
+    void on_paint(gf::Painter &, gf::Rect) override;
     void on_frame(gf::FrameTime) override;
     bool search_pending() const { return static_cast<bool>(search_); }
     std::vector<gf::ApplicationWindow> application_windows(const std::filesystem::path &initial);
