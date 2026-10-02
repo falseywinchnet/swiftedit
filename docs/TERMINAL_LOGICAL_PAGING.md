@@ -99,7 +99,7 @@ boundaries, empty EOF, cancellation, stale output and an actual 16 MiB read-only
 line. This is the cancellable reveal operation; host commands are not yet wired.
 
 The terminal input loop now uses these operations. F2 switches read-only files
-between the existing hard-wrapped view and a no-wrap view. Replacement work
+between the wrapped view and a no-wrap view. Replacement work
 advances cooperatively and remains private until complete. Escape cancels a
 transition or movement and restores the prior published caret/selection. Resize
 reprepares the viewport; old frames with incompatible dimensions are withheld.
@@ -124,10 +124,30 @@ clamping at document edges, and stale-source refusal. The 137-file spelling
 audit passed. Source review checked ownership, complete-before-publication,
 restoration on failure/cancellation, and absence of added idle polling.
 
-Still required: intelligent space wrapping for read-only views, native/physical
-host checks, and responsiveness measurement of mode changes and long-line
-navigation. Read-only wrap mode remains hard wrapping; this does not close the
-full wrap or final responsiveness requirement.
+Read-only wrapping now prefers the last ASCII space/tab before overflow, keeping
+all original whitespace and source mappings. If there is no break opportunity,
+long words still wrap at grapheme boundaries; inert labels may continue across
+rows without executing source controls. Rendering and End/Page Up reconstruction
+share the same break calculation. The scanner carries the last break across read
+chunks and can rewind only the unfinished word. Backward navigation waits for a
+confirmed row start rather than assuming that scanning past a byte finalizes its
+row. This avoids choosing a stale row when later overflow moves that word.
+
+Tests compare paged row boundaries with the editable terminal's wrap policy for
+spaces, tabs, repeated whitespace, long words, Unicode and combining text.
+End reconstruction is checked with read budgets 1, 2, 3, 7, 33 and 8192 bytes;
+an explicit long word crosses the 8 KiB read edge. Control-label continuation
+and source-preserving Shift+Down/Copy/Up are exercised through the terminal loop
+on a real read-only file. An initial test build needed the direct wrap header;
+the stale test binary from that failed build was not treated as validation.
+The subsequent full Windows Release build and 26/26 headless tests passed in
+20.84 seconds. The 138-file spelling audit passed. Native validation of the
+preceding prefix optimization passed in run 36991994057; this new wrapping
+change still needs its own native evidence.
+
+Still required: native validation of space wrapping, physical host checks, and
+broader responsiveness measurement of mode changes and long-line navigation.
+This does not close the full wrap QA or final responsiveness requirement.
 
 Native run 36989937839 at 901152d passed all three platforms and packaging,
 including the F2/no-wrap input-loop tests. A subsequent timing scan found

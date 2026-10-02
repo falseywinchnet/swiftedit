@@ -543,6 +543,27 @@ int main() {
         if (run_case(cancelled_nowrap_terminal, nowrap_path, "cancelled_nowrap_terminal") != 0 ||
             cancelled_nowrap.no_wrap_frames)
             throw std::runtime_error("F2 no-wrap transition ignored cancellation before publication.");
+        const std::filesystem::path wordwrap_path = directory / "word-wrap-read-only.txt";
+        {
+            std::ofstream output(wordwrap_path, std::ios::binary);
+            output << "alpha " << std::string(78, 'b') << " end\r\n";
+            for (std::size_t row = 0; row < 100; ++row)
+                output << "row\r\n";
+            output.seekp(swiftedit::editable_limit - 1);
+            output.put('z');
+        }
+        ScriptConsole wordwrap{};
+        wordwrap.expected_copy = "Copied 6 bytes";
+        wordwrap.press(swiftedit::terminal_key::down, 0, false, true);
+        wordwrap.press('C', 0, true);
+        wordwrap.press(swiftedit::terminal_key::up);
+        wordwrap.press(swiftedit::terminal_key::right, 0, false, true);
+        wordwrap.press('C', 0, true);
+        wordwrap.press('X', 0, true);
+        swiftedit::Terminal wordwrap_terminal(wordwrap);
+        if (run_case(wordwrap_terminal, wordwrap_path, "wordwrap_terminal") != 0 ||
+            !wordwrap.expected_copy_seen || !wordwrap.single_copy_seen)
+            throw std::runtime_error("Read-only word-wrap navigation did not follow the rendered source boundary.");
         ScriptConsole resized_nowrap{};
         resized_nowrap.wait_for_no_wrap = true;
         resized_nowrap.resize_after = 5;

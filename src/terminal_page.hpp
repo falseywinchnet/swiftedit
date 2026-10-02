@@ -51,6 +51,8 @@ struct TerminalPageCaret {
 // labels may continue across rows/pages.
 [[nodiscard]] TerminalPageFrame terminal_page(const Session &, TerminalPageCursor,
                                               std::size_t width, std::size_t rows);
+// Rows prefer spaces/tabs without removing source bytes. Reconstruction carries
+// the last word break across reads and may rewind an unfinished word.
 // Normally reads 8 KiB per step. Incomplete first graphemes grow context up to
 // 64 KiB (at most 120 KiB total reads for the default adaptive step). Retains the final
 // viewport and at most 32768 preceding row cursors for backward navigation.
@@ -71,6 +73,7 @@ private:
     std::uint64_t size_{};
     std::size_t width_{}, rows_{};
     std::size_t source_budget_{}, column_{};
+    std::optional<TerminalPageCursor> word_break_{};
     TerminalPageCursor cursor_{};
     std::optional<TerminalPageCursor> before_{};
     std::deque<TerminalPageCursor> tail_{};

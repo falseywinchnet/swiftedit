@@ -1,5 +1,6 @@
 #include "terminal_buffer.hpp"
 #include "terminal_row.hpp"
+#include "terminal_wrap.hpp"
 #include "terminal_page.hpp"
 #include "terminal_search.hpp"
 #include "terminal_query.hpp"
@@ -14,8 +15,72 @@ void check(bool condition, const char *message) {
         throw std::runtime_error(message);
 }
 } // namespace
+void check_paged_word_wrap(const std::string &source, const std::size_t width) {
+    swiftedit::TerminalBuffer buffer{};
+    buffer.insert(source);
+    const swiftedit::Session &session = buffer.session();
+    std::vector<std::uint64_t> starts{};
+    std::size_t offset = 0;
+    swiftedit::TerminalPageCursor cursor{};
+    while (offset < source.size()) {
+        starts.push_back(offset);
+        const swiftedit::TerminalWrapSpan expected = swiftedit::terminal_wrap_span(buffer, 0, offset, width);
+        const swiftedit::TerminalPageFrame frame = swiftedit::terminal_page(session, cursor, width, 1);
+        const std::size_t next = expected.source.offset + expected.source.length;
+        check(frame.next.offset == next && !frame.next.label_cell && next > offset,
+              "Paged space wrapping must agree with editable logical-row wrapping");
+        for (const swiftedit::TerminalPageRun &run : frame.runs)
+            check(run.row == 0 && run.source_offset >= offset &&
+                      run.source_offset + run.source_length <= next,
+                  "A rewound word cannot leave stale painted runs on the previous row");
+        offset = next;
+        cursor = frame.next;
+    }
+    for (const std::size_t budget : {1U, 2U, 3U, 7U, 33U, 8192U}) {
+        for (const std::size_t rows : {1U, 2U, 3U}) {
+            swiftedit::TerminalPageEnd end(session, width, rows, budget);
+            std::size_t steps = 0;
+            while (!end.step(session)) {
+                ++steps;
+                check(steps < source.size() * 4 + 100, "Wrapped End reconstruction must make progress");
+            }
+            const std::size_t first = starts.size() > rows ? starts.size() - rows : 0;
+            check(end.result(session).offset == starts[first],
+                  "End reconstruction must preserve word boundaries across source chunks");
+        }
+    }
+    for (std::size_t row = 1; row < starts.size(); ++row) {
+        swiftedit::TerminalPageEnd previous(session, width, 1,
+            swiftedit::TerminalPageCursor{starts[row], 0, false});
+        while (!previous.step(session)) {}
+        check(previous.result(session).offset == starts[row - 1],
+              "Backward reconstruction must find the preceding word-wrapped row");
+    }
+    check(session.text() == source, "Word wrapping must preserve original whitespace and source bytes");
+}
 int main() {
     try {
+        check_paged_word_wrap("one two three four five", 9);
+        check_paged_word_wrap("ab cd ef gh", 6);
+        check_paged_word_wrap("    abc   def  end ", 7);
+        check_paged_word_wrap("word\tword\tlast", 8);
+        check_paged_word_wrap("abcdefghijklmnop longwordwithnospaces z", 8);
+        check_paged_word_wrap("a \xe6\xbc\xa2\xe6\xbc\xa2 " "e\xcc\x81 next end", 7);
+        check_paged_word_wrap(std::string(8189, 'x') + " " + std::string(900, 'y') + " z", 1000);
+        swiftedit::Session wrapped_control{};
+        wrapped_control.replace_ranges({{0, 0}}, "ab \x1b cd", wrapped_control.stamp());
+        const swiftedit::TerminalPageFrame wrapped_control_frame =
+            swiftedit::terminal_page(wrapped_control, {}, 6, 3);
+        std::vector<std::string> control_rows(3);
+        for (const swiftedit::TerminalPageRun &run : wrapped_control_frame.runs)
+            control_rows[run.row] += run.text;
+        check(control_rows[0] == "ab " && control_rows[1] == "[U+001" && control_rows[2] == "B] cd",
+              "Word wrapping preserves complete inert control labels across narrower rows");
+        swiftedit::TerminalPageEnd control_end(wrapped_control, 6, 1, 1);
+        while (!control_end.step(wrapped_control)) {}
+        check(control_end.result(wrapped_control).offset == 3 &&
+                  control_end.result(wrapped_control).label_cell == 6,
+              "End reconstruction retains the control-label continuation after a word break");
         swiftedit::TerminalBuffer terminal{};
         std::tm calendar{};
         calendar.tm_year = 126;

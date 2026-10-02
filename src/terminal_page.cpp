@@ -118,11 +118,32 @@ struct BuiltPage {
     std::size_t next_column{};
     bool needs_context{};
     bool viewport_filled{};
+    std::optional<TerminalPageCursor> word_break{};
 };
+struct PageWordBreak {
+    TerminalPageCursor cursor{};
+    std::size_t next_index{}, runs{}, graphemes{};
+    bool local{};
+};
+template <bool PaintRuns>
+static void rewind_page_word(BuiltPage &built, const PageWordBreak &point,
+                             std::size_t &row, std::size_t &column, std::size_t &index) {
+    if constexpr (PaintRuns) {
+        built.page.runs.resize(point.runs);
+        built.page.graphemes.resize(point.graphemes);
+    }
+    ++row;
+    column = 0;
+    built.page.next = point.cursor;
+    built.page.row_starts.push_back(point.cursor);
+    if (point.local)
+        index = point.next_index - 1;
+}
 template <bool PaintRuns>
 static BuiltPage build_terminal_page(const Session &session, const TerminalPageCursor cursor,
                                      const std::size_t width, const std::size_t rows,
-                                     const std::size_t source_budget, const std::size_t initial_column) {
+                                     const std::size_t source_budget, const std::size_t initial_column,
+                                     const std::optional<TerminalPageCursor> initial_break = std::nullopt) {
     if (!width || width > 1000 || !rows || rows > 32768)
         throw std::runtime_error("Terminal page dimensions exceed their bounded range.");
     if (initial_column >= width)
@@ -168,6 +189,10 @@ static BuiltPage build_terminal_page(const Session &session, const TerminalPageC
     std::size_t row = 0;
     std::size_t column = initial_column;
     bool after_wrap = cursor.after_wrap;
+    std::optional<PageWordBreak> word_break{};
+    if (initial_break)
+        word_break = PageWordBreak{*initial_break, 0, 0, 0, false};
+    bool stop = false;
     for (std::size_t index = 0; index < count && row < rows; ++index) {
         const gf::Utf8Range range = text.grapheme_range(gf::GraphemeIndex(index));
         const std::size_t offset = range.start.value();
@@ -176,6 +201,7 @@ static BuiltPage build_terminal_page(const Session &session, const TerminalPageC
         if constexpr (PaintRuns)
             result.graphemes.push_back({static_cast<std::size_t>(cursor.offset + offset), length});
         if (bytes == "\r" || bytes == "\n" || bytes == "\r\n") {
+            word_break.reset();
             if (index == 0 && cursor.label_cell)
                 throw std::runtime_error("Invalid terminal label continuation.");
             if constexpr (PaintRuns)
@@ -200,10 +226,22 @@ static BuiltPage build_terminal_page(const Session &session, const TerminalPageC
         if (!glyph.label && glyph.cells > width)
             throw std::runtime_error("A printable grapheme is wider than this terminal. Enlarge "
                                      "the window; source is unchanged.");
+        if (word_break && column + glyph.cells - consumed > width) {
+            const PageWordBreak point = *word_break;
+            rewind_page_word<PaintRuns>(built, point, row, column, index);
+            word_break.reset();
+            after_wrap = false;
+            if (!point.local) {
+                stop = true;
+                break;
+            }
+            continue;
+        }
         if (!glyph.label && column + glyph.cells > width) {
             ++row;
             column = 0;
             result.row_starts.push_back({cursor.offset + offset, 0, false});
+            word_break.reset();
             if (row == rows)
                 break;
             // Tab stops depend on the row column after wrapping.
@@ -231,17 +269,38 @@ static BuiltPage build_terminal_page(const Session &session, const TerminalPageC
                 result.next = {cursor.offset + offset + length, 0};
             else
                 result.next = {cursor.offset + offset, consumed};
+            if (consumed == glyph.cells && (bytes == " " || bytes == "\t"))
+                word_break = PageWordBreak{result.next, index + 1, result.runs.size(), result.graphemes.size(), true};
             if (column == width) {
+                bool follows = consumed < glyph.cells;
+                if (!follows && index + 1 < text.grapheme_count().value()) {
+                    const gf::Utf8Range next_range = text.grapheme_range(gf::GraphemeIndex(index + 1));
+                    const char next_byte = source.bytes[next_range.start.value()];
+                    follows = next_byte != '\r' && next_byte != '\n';
+                }
+                if (word_break && follows && (*word_break).cursor.offset < result.next.offset) {
+                    const PageWordBreak point = *word_break;
+                    rewind_page_word<PaintRuns>(built, point, row, column, index);
+                    word_break.reset();
+                    after_wrap = false;
+                    stop = !point.local;
+                    break;
+                }
                 ++row;
                 column = 0;
                 after_wrap = true;
                 result.next.after_wrap = true;
                 result.row_starts.push_back(result.next);
+                word_break.reset();
             }
         }
+        if (stop)
+            break;
     }
     result.more = result.next.offset < source.size || result.next.label_cell != 0;
     built.next_column = column;
+    if (word_break)
+        built.word_break = (*word_break).cursor;
     built.viewport_filled = row >= rows;
     return built;
 }
@@ -355,19 +414,22 @@ bool TerminalPageEnd::step(const Session &session) {
     // Grow context only when the first grapheme is incomplete. Ordinary steps
     // yield after 8 KiB; exceptionally long graphemes retain the 64 KiB ceiling.
     std::size_t budget = source_budget_;
-    BuiltPage built = build_terminal_page<false>(session, cursor_, width_, 32768, budget, column_);
+    BuiltPage built = build_terminal_page<false>(session, cursor_, width_, 32768, budget, column_, word_break_);
     while (built.needs_context && budget < maximum_page) {
         budget = std::min(maximum_page, budget * 2);
-        built = build_terminal_page<false>(session, cursor_, width_, 32768, budget, column_);
+        built = build_terminal_page<false>(session, cursor_, width_, 32768, budget, column_, word_break_);
     }
     if (built.needs_context)
         throw std::runtime_error("A complete grapheme exceeds the terminal page context limit. Source is unchanged.");
     const TerminalPageFrame &frame = built.page;
-    if (frame.more && frame.next == cursor_)
+    if (frame.more && frame.next == cursor_ && built.next_column == column_)
         throw std::runtime_error("End navigation made no source progress.");
+    bool passed_before = false;
     for (const TerminalPageCursor start : frame.row_starts) {
-        if (before_ && !cursor_precedes(start, *before_))
+        if (before_ && !cursor_precedes(start, *before_)) {
+            passed_before = true;
             break;
+        }
         if (start.offset == size_ && size_ != 0)
             continue;
         if (!tail_.empty() && tail_.back() == start)
@@ -378,7 +440,10 @@ bool TerminalPageEnd::step(const Session &session) {
     }
     cursor_ = frame.next;
     column_ = built.next_column;
-    complete_ = !frame.more || (before_ && !cursor_precedes(cursor_, *before_));
+    word_break_ = built.word_break;
+    // A word can move to the following row after a later overflow. Do not
+    // finalize backward reconstruction merely because its bytes were scanned.
+    complete_ = !frame.more || passed_before;
     return complete_;
 }
 TerminalPageCursor TerminalPageEnd::result(const Session &session) const {
