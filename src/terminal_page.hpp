@@ -69,6 +69,19 @@ private:
     std::deque<TerminalPageCursor> tail_{};
     bool complete_{};
 };
+// Logical-line navigation from a proven source grapheme boundary. Each step
+// reads at most 8 KiB; cancellation drops the owner without publishing a caret.
+class TerminalLineBoundary final {
+public:
+    TerminalLineBoundary(const Session &, std::uint64_t caret, bool end);
+    [[nodiscard]] bool step(const Session &);
+    [[nodiscard]] std::uint64_t result(const Session &) const;
+private:
+    void validate(const Session &) const;
+    DocumentStamp stamp_{};
+    std::uint64_t size_{}, cursor_{};
+    bool end_{}, complete_{};
+};
 class TerminalPager {
 public:
     void reset(const Session &);

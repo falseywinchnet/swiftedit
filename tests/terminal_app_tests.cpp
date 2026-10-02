@@ -13,6 +13,8 @@ public:
     bool wait_for_search{};
     mutable std::size_t found_count{};
     mutable bool three_copy_seen{}, two_copy_seen{}, caret_completed{};
+    mutable bool line_pending{}, line_completed{};
+    bool wait_for_line{};
     bool started{};
     void start() override { started = true; }
     swiftedit::TerminalSize size() const override { return {80, 24}; }
@@ -20,6 +22,12 @@ public:
         if (text.empty() || !started)
             throw std::runtime_error("Unexpected empty or premature terminal frame.");
         ++writes;
+        if (text.find("Finding line boundary...") != std::string_view::npos)
+            line_pending = true;
+        if (text.find("Read-only line boundary reached") != std::string_view::npos) {
+            line_pending = false;
+            line_completed = true;
+        }
         if (text.find("Finding previous grapheme...") != std::string_view::npos)
             previous_pending = true;
         if (text.find("Read-only caret moved") != std::string_view::npos && previous_pending) {
@@ -51,7 +59,7 @@ public:
     }
     bool input_ready() const override {
         const bool ready = cursor < inputs.size() && (!wait_for_end || end_seen) &&
-                           (!wait_for_copy || copy_seen) && (!wait_for_previous || !previous_pending) &&
+                           (!wait_for_line || !line_pending) && (!wait_for_copy || copy_seen) && (!wait_for_previous || !previous_pending) &&
                            (!wait_for_search || !search_pending);
         return ready;
     }
@@ -264,6 +272,27 @@ int main() {
         if (horizontal_terminal.run(horizontal_path) != 0 || !horizontal.three_copy_seen ||
             !horizontal.two_copy_seen || !horizontal.single_copy_seen)
             throw std::runtime_error("Shift+Right did not select atomic Unicode, CRLF and control source bytes.");
+        ScriptConsole line_selection{};
+        line_selection.wait_for_line = true;
+        line_selection.press(swiftedit::terminal_key::end, 0, false, true);
+        line_selection.press('C', 0, true);
+        line_selection.press(swiftedit::terminal_key::home);
+        line_selection.press(swiftedit::terminal_key::right, 0, false, true);
+        line_selection.press('C', 0, true);
+        line_selection.press('X', 0, true);
+        swiftedit::Terminal line_terminal(line_selection);
+        if (line_terminal.run(horizontal_path) != 0 || !line_selection.line_completed ||
+            !line_selection.three_copy_seen)
+            throw std::runtime_error("Read-only Home/End failed to select the logical line.");
+        ScriptConsole cancelled_line{};
+        cancelled_line.press('A', 0, true);
+        cancelled_line.press(swiftedit::terminal_key::right);
+        cancelled_line.press(swiftedit::terminal_key::home);
+        cancelled_line.press(swiftedit::terminal_key::escape);
+        cancelled_line.press('X', 0, true);
+        swiftedit::Terminal cancelled_line_terminal(cancelled_line);
+        if (cancelled_line_terminal.run(horizontal_path) != 0 || cancelled_line.line_completed)
+            throw std::runtime_error("Read-only Home did not cancel before publishing its result.");
         ScriptConsole distant_left{};
         distant_left.wait_for_previous = true;
         distant_left.press('A', 0, true);

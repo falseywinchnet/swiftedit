@@ -183,3 +183,7 @@ reconstructs the earlier row cooperatively; source and pending selection stay
 unchanged until completion. Details and validation are in TERMINAL_PORTABILITY.md.
 This closes the basic terminal horizontal-motion gap; GUI integration and broader
 physical terminal dogfooding remain unfinished.
+
+Read-only terminal Home/End now use cancellable, bounded logical-line scans with
+Shift selection. This removes their editable-buffer fallback; desired-column
+vertical caret motion and physical terminal dogfooding remain unfinished.

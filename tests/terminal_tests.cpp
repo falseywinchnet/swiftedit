@@ -437,6 +437,30 @@ int main() {
             swiftedit::terminal_page_caret(blank_frame, 5, 4, 4);
         check(blank_start && (*blank_start).row == 1 && (*blank_start).column == 0,
               "Blank-line caret survives a preceding wrap plus newline");
+        swiftedit::Session lines{};
+        const std::string long_lines = "a\r\n" + std::string(20000, 'x') + "\rZ\n";
+        lines.replace_ranges({{0, 0}}, long_lines, lines.stamp());
+        swiftedit::TerminalLineBoundary line_end(lines, 3, true);
+        check(!line_end.step(lines), "Long-line End yields after a bounded read");
+        check(!line_end.step(lines), "Long-line End remains cooperative across chunks");
+        check(line_end.step(lines) && line_end.result(lines) == 20003,
+              "End stops before the source separator");
+        swiftedit::TerminalLineBoundary line_home(lines, 20003, false);
+        check(!line_home.step(lines), "Long-line Home yields after a bounded backward read");
+        while (!line_home.step(lines)) {}
+        check(line_home.result(lines) == 3, "Home returns after the complete CRLF");
+        swiftedit::TerminalLineBoundary crlf_end(lines, 0, true);
+        check(crlf_end.step(lines) && crlf_end.result(lines) == 1,
+              "End excludes both bytes of CRLF");
+        swiftedit::TerminalLineBoundary empty_home(lines, lines.size(), false);
+        check(empty_home.step(lines) && empty_home.result(lines) == lines.size(),
+              "Home preserves the empty trailing line");
+        swiftedit::TerminalLineBoundary stale_line(lines, 3, true);
+        lines.reset();
+        bool stale_line_rejected = false;
+        try { static_cast<void>(stale_line.step(lines)); }
+        catch (const std::exception &) { stale_line_rejected = true; }
+        check(stale_line_rejected, "Line navigation rejects a replaced source");
         const std::filesystem::path large_path = dir / "large.txt";
         {
             std::ofstream file(large_path, std::ios::binary);

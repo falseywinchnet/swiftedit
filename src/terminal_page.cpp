@@ -5,6 +5,55 @@
 #include <stdexcept>
 namespace swiftedit {
 namespace gf = gui_forms;
+TerminalLineBoundary::TerminalLineBoundary(const Session &session, const std::uint64_t caret,
+                                           const bool end)
+    : stamp_(session.stamp()), size_(session.size()), cursor_(caret), end_(end) {
+    if (caret > size_)
+        throw std::runtime_error("Line navigation starts outside the document.");
+    complete_ = end_ ? caret == size_ : caret == 0;
+}
+void TerminalLineBoundary::validate(const Session &session) const {
+    const DocumentStamp current = session.stamp();
+    if (current.identity != stamp_.identity || current.revision != stamp_.revision || session.size() != size_)
+        throw std::runtime_error("Line navigation source changed.");
+}
+bool TerminalLineBoundary::step(const Session &session) {
+    validate(session);
+    if (complete_)
+        return true;
+    if (end_) {
+        const Page source = session.page(cursor_, 8192);
+        for (std::size_t index = 0; index < source.bytes.size(); ++index) {
+            if (source.bytes[index] == '\r' || source.bytes[index] == '\n') {
+                cursor_ += index;
+                complete_ = true;
+                return true;
+            }
+        }
+        cursor_ = source.next;
+        complete_ = cursor_ == size_;
+    } else {
+        const std::size_t count = static_cast<std::size_t>(std::min<std::uint64_t>(cursor_, 8192));
+        const std::uint64_t start = cursor_ - count;
+        const Page source = session.page(start, count);
+        for (std::size_t index = source.bytes.size(); index > 0; --index) {
+            if (source.bytes[index - 1] == '\r' || source.bytes[index - 1] == '\n') {
+                cursor_ = start + index;
+                complete_ = true;
+                return true;
+            }
+        }
+        cursor_ = start;
+        complete_ = cursor_ == 0;
+    }
+    return complete_;
+}
+std::uint64_t TerminalLineBoundary::result(const Session &session) const {
+    validate(session);
+    if (!complete_)
+        throw std::runtime_error("Line navigation is not complete.");
+    return cursor_;
+}
 struct BuiltPage {
     TerminalPageFrame page{};
     std::size_t next_column{};

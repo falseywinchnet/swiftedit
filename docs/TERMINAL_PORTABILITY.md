@@ -294,3 +294,18 @@ and visible wide glyphs and consecutive newlines after wrapping. All 23 local
 headless tests passed in 9.86 seconds; spelling audit passed across 117 source
 files. The preceding df74c8b checkpoint passed native run 36961373954 and portable
 run 36961373917. Native validation of this correction is pending.
+
+Read-only logical-line navigation (2026-10-01): Home and End now scan to the
+current source line's start or end instead of falling through to editable-only
+commands. Shift preserves the anchor. Each cooperative step reads at most 8 KiB;
+Home scans backward from the caret, so it does not rebuild from the file start.
+CR, LF and CRLF delimit logical lines; End excludes the separator. The caller
+supplies a proven source grapheme boundary. Cancellation, resize and source
+replacement do not publish a partial caret. Completion reveals the exact target.
+These are logical-line commands, not visual wrapped-row Home/End commands.
+
+Tests cover a 20,000-byte line requiring multiple steps in both directions,
+CRLF, trailing empty lines, stale source rejection, actual read-only terminal
+Home/End with Shift/copy, and cancelling a backward scan on a 16 MiB file.
+All 23 local headless tests passed in 10.03 seconds, with zero spelling findings
+across 117 source files. Native validation of this checkpoint is pending.

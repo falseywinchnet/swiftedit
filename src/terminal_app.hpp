@@ -59,6 +59,7 @@ public:
         counting_.reset();
         copying_.reset();
         ending_.reset();
+        line_boundary_.reset();
         page_anchor_ = 0;
         page_caret_ = 0;
         buffer_.open(path);
@@ -95,6 +96,21 @@ public:
                 redraw = false;
             }
             try {
+                if (line_boundary_) {
+                    if ((*line_boundary_).step(buffer_.session())) {
+                        const std::uint64_t target = (*line_boundary_).result(buffer_.session());
+                        pager_.reveal(buffer_.session(), target);
+                        page_caret_ = target;
+                        if (!line_extend_)
+                            page_anchor_ = target;
+                        line_boundary_.reset();
+                        status_ = "Read-only line boundary reached";
+                        redraw = true;
+                        continue;
+                    }
+                    if (!console_.input_ready())
+                        continue;
+                }
                 if (ending_) {
                     if ((*ending_).step(buffer_.session())) {
                         std::optional<std::uint64_t> left_target{};
@@ -198,6 +214,7 @@ public:
                 counting_.reset();
                 copying_.reset();
                 ending_.reset();
+                line_boundary_.reset();
                 status_ = failure.what();
                 redraw = true;
                 continue;
@@ -210,6 +227,10 @@ public:
                 continue;
             }
             if (input.resized) {
+                if (line_boundary_) {
+                    line_boundary_.reset();
+                    status_ = "Navigation cancelled because the terminal resized";
+                }
                 if (ending_) {
                     ending_.reset();
                     status_ = "Navigation cancelled because the terminal resized";
@@ -497,6 +518,12 @@ private:
         const bool alt = event.alt;
         const bool shift = event.shift;
         const std::uint32_t key = event.key;
+        if (line_boundary_) {
+            line_boundary_.reset();
+            status_ = "Read-only navigation cancelled";
+            if (key == terminal_key::escape)
+                return;
+        }
         if (ending_) {
             ending_.reset();
             status_ = "Read-only navigation cancelled";
@@ -637,6 +664,13 @@ private:
             return;
         }
         if (buffer_.session().read_only()) {
+            if (!ctrl && !alt && (key == terminal_key::home || key == terminal_key::end)) {
+                line_boundary_ = std::make_unique<swiftedit::TerminalLineBoundary>(
+                    buffer_.session(), page_caret_, key == terminal_key::end);
+                line_extend_ = shift;
+                status_ = "Finding line boundary... Any key cancels";
+                return;
+            }
             if (!ctrl && !alt && (key == terminal_key::left || key == terminal_key::right)) {
                 page_horizontal(key == terminal_key::right, shift);
                 return;
@@ -844,6 +878,8 @@ private:
     std::unique_ptr<swiftedit::SessionWordCount> counting_{};
     std::unique_ptr<swiftedit::SessionCopy> copying_{};
     std::unique_ptr<swiftedit::TerminalPageEnd> ending_{};
+    std::unique_ptr<swiftedit::TerminalLineBoundary> line_boundary_{};
+    bool line_extend_{};
     bool end_extend_{};
     PageNavigation page_navigation_{PageNavigation::end};
     std::uint64_t end_anchor_{}, end_caret_{};
