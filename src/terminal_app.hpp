@@ -156,6 +156,12 @@ public:
                 if (search_.state() == swiftedit::TerminalSearchState::pending) {
                     const swiftedit::TerminalSearchState state = search_.step(buffer_);
                     if (state != swiftedit::TerminalSearchState::pending) {
+                        if (state == swiftedit::TerminalSearchState::found && buffer_.session().read_only()) {
+                            const swiftedit::PagedSearchMatch match = *search_.paged_match();
+                            pager_.reveal(buffer_.session(), match.offset);
+                            page_anchor_ = match.offset;
+                            page_caret_ = match.offset + match.length;
+                        }
 #ifdef SWIFTEDIT_TERMINAL_SMOKE
                         if (state == swiftedit::TerminalSearchState::found)
                             ++search_hits_;
@@ -524,7 +530,7 @@ private:
                     input_.clear();
                     status_.clear();
                 } else {
-                    search_.begin(buffer_, std::move(pattern));
+                    search_.begin(buffer_, std::move(pattern), false, page_caret_);
                     prompt_ = Prompt::none;
                     status_ = "Searching... Escape cancels";
                 }
@@ -745,7 +751,7 @@ private:
             break;
         case terminal_key::f3: {
             swiftedit::SearchPattern pattern = query_.pattern();
-            search_.begin(buffer_, std::move(pattern));
+            search_.begin(buffer_, std::move(pattern), false, page_caret_);
             status_ = "Searching... Escape cancels";
             break;
         }

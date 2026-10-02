@@ -340,6 +340,12 @@ void TerminalPager::up() {
         page_history_.pop_back();
     ready_ = false;
 }
+void TerminalPager::reveal(const Session &session, const std::uint64_t offset) {
+    if (offset > session.size())
+        throw std::runtime_error("Search destination exceeds source size.");
+    reset(session);
+    cursor_.offset = offset;
+}
 void TerminalPager::first() {
     cursor_ = {};
     history_.clear();

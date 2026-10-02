@@ -9,7 +9,9 @@ public:
     mutable std::size_t cursor{}, writes{};
     mutable bool end_seen{}, copy_seen{};
     bool wait_for_end{}, wait_for_copy{}, wait_for_previous{};
-    mutable bool previous_pending{}, previous_seen{};
+    mutable bool previous_pending{}, previous_seen{}, search_pending{}, single_copy_seen{};
+    bool wait_for_search{};
+    mutable std::size_t found_count{};
     bool started{};
     void start() override { started = true; }
     swiftedit::TerminalSize size() const override { return {80, 24}; }
@@ -17,6 +19,14 @@ public:
         if (text.empty() || !started)
             throw std::runtime_error("Unexpected empty or premature terminal frame.");
         ++writes;
+        if (text.find("Searching...") != std::string_view::npos)
+            search_pending = true;
+        if (text.find("Found") != std::string_view::npos) {
+            ++found_count;
+            search_pending = false;
+        }
+        if (text.find("Copied 1 bytes") != std::string_view::npos)
+            single_copy_seen = true;
         if (text.find("Finding earlier page...") != std::string_view::npos)
             previous_pending = true;
         if (text.find("Earlier read-only page") != std::string_view::npos) {
@@ -30,7 +40,8 @@ public:
     }
     bool input_ready() const override {
         const bool ready = cursor < inputs.size() && (!wait_for_end || end_seen) &&
-                           (!wait_for_copy || copy_seen) && (!wait_for_previous || !previous_pending);
+                           (!wait_for_copy || copy_seen) && (!wait_for_previous || !previous_pending) &&
+                           (!wait_for_search || !search_pending);
         return ready;
     }
     swiftedit::TerminalInput read() const override {
@@ -201,6 +212,26 @@ int main() {
         if (rewind_terminal.run(large_path) != 0 || !rewind_navigation.previous_seen ||
             rewind_navigation.cursor != rewind_navigation.inputs.size())
             throw std::runtime_error("Read-only Page Up did not rebuild exhausted history cooperatively.");
+        ScriptConsole paged_find{};
+        paged_find.wait_for_search = true;
+        paged_find.press('W', 0, true);
+        paged_find.press('Z', u'z');
+        paged_find.press(swiftedit::terminal_key::enter);
+        paged_find.press(swiftedit::terminal_key::f3);
+        paged_find.press('C', 0, true);
+        paged_find.press('X', 0, true);
+        swiftedit::Terminal find_terminal(paged_find);
+        if (find_terminal.run(large_path) != 0 || paged_find.found_count != 2 || !paged_find.single_copy_seen)
+            throw std::runtime_error("Paged Find/F3 did not select, wrap and copy the exact final match.");
+        ScriptConsole cancelled_find{};
+        cancelled_find.press('W', 0, true);
+        cancelled_find.press('Z', u'z');
+        cancelled_find.press(swiftedit::terminal_key::enter);
+        cancelled_find.press(swiftedit::terminal_key::escape);
+        cancelled_find.press('X', 0, true);
+        swiftedit::Terminal cancelled_find_terminal(cancelled_find);
+        if (cancelled_find_terminal.run(large_path) != 0 || cancelled_find.found_count)
+            throw std::runtime_error("Paged Find did not cancel before publishing a match.");
         ScriptConsole cancelled_end{};
         cancelled_end.press(swiftedit::terminal_key::end, 0, true);
         cancelled_end.press(swiftedit::terminal_key::escape);

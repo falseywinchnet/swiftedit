@@ -16,7 +16,7 @@ precedence. The previous DECISIONS.md is historical implementation evidence.
 | Paste, 00:22 | Always plain text, retain Unicode | GUI and shared terminal use >500,000-byte confirmation; terminal preflights editable size, stages exact bytes, and requires a typed choice. Both emulator paste and private clipboard share that path; full physical clipboard QA pending |
 | Preservation, 00:26 onward | Preserve existing endings and whitespace; explicit conversion; native endings for new documents | Exact existing bytes in command session; explicit LF/CRLF commands; owned mixed-save preserve/default-convert/cancel choice implemented |
 | Undo, 00:32 correction | Undo only to last successful save B; separately jump to as-opened A, forgotten on close | Both GUI and command model; restore is itself undoable; save failure does not clear history |
-| Large files, 00:27 and later threshold | Paginated load, >=16 MB read-only; slow work interruptible | Command model >=16 MiB bounded read pages; GUI still 1 MiB/4096-byte-line public provider limit; async indexing/search pending |
+| Large files, 00:27 and later threshold | Paginated load, >=16 MB read-only; slow work interruptible | Command model >=16 MiB bounded read pages; shared terminal streaming Find/F3 implemented; GUI still 1 MiB/4096-byte-line public provider limit; GUI search and indexing pending |
 | Commands | GUI, conventional nano-like terminal, and AI share text operations; no semantic summaries | Preview/commit model, stdin CLI and Windows/macOS/Linux terminal share Session; Mac terminal is packaged and native PTY smoke passes. GUI migration remains pending |
 | Automated edits | Exact before/old/after context, ambiguity selection, preview then explicit commit; stale work refused | Session revision + one-use preview tokens; all edits local to this process |
 | Line metadata | Blank lines alone get `CR CR L<number> CR CR`; markers never become content | Stamped sequential context emits separate escaped blank markers; source CRCR stays source and echoed mutation markers are refused |
@@ -150,7 +150,9 @@ forcing Ctrl+Home. Resizing invalidates row/page geometry according to its width
 and height dependencies while preserving the source anchor. Detailed tests and
 remaining performance outliers are recorded in TERMINAL_PORTABILITY.md and
 performance/2026-10-01-terminal-end/paired-8k.md. These changes do not complete
-horizontal read-only caret navigation, large-file search, or GUI virtualization.
+horizontal read-only caret navigation or GUI virtualization. Streaming terminal
+large-file Find/F3 is now implemented through SessionSearch; CLI exposure and
+large GUI integration remain pending (see TERMINAL_PORTABILITY.md).
 
 Provider coordination checkpoint: public SDK723 remains pinned. The next
 retained DocumentView depends on native transactional presentation integration,

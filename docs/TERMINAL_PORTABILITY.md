@@ -213,3 +213,41 @@ Regression tests verify a height change uses the new page size, a width change
 preserves the source anchor, and Up reconstructs and retains the correct rows
 at the new width. The complete local suite passed 22/22 in 7.80 s and the
 source spelling audit passed 113 files. Native validation is pending.
+
+
+## Streaming read-only Find
+
+Ctrl+W Find and F3 now search paged read-only files through SessionSearch. The
+query retains the existing 1..4096 UTF-8 byte limit, flagged one-grapheme
+wildcards, literal punctuation and ASCII-only case folding. Source graphemes
+and active pattern prefixes survive read boundaries; invalid bytes remain
+unchanged and can be matched atomically by a wildcard. Metadata placeholders
+cannot produce false literal matches because comparisons use original bytes.
+
+The task owns one bounded source context and at most one candidate offset per
+pattern slot. Ordinary acquisition reads/parses 8 KiB. An incomplete first
+grapheme grows context on later steps up to 64 KiB; a larger grapheme produces
+an explicit refusal. Each step either acquires one context or performs up to
+the requested comparison work (4096 by default). These are work bounds, not
+wall-time guarantees. The task validates source identity, revision and size.
+It begins parsing from the start to preserve grapheme boundaries, even when
+candidate matching begins later. Starting at EOF completes immediately.
+
+The terminal keeps the visible page and selection until a complete match is
+available, then highlights the exact source range and reveals it. F3 begins
+at the selection end and wraps once. Any key cancels pending search; Escape
+is consumed. Completed, cancelled and failed work cannot publish a partial
+match. Replace remains unavailable for read-only files.
+
+Validation includes 4096 streaming/reference comparisons with one-operation
+steps, overlapping candidates, literal and wildcard Unicode/CRLF matches across
+read boundaries, case handling, start offsets, invalid-byte/control distinction,
+adaptive long graphemes, context refusal and stale source rejection. An actual
+16 MiB file is searched through its final bytes. The shared terminal loop finds,
+wraps, copies exactly the final one-byte match, and cancels a separate search.
+The full local suite passed 23/23 in 9.46 s; spelling audit passed 116 files.
+Native validation is pending. CLI start/next/cancel exposure and large GUI
+integration remain to be connected to this shared task.
+
+Resize source c2fb0aa passed native run 36958985720 and portable-core run
+36958985706 on Windows, macOS and Linux.

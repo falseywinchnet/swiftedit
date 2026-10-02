@@ -63,6 +63,8 @@ public:
     void down();
     void up();
     void first();
+    // Caller supplies a source grapheme boundary from a completed search.
+    void reveal(const Session &, std::uint64_t offset);
     // Returns work only when retained history cannot satisfy Up/Page Up.
     // The caller must retain the viewport until successful finish_end publication.
     [[nodiscard]] std::unique_ptr<TerminalPageEnd> prepare_previous(const Session &, bool page) const;
