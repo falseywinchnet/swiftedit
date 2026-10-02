@@ -9,7 +9,7 @@ limits; broad desktop and responsiveness validation remain in progress. Grid
 paste inserts plain clipboard text into the selected cell; rectangular clipboard
 import and column resizing are not implemented.
 
-- Release v0.3.2 has validated Windows x64, macOS ARM64 and Linux x64 packages.
+- Release v0.3.3 has validated Windows x64, macOS ARM64 and Linux x64 packages.
   Each platform package includes the GUI, interactive terminal and CLI. Native
   terminal and application tests run on all three systems; current development
   revisions still require their own CI and packaging evidence.
@@ -58,7 +58,8 @@ import and column resizing are not implemented.
   titles and pointer/keyboard menu opening. The filename row is removed and its
   space returned to the document. Consumer native tests and packaging passed on
   all three systems in run 36985848443; Mac captures were inspected. These fixes
-  are prepared for v0.3.3; v0.3.2 retains the old row/menu focus.
+  are published in v0.3.3; v0.3.2 retains the old row/menu focus. Tag run
+  36986875922 passed all three native jobs and publication with nine assets.
 
 The owner interview now provides direction. These gaps remain implementation
 work, not claims of a finished Malkuth release.

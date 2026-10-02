@@ -37,4 +37,28 @@ private:
     TerminalHorizontalFrame frame_{};
     bool complete_{}, failed_{};
 };
+// Cooperative no-wrap viewport preparation. Each step advances either the
+// logical scan or one row renderer, never both. No partial viewport is exposed.
+// Result references borrow this owner; dropping it cancels unfinished work.
+class TerminalHorizontalPage final {
+public:
+    TerminalHorizontalPage(const Session &, std::uint64_t start, std::size_t rows,
+                           std::uint64_t left, std::size_t width);
+    [[nodiscard]] bool step(const Session &, std::size_t budget = 8192);
+    [[nodiscard]] const std::vector<TerminalHorizontalFrame> &result(const Session &) const;
+    [[nodiscard]] const std::vector<TerminalLogicalRow> &rows(const Session &) const;
+    [[nodiscard]] std::uint64_t next(const Session &) const;
+    [[nodiscard]] bool more(const Session &) const;
+
+private:
+    void validate(const Session &) const;
+    void require_complete(const Session &) const;
+    DocumentStamp stamp_{};
+    std::uint64_t size_{}, left_{};
+    std::size_t width_{};
+    TerminalLogicalPage logical_;
+    std::unique_ptr<TerminalHorizontalLine> line_{};
+    std::vector<TerminalHorizontalFrame> frames_{};
+    bool indexed_{}, complete_{}, failed_{};
+};
 } // namespace swiftedit

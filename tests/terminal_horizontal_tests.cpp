@@ -230,6 +230,52 @@ void check_large_file(const Fixture &fixture) {
     }
     require(refused, "Completed horizontal result cannot outlive its source identity");
 }
+void check_viewport(const Fixture &fixture) {
+    const std::string source = "abcdef\r\n\tZ\nlast\n";
+    swiftedit::Session session{};
+    session.open(fixture.write("viewport.txt", source));
+    swiftedit::TerminalHorizontalPage page(session, 0, 2, 2, 3);
+    bool refused = false;
+    try {
+        static_cast<void>(page.result(session));
+    } catch (const std::runtime_error &) {
+        refused = true;
+    }
+    require(refused, "Incomplete viewport remains unpublished");
+    std::size_t steps = 0;
+    while (!page.step(session, 1)) {
+        ++steps;
+        require(steps < 50, "Cooperative viewport advances");
+    }
+    const std::vector<swiftedit::TerminalHorizontalFrame> &frames = page.result(session);
+    require(frames.size() == 2 && frames[0].runs.size() == 3 &&
+                frames[0].runs[0].text == "c" && frames[0].runs[2].text == "e",
+            "Viewport retains exact horizontal slice");
+    require(frames[1].runs.size() == 2 && frames[1].runs[0].text == "  " &&
+                frames[1].runs[1].text == "Z" && frames[1].runs[1].column == 2,
+            "Rows share horizontal coordinates and inert tab expansion");
+    require(page.rows(session)[1].offset == 8 && page.next(session) == 11 && page.more(session),
+            "Viewport pagination retains logical CRLF offsets");
+    swiftedit::TerminalHorizontalPage tail(session, page.next(session), 2, 0, 10);
+    while (!tail.step(session, 2)) {}
+    require(tail.result(session).size() == 2 && tail.result(session)[1].total_cells == 0 &&
+                !tail.more(session) && tail.next(session) == source.size(),
+            "Last separator retains empty EOF row");
+    {
+        swiftedit::TerminalHorizontalPage cancelled(session, 0, 2, 0, 10);
+        require(!cancelled.step(session, 1), "Viewport cancellation occurs between bounded steps");
+    }
+    require(page.result(session)[0].runs[0].text == "c" && session.text() == source,
+            "Cancelling replacement leaves published viewport and source intact");
+    session.reset();
+    refused = false;
+    try {
+        static_cast<void>(page.result(session));
+    } catch (const std::runtime_error &) {
+        refused = true;
+    }
+    require(refused, "Viewport refuses stale source identity");
+}
 } // namespace
 int main() {
     try {
@@ -242,6 +288,7 @@ int main() {
         check_refusals(fixture);
         check_context_limit(fixture);
         check_large_file(fixture);
+        check_viewport(fixture);
         std::cout << "Bounded horizontal rendering matches source, width and inert-control policies.\n";
         return 0;
     } catch (const std::exception &failure) {

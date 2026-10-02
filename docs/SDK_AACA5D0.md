@@ -61,3 +61,8 @@ border. Exact native title transitions passed the AppKit assertions; the content
 captures do not include native window chrome. Images and provenance are in
 `docs/visual/2026-10-02-gui-polish`. This does not close the final physical
 responsiveness audit.
+
+SwiftEdit v0.3.3 is public at source 427f5066b4477d7fe20dfc3683a6dc02f68c66eb.
+Tag run 36986875922 passed all three native jobs and publication. The release
+contains nine assets: one archive, checksum and source/SDK manifest per platform.
+The published Mac archive is `SwiftEdit-macos-arm64-427f5066b447.zip`.

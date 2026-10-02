@@ -51,6 +51,16 @@ oversized context and stale results are covered. The complete Windows Release
 build and all 26 headless tests passed in 23.07 seconds; the 135-file spelling
 audit passed. These are bounded-work checks, not physical latency measurements.
 
+`TerminalHorizontalPage` composes the scanner and row renderers into a complete
+viewport task. One step advances only the scan or one renderer, preserving the
+8 KiB read budget. Completed row output is copied into reserved viewport storage
+and row scratch is released. Partial or failed viewports remain unavailable;
+the caller can retain its previous published owner while replacement work runs.
+Tests cover exact horizontal slices, clipped tabs, CRLF pagination, empty EOF
+rows, cancellation without changing an existing completed viewport, and stale
+identity refusal. The focused test passed in 0.14 seconds and the spelling
+audit remained clean. This task is not yet wired to the host input loop.
+
 Still required: connect this work to the terminal event loop, preserve caret/selection
 and backward navigation across mode/width changes, implement space wrapping,
 and exercise F2 and cancellation through the terminal host. This component does

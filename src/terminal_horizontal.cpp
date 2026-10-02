@@ -146,4 +146,74 @@ const TerminalHorizontalFrame &TerminalHorizontalLine::result(const Session &ses
         throw std::runtime_error("Horizontal viewport is not complete.");
     return frame_;
 }
+TerminalHorizontalPage::TerminalHorizontalPage(const Session &session,
+                                               const std::uint64_t start,
+                                               const std::size_t rows,
+                                               const std::uint64_t left,
+                                               const std::size_t width)
+    : stamp_(session.stamp()), size_(session.size()), left_(left), width_(width),
+      logical_(session, start, rows) {
+    if (!width || width > 1000 || left > std::numeric_limits<std::uint64_t>::max() - width)
+        throw std::runtime_error("Horizontal viewport width must be 1..1000 without overflow.");
+    frames_.reserve(rows);
+}
+void TerminalHorizontalPage::validate(const Session &session) const {
+    const DocumentStamp current = session.stamp();
+    if (current.identity != stamp_.identity || current.revision != stamp_.revision ||
+        session.size() != size_)
+        throw std::runtime_error("Horizontal viewport belongs to an older document.");
+    if (failed_)
+        throw std::runtime_error("Horizontal viewport preparation previously failed.");
+}
+void TerminalHorizontalPage::require_complete(const Session &session) const {
+    validate(session);
+    if (!complete_)
+        throw std::runtime_error("Horizontal viewport is not complete.");
+}
+bool TerminalHorizontalPage::step(const Session &session, const std::size_t budget) {
+    validate(session);
+    if (!budget || budget > 8192)
+        throw std::runtime_error("Horizontal viewport step budget must be 1..8192 bytes.");
+    if (complete_)
+        return true;
+    try {
+        if (!indexed_) {
+            indexed_ = logical_.step(session, budget);
+            return false;
+        }
+        if (!line_)
+            line_ = std::make_unique<TerminalHorizontalLine>(
+                session, logical_, frames_.size(), left_, width_);
+        const bool ready = (*line_).step(session, budget);
+        if (ready) {
+            // Copy only the completed visible row, then release its scratch.
+            frames_.push_back((*line_).result(session));
+            line_.reset();
+            complete_ = frames_.size() == logical_.result(session).size();
+        }
+    } catch (...) {
+        failed_ = true;
+        throw;
+    }
+    return complete_;
+}
+const std::vector<TerminalHorizontalFrame> &TerminalHorizontalPage::result(const Session &session) const {
+    require_complete(session);
+    return frames_;
+}
+const std::vector<TerminalLogicalRow> &TerminalHorizontalPage::rows(const Session &session) const {
+    require_complete(session);
+    const std::vector<TerminalLogicalRow> &result = logical_.result(session);
+    return result;
+}
+std::uint64_t TerminalHorizontalPage::next(const Session &session) const {
+    require_complete(session);
+    const std::uint64_t offset = logical_.next(session);
+    return offset;
+}
+bool TerminalHorizontalPage::more(const Session &session) const {
+    require_complete(session);
+    const bool remaining = logical_.more(session);
+    return remaining;
+}
 } // namespace swiftedit
