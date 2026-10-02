@@ -25,10 +25,35 @@ public:
     std::string expected_copy{};
     mutable bool expected_copy_seen{};
     bool cancel_repeats{};
+    bool wait_for_no_wrap{};
+    mutable bool no_wrap_pending{};
+    mutable std::size_t no_wrap_frames{};
+    mutable std::size_t no_wrap_requests{};
+    std::size_t resize_after{}, cancel_no_wrap_after{};
+    std::string expected_no_wrap_cursor{};
+    mutable bool no_wrap_cursor_seen{};
     mutable bool repeats_cancelled{};
     void start() override { started = true; }
-    swiftedit::TerminalSize size() const override { return {80, 24}; }
+    swiftedit::TerminalSize size() const override {
+        if (resize_after && cursor >= resize_after)
+            return {40, 12};
+        return {80, 24};
+    }
     void write(std::string_view text) const override {
+        if (text.find("Preparing no-wrap view...") != std::string_view::npos)
+            ++no_wrap_requests;
+        if (text.find("Preparing no-wrap view...") != std::string_view::npos ||
+            text.find("Moving by logical lines...") != std::string_view::npos)
+            no_wrap_pending = true;
+        if (text.find("No wrap") != std::string_view::npos) {
+            no_wrap_pending = false;
+            ++no_wrap_frames;
+            if (resize_after && cursor >= resize_after && !expected_no_wrap_cursor.empty() &&
+                text.find(expected_no_wrap_cursor + "\x1b[?25h") != std::string_view::npos)
+                no_wrap_cursor_seen = true;
+        }
+        if (text.find("No-wrap navigation cancelled") != std::string_view::npos)
+            no_wrap_pending = false;
         if (!expected_copy.empty() && text.find(expected_copy) != std::string_view::npos)
             expected_copy_seen = true;
         if (inspect_after && cursor == inspect_after) {
@@ -84,6 +109,7 @@ public:
     }
     bool input_ready() const override {
         const bool ready = cursor < inputs.size() && (!wait_for_end || end_seen) &&
+                           (!wait_for_no_wrap || !no_wrap_pending || cursor == cancel_no_wrap_after) &&
                            (!wait_for_publication || publication_seen) && (!wait_for_text_copy || !text_copy_pending) && (!wait_for_line || !line_pending) && (!wait_for_copy || copy_seen) && (!wait_for_previous || !previous_pending) &&
                            (!wait_for_search || !search_pending);
         return ready;
@@ -483,6 +509,99 @@ int main() {
         if (run_case(cancelled_end_terminal, large_path, "cancelled_end_terminal") != 0 || cancelled_end.end_seen ||
             cancelled_end.cursor != cancelled_end.inputs.size())
             throw std::runtime_error("Read-only Ctrl+End did not cancel on the next key.");
+        const std::filesystem::path nowrap_path = directory / "no-wrap-read-only.txt";
+        {
+            std::ofstream output(nowrap_path, std::ios::binary);
+            output << std::string(200, 'a') << "\r\nbcd\r\n";
+            for (std::size_t row = 0; row < 100; ++row)
+                output << "row\r\n";
+            output.seekp(swiftedit::editable_limit - 1);
+            output.put('z');
+        }
+        ScriptConsole nowrap{};
+        nowrap.wait_for_no_wrap = true;
+        nowrap.expected_copy = "Copied 202 bytes";
+        nowrap.press(swiftedit::terminal_key::f2);
+        nowrap.press(swiftedit::terminal_key::right);
+        nowrap.press(swiftedit::terminal_key::right);
+        nowrap.press(swiftedit::terminal_key::down, 0, false, true);
+        nowrap.press('C', 0, true);
+        nowrap.press(swiftedit::terminal_key::up);
+        nowrap.press(swiftedit::terminal_key::f2);
+        nowrap.press(swiftedit::terminal_key::right, 0, false, true);
+        nowrap.press('C', 0, true);
+        nowrap.press('X', 0, true);
+        swiftedit::Terminal nowrap_terminal(nowrap);
+        if (run_case(nowrap_terminal, nowrap_path, "nowrap_terminal") != 0 ||
+            !nowrap.expected_copy_seen || !nowrap.single_copy_seen || nowrap.no_wrap_frames < 4)
+            throw std::runtime_error("F2 no-wrap logical navigation lost source selection or wrap-back caret.");
+        ScriptConsole cancelled_nowrap{};
+        cancelled_nowrap.press(swiftedit::terminal_key::f2);
+        cancelled_nowrap.press(swiftedit::terminal_key::escape);
+        cancelled_nowrap.press('X', 0, true);
+        swiftedit::Terminal cancelled_nowrap_terminal(cancelled_nowrap);
+        if (run_case(cancelled_nowrap_terminal, nowrap_path, "cancelled_nowrap_terminal") != 0 ||
+            cancelled_nowrap.no_wrap_frames)
+            throw std::runtime_error("F2 no-wrap transition ignored cancellation before publication.");
+        ScriptConsole resized_nowrap{};
+        resized_nowrap.wait_for_no_wrap = true;
+        resized_nowrap.resize_after = 5;
+        resized_nowrap.expected_no_wrap_cursor = "\x1b[2;40H";
+        resized_nowrap.press(swiftedit::terminal_key::f2);
+        resized_nowrap.press(swiftedit::terminal_key::right);
+        resized_nowrap.inputs.back().repeats = 90;
+        resized_nowrap.press(swiftedit::terminal_key::down);
+        resized_nowrap.press(swiftedit::terminal_key::up);
+        swiftedit::TerminalInput resize{};
+        resize.resized = true;
+        resized_nowrap.inputs.push_back(resize);
+        resized_nowrap.press(swiftedit::terminal_key::left, 0, false, true);
+        resized_nowrap.press('C', 0, true);
+        resized_nowrap.press('X', 0, true);
+        swiftedit::Terminal resized_nowrap_terminal(resized_nowrap);
+        if (run_case(resized_nowrap_terminal, nowrap_path, "resized_nowrap_terminal") != 0 ||
+            !resized_nowrap.no_wrap_cursor_seen || !resized_nowrap.single_copy_seen)
+            throw std::runtime_error("No-wrap resize lost an off-screen source caret or atomic selection.");
+        ScriptConsole page_nowrap{};
+        page_nowrap.wait_for_no_wrap = true;
+        page_nowrap.expected_copy = "Copied 297 bytes";
+        page_nowrap.press(swiftedit::terminal_key::f2);
+        page_nowrap.press(swiftedit::terminal_key::page_down, 0, false, true);
+        page_nowrap.press('C', 0, true);
+        page_nowrap.press(swiftedit::terminal_key::page_up);
+        page_nowrap.press(swiftedit::terminal_key::right, 0, false, true);
+        page_nowrap.press('C', 0, true);
+        page_nowrap.press('X', 0, true);
+        swiftedit::Terminal page_nowrap_terminal(page_nowrap);
+        if (run_case(page_nowrap_terminal, nowrap_path, "page_nowrap_terminal") != 0 ||
+            !page_nowrap.expected_copy_seen || !page_nowrap.single_copy_seen)
+            throw std::runtime_error("No-wrap page navigation did not use logical lines or rewind accurately.");
+        ScriptConsole cancelled_move{};
+        cancelled_move.wait_for_no_wrap = true;
+        cancelled_move.cancel_no_wrap_after = 3;
+        cancelled_move.inspect_after = 4;
+        cancelled_move.expected_cursor = "\x1b[2;2H";
+        cancelled_move.press(swiftedit::terminal_key::f2);
+        cancelled_move.press(swiftedit::terminal_key::right);
+        cancelled_move.press(swiftedit::terminal_key::down);
+        cancelled_move.press(swiftedit::terminal_key::escape);
+        cancelled_move.press('X', 0, true);
+        swiftedit::Terminal cancelled_move_terminal(cancelled_move);
+        if (run_case(cancelled_move_terminal, nowrap_path, "cancelled_move_terminal") != 0 ||
+            !cancelled_move.cursor_checked)
+            throw std::runtime_error("Cancelled no-wrap movement changed the published caret.");
+        ScriptConsole cancelled_resize{};
+        cancelled_resize.wait_for_no_wrap = true;
+        cancelled_resize.resize_after = 2;
+        cancelled_resize.cancel_no_wrap_after = 2;
+        cancelled_resize.press(swiftedit::terminal_key::f2);
+        cancelled_resize.inputs.push_back(resize);
+        cancelled_resize.press(swiftedit::terminal_key::escape);
+        cancelled_resize.press('X', 0, true);
+        swiftedit::Terminal cancelled_resize_terminal(cancelled_resize);
+        if (run_case(cancelled_resize_terminal, nowrap_path, "cancelled_resize_terminal") != 0 ||
+            cancelled_resize.no_wrap_requests != 2 || cancelled_resize.no_wrap_frames != 1)
+            throw std::runtime_error("Cancelled resize restarted no-wrap preparation without a new command.");
         std::cout << "Shared terminal loop: Unicode, undo/redo, navigation, save, recovery and large paste passed.\n";
         return 0;
     } catch (const std::exception &failure) {

@@ -2,6 +2,27 @@
 #include "terminal_horizontal.hpp"
 
 namespace swiftedit {
+// Finds a caret on an earlier/later logical line at the preferred display
+// column. Work is cooperative and independent of wrapped-row history.
+class TerminalNoWrapMove final {
+public:
+    TerminalNoWrapMove(const Session &, std::uint64_t caret, std::uint64_t column,
+                      bool down, std::size_t count);
+    [[nodiscard]] bool step(const Session &);
+    [[nodiscard]] std::uint64_t result(const Session &) const;
+private:
+    enum class Phase { boundary, navigate, target, measure, complete };
+    void validate(const Session &) const;
+    DocumentStamp stamp_{};
+    std::uint64_t size_{}, column_{}, start_{}, target_{};
+    std::size_t count_{};
+    bool down_{}, failed_{};
+    TerminalLineBoundary boundary_;
+    std::unique_ptr<TerminalLogicalPrevious> previous_{};
+    std::unique_ptr<TerminalLogicalPage> logical_{};
+    std::unique_ptr<TerminalHorizontalLine> measurement_{};
+    Phase phase_{Phase::boundary};
+};
 // Owns replacement preparation, not the currently displayed viewport. Dropping
 // this task cancels it. A requested old top is retained only if it still exposes
 // the caret; otherwise the caret's logical line becomes the top row.

@@ -2,6 +2,7 @@
 #include "terminal_row.hpp"
 #include "terminal_wrap_view.hpp"
 #include "terminal_page.hpp"
+#include "terminal_reveal.hpp"
 #include "terminal_search.hpp"
 #include "terminal_query.hpp"
 #include "date_time.hpp"
@@ -64,6 +65,11 @@ public:
         text_copy_.reset();
         page_anchor_ = 0;
         page_caret_ = 0;
+        no_wrap_pending_.reset();
+        no_wrap_move_.reset();
+        no_wrap_visible_.reset();
+        read_no_wrap_ = false;
+        no_wrap_suspended_ = false;
         page_column_.reset();
         buffer_.open(path);
         pager_.reset(buffer_.session());
@@ -100,6 +106,33 @@ public:
                 redraw = false;
             }
             try {
+                if (no_wrap_move_) {
+                    if ((*no_wrap_move_).step(buffer_.session())) {
+                        page_caret_ = (*no_wrap_move_).result(buffer_.session());
+                        if (!no_wrap_extend_)
+                            page_anchor_ = page_caret_;
+                        begin_no_wrap_reveal();
+                        no_wrap_move_.reset();
+                        redraw = true;
+                        continue;
+                    }
+                    if (!console_.input_ready())
+                        continue;
+                }
+                if (no_wrap_pending_) {
+                    if ((*no_wrap_pending_).step(buffer_.session())) {
+                        no_wrap_visible_ = std::move(no_wrap_pending_);
+                        no_wrap_caret_ = page_caret_;
+                        no_wrap_anchor_ = page_anchor_;
+                        no_wrap_width_ = width_;
+                        no_wrap_rows_ = rows_;
+                        status_ = "No wrap";
+                        redraw = true;
+                        continue;
+                    }
+                    if (!console_.input_ready())
+                        continue;
+                }
                 if (text_copy_) {
                     if ((*text_copy_).state() == swiftedit::TextCopyState::publishing) {
                         const std::chrono::milliseconds wait(console_.input_ready() ? 0 : 8);
@@ -256,6 +289,7 @@ public:
                         continue;
                 }
             } catch (const std::exception &failure) {
+                cancel_no_wrap_work();
                 search_.cancel();
                 replacement_.cancel();
                 counting_.reset();
@@ -269,7 +303,7 @@ public:
                 continue;
             }
             TerminalInput input{};
-            if (repeated_navigation && !ending_ && !line_boundary_) {
+            if (repeated_navigation && !ending_ && !line_boundary_ && !no_wrap_move_ && !no_wrap_pending_) {
                 if (console_.cancel_requested()) {
                     repeated_navigation.reset();
                     input.key = terminal_key::escape;
@@ -291,6 +325,8 @@ public:
                 continue;
             }
             if (input.resized) {
+                cancel_no_wrap_work();
+                no_wrap_suspended_ = false;
                 if (line_boundary_) {
                     line_boundary_.reset();
                     status_ = "Navigation cancelled because the terminal resized";
@@ -324,7 +360,7 @@ public:
                 } catch (const std::exception &failure) {
                     status_ = failure.what();
                 }
-                if (navigation && (ending_ || line_boundary_))
+                if (navigation && (ending_ || line_boundary_ || no_wrap_move_ || no_wrap_pending_))
                     break;
             }
             if (navigation && executed < repeats && !done_) {
@@ -336,6 +372,28 @@ public:
     }
 
 private:
+    void cancel_no_wrap_work() {
+        if (!no_wrap_pending_ && !no_wrap_move_)
+            return;
+        no_wrap_pending_.reset();
+        no_wrap_move_.reset();
+        no_wrap_suspended_ = true;
+        if (no_wrap_visible_) {
+            page_caret_ = no_wrap_caret_;
+            page_anchor_ = no_wrap_anchor_;
+        } else {
+            read_no_wrap_ = false;
+        }
+    }
+    void begin_no_wrap_reveal() {
+        const std::uint64_t left = no_wrap_visible_ ? (*no_wrap_visible_).left(buffer_.session()) : 0;
+        const std::optional<std::uint64_t> top = no_wrap_visible_
+            ? std::optional<std::uint64_t>((*no_wrap_visible_).top(buffer_.session())) : std::nullopt;
+        no_wrap_pending_ = std::make_unique<swiftedit::TerminalNoWrapReveal>(
+            buffer_.session(), page_caret_, left, width_, rows_, top);
+        no_wrap_suspended_ = false;
+        status_ = "Preparing no-wrap view... Any key cancels";
+    }
     void draw() {
         console_.allow_wrap_cancel(prompt_ == Prompt::none);
         const TerminalSize size = console_.size();
@@ -363,7 +421,35 @@ private:
         }
         std::optional<std::size_t> cursor_column{};
         std::size_t cursor_row = 1;
-        if (buffer_.session().read_only()) {
+        if (buffer_.session().read_only() && read_no_wrap_) {
+            if (!no_wrap_suspended_ && !no_wrap_pending_ && !no_wrap_move_ &&
+                (!no_wrap_visible_ || no_wrap_caret_ != page_caret_ ||
+                 no_wrap_width_ != width_ || no_wrap_rows_ != rows_))
+                begin_no_wrap_reveal();
+            if (no_wrap_visible_ && no_wrap_width_ == width_ && no_wrap_rows_ == rows_) {
+                const swiftedit::TerminalHorizontalPage &page = (*no_wrap_visible_).viewport(buffer_.session());
+                const std::vector<swiftedit::TerminalHorizontalFrame> &frames = page.result(buffer_.session());
+                const swiftedit::TerminalPageCaret caret = (*no_wrap_visible_).caret(buffer_.session());
+                cursor_column = caret.column;
+                cursor_row = caret.row + 1;
+                const bool pending = no_wrap_pending_ || no_wrap_move_;
+                const std::uint64_t anchor = pending ? no_wrap_anchor_ : page_anchor_;
+                const std::uint64_t selected_caret = pending ? no_wrap_caret_ : page_caret_;
+                const std::uint64_t first = std::min(anchor, selected_caret);
+                const std::uint64_t last = std::max(anchor, selected_caret);
+                for (std::size_t row = 0; row < frames.size(); ++row) {
+                    for (const swiftedit::TerminalPageRun &run : frames[row].runs) {
+                        position(screen, row + 1, run.column);
+                        const bool selected = run.source_offset < last &&
+                            run.source_offset + run.source_length > first;
+                        screen += selected ? "\x1b[7m" : "\x1b[0m";
+                        screen += run.text;
+                    }
+                }
+                if (!pending)
+                    no_wrap_anchor_ = page_anchor_;
+            }
+        } else if (buffer_.session().read_only()) {
             const swiftedit::TerminalPageFrame &page =
                 pager_.frame(buffer_.session(), width_, rows_);
             const std::optional<swiftedit::TerminalPageCaret> caret =
@@ -457,7 +543,7 @@ private:
                 width_);
         if (buffer_.session().read_only())
             status_line(screen, height - 1,
-                        "Read-only: Shift+arrows/Pg Select  ^A All  ^C Copy  F6 Words",
+                        "Read-only: Shift+arrows/Pg Select  ^A All  ^C Copy  F6 Words  F2 Wrap",
                         width_);
         else
             status_line(
@@ -689,6 +775,12 @@ private:
         const bool alt = event.alt;
         const bool shift = event.shift;
         const std::uint32_t key = event.key;
+        if (no_wrap_pending_ || no_wrap_move_) {
+            cancel_no_wrap_work();
+            status_ = "No-wrap navigation cancelled";
+            if (key == terminal_key::escape)
+                return;
+        }
         if (key != terminal_key::up && key != terminal_key::down &&
             key != terminal_key::page_up && key != terminal_key::page_down)
             page_column_.reset();
@@ -719,8 +811,10 @@ private:
         }
         const bool preserving_command =
             ctrl && !alt && (key == 'X' || key == 'S' || key == 'R' || key == 'T');
-        if (key != terminal_key::escape && prompt_ == Prompt::none && !preserving_command)
+        if (key != terminal_key::escape && prompt_ == Prompt::none && !preserving_command) {
             wrap_suspended_ = false;
+            no_wrap_suspended_ = false;
+        }
         if (key != 0 && event.text_unit < 32)
             high_surrogate_ = 0;
         if (copying_) {
@@ -856,6 +950,20 @@ private:
             return;
         }
         if (buffer_.session().read_only()) {
+            if (read_no_wrap_ && !ctrl && !alt &&
+                (key == terminal_key::up || key == terminal_key::down ||
+                 key == terminal_key::page_up || key == terminal_key::page_down)) {
+                const swiftedit::TerminalPageCaret caret = (*no_wrap_visible_).caret(buffer_.session());
+                if (!page_column_)
+                    page_column_ = static_cast<std::size_t>((*no_wrap_visible_).left(buffer_.session()) + caret.column);
+                const bool down = key == terminal_key::down || key == terminal_key::page_down;
+                const std::size_t count = key == terminal_key::page_up || key == terminal_key::page_down ? rows_ : 1;
+                no_wrap_move_ = std::make_unique<swiftedit::TerminalNoWrapMove>(
+                    buffer_.session(), page_caret_, *page_column_, down, count);
+                no_wrap_extend_ = shift;
+                status_ = "Moving by logical lines... Any key cancels";
+                return;
+            }
             if (!ctrl && !alt && (key == terminal_key::page_up || key == terminal_key::page_down)) {
                 page_jump(key == terminal_key::page_down, shift);
                 return;
@@ -991,7 +1099,17 @@ private:
         }
         switch (key) {
         case terminal_key::f2:
-            if (!buffer_.session().read_only()) {
+            if (buffer_.session().read_only()) {
+                if (!read_no_wrap_) {
+                    begin_no_wrap_reveal();
+                    read_no_wrap_ = true;
+                } else {
+                    read_no_wrap_ = false;
+                    no_wrap_visible_.reset();
+                    pager_.reveal(buffer_.session(), page_caret_);
+                    status_ = "Wrap to window";
+                }
+            } else {
                 wrap_ = !wrap_;
                 wrap_view_ = swiftedit::TerminalWrapView{&console_};
                 status_ = wrap_ ? "Wrap to window" : "No wrap";
@@ -1074,6 +1192,11 @@ private:
     swiftedit::TerminalWrapView wrap_view_{&console_};
     bool wrap_{}, wrap_suspended_{};
     swiftedit::TerminalPager pager_{};
+    bool read_no_wrap_{}, no_wrap_extend_{}, no_wrap_suspended_{};
+    std::unique_ptr<swiftedit::TerminalNoWrapReveal> no_wrap_pending_{}, no_wrap_visible_{};
+    std::unique_ptr<swiftedit::TerminalNoWrapMove> no_wrap_move_{};
+    std::uint64_t no_wrap_caret_{}, no_wrap_anchor_{};
+    std::size_t no_wrap_width_{}, no_wrap_rows_{};
     swiftedit::TerminalSearch search_{};
     swiftedit::TerminalReplace replacement_{};
     std::unique_ptr<swiftedit::SessionWordCount> counting_{};

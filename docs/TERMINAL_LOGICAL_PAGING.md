@@ -1,6 +1,6 @@
 # Logical paging for read-only terminal views
 
-The read-only terminal currently hard-wraps pages and ignores F2. The owner
+The previous read-only terminal hard-wrapped pages and ignored F2. The owner
 requires no-wrap and intelligent space wrapping without source mutation. The
 existing visual-row pager cannot implement that simply by toggling a flag:
 its row cursors and backward navigation are tied to hard-wrap width.
@@ -98,7 +98,33 @@ top, horizontal scrolling across tabs/wide/combining characters, invalid split
 boundaries, empty EOF, cancellation, stale output and an actual 16 MiB read-only
 line. This is the cancellable reveal operation; host commands are not yet wired.
 
-Still required: connect this work to the terminal event loop, preserve caret/selection
-and backward navigation across mode/width changes, implement space wrapping,
-and exercise F2 and cancellation through the terminal host. This component does
-not yet change the visible read-only terminal or close the wrap requirement.
+The terminal input loop now uses these operations. F2 switches read-only files
+between the existing hard-wrapped view and a no-wrap view. Replacement work
+advances cooperatively and remains private until complete. Escape cancels a
+transition or movement and restores the prior published caret/selection. Resize
+reprepares the viewport; old frames with incompatible dimensions are withheld.
+Up/Down and Page Up/Down use logical rows and preserve a preferred display
+column across short lines. Shift selection retains exact source byte ranges;
+existing copy, search and source-boundary commands remain shared. Mode changes
+and view preparation do not change document bytes or history.
+
+Scripted terminal-host tests use real read-only files and cover F2 both ways,
+logical movement across a line longer than the viewport, exact selection/copy,
+horizontal scrolling, shrinking dimensions, preferred-column restoration,
+backward paging, and Escape before transition/movement publication. These are
+input-loop tests, not physical keyboard or screen evidence. Native platform
+validation of the integration remains pending.
+
+Local Windows Release build passed, with 26/26 headless tests in 19.72 seconds.
+A subsequent cancellation review fixed automatic restart after Escape during
+resize preparation. The terminal-host suite then passed in 10.49 seconds,
+including a regression asserting that cancellation does not request another
+viewport. Focused movement checks also pass for wide glyphs, empty rows,
+clamping at document edges, and stale-source refusal. The 137-file spelling
+audit passed. Source review checked ownership, complete-before-publication,
+restoration on failure/cancellation, and absence of added idle polling.
+
+Still required: intelligent space wrapping for read-only views, native/physical
+host checks, and responsiveness measurement of mode changes and long-line
+navigation. Read-only wrap mode remains hard wrapping; this does not close the
+full wrap or final responsiveness requirement.

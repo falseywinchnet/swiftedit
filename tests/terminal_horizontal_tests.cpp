@@ -403,6 +403,41 @@ void check_reveal(const Fixture &fixture) {
     }
     require(refused, "Completed reveal refuses a changed source identity");
 }
+void check_logical_movement(const Fixture &fixture) {
+    swiftedit::Session session{};
+    session.open(fixture.write("logical-move.txt", "ab\r\n\t\xe6\xbc\xa2\n\nz"));
+    struct Case {
+        std::uint64_t caret{}, column{};
+        bool down{};
+        std::size_t count{};
+        std::uint64_t target{};
+    };
+    const std::vector<Case> cases = {
+        {10, 8, false, 1, 9}, {0, 5, true, 1, 5}, {4, 4, true, 1, 9},
+        {10, 8, true, 1, 11}, {0, 1, false, 1, 1},
+        {0, 0, true, 300, 10}, {11, 9, false, 300, 2}};
+    for (const Case scenario : cases) {
+        swiftedit::TerminalNoWrapMove move(session, scenario.caret, scenario.column,
+                                         scenario.down, scenario.count);
+        std::size_t steps = 0;
+        while (!move.step(session)) {
+            ++steps;
+            require(steps < 100, "Logical movement advances through phases");
+        }
+        require(move.result(session) == scenario.target,
+                "Logical movement handles wide glyphs, empty rows and clamped source edges");
+    }
+    swiftedit::TerminalNoWrapMove pending(session, 0, 0, true, 1);
+    require(!pending.step(session), "Logical movement remains cancellable before publication");
+    session.reset();
+    bool refused = false;
+    try {
+        static_cast<void>(pending.step(session));
+    } catch (const std::runtime_error &) {
+        refused = true;
+    }
+    require(refused, "Logical movement rejects changed source identity");
+}
 } // namespace
 int main() {
     try {
@@ -418,6 +453,7 @@ int main() {
         check_viewport(fixture);
         check_source_caret(fixture);
         check_reveal(fixture);
+        check_logical_movement(fixture);
         std::cout << "Bounded horizontal rendering matches source, width and inert-control policies.\n";
         return 0;
     } catch (const std::exception &failure) {
