@@ -37,6 +37,10 @@ returns `ok<TAB>quit`. Requests exceeding 32 MiB of transport text are rejected.
 | `save` | Snapshot-checked save to current path; illegal UTF-8 bytes block it |
 | `save-as`, new-path | Creates a new file, never replaces an existing target |
 | `save-text-copy`, new-path | Creates sanitized copy, one space per illegal byte; leaves current document and original untouched |
+| `text-copy-start`, new-path | Reserves a new-file copy task and emits progress without reading source |
+| `text-copy-next`, byte-budget | Advances one read/convert/write step; budget 1..65536 |
+| `text-copy-publish` | Publishes a ready copy after source validation; never overwrites |
+| `text-copy-cancel` | Drops the pending/ready copy and removes its unpublished temporary |
 | `csv-get`, A1 | Decoded CSV field from an editable `.csv` file |
 | `csv-set`, A1, text | Previews a correctly quoted field update; requires commit |
 | `csv-clear`, A1, B3 | Previews contents-only rectangular clear; requires commit |
@@ -159,3 +163,20 @@ stale document identity, and wildcard search in an actual 16 MiB paged file.
 The complete local suite passed 23/23 in 9.05 s; source spelling audit passed
 116 files. Source c2569a3 passed native run 36960180849 and portable-core
 run 36960180791 on Windows, macOS and Linux.
+
+
+Cooperative text copies use `text-copy-start/next/publish/cancel` for editable or
+paged sources. Start and unfinished steps emit
+`text-copy-progress<TAB>source-offset<TAB>source-size<TAB>illegal-bytes`.
+The final step emits the same fields with `text-copy-ready`; the destination is
+still absent. UTF-8 carry can defer up to three source bytes, so offset is source
+bytes consumed, not bytes already written. Illegal-byte count includes only
+resolved conversion output. `text-copy-publish` revalidates the source and emits
+`text-copy-saved<TAB>source-size<TAB>illegal-bytes` after installation, then drops
+the task. Final file flush/publication is synchronous. A premature publish is
+refused without losing the task. Cancel is harmless when no task exists; quitting
+also destroys an unpublished task. Invalid start arguments or a failed destination
+reservation preserve the preceding task. A successful new start replaces it.
+A changed source causes step/publication failure and temporary cleanup. Existing
+names, including names created after start, are never replaced. The older
+`save-text-copy` remains a synchronous convenience command using the same task.

@@ -243,3 +243,13 @@ Full local suite: 23 passed in 11.15 seconds. Expanded CLI test passed in 1.15
 seconds. House-style audit: 122 source files, zero spelling findings. Native
 integration validation is pending. This supersedes earlier ledger statements
 that paged Save Text Copy is unavailable; large GUI integration remains pending.
+
+Cooperative text-copy protocol is now exposed as text-copy-start/next/publish/
+cancel. Preparation and publication are separate, so clients can cancel even a
+fully prepared copy. Invalid starts/budgets and premature publication preserve
+the existing task; stale source publication fails and cleans up. CLI tests cover
+a 16 MiB copy in 256 steps with SHA-256 equality, no destination before explicit
+publish, one-byte reads across an emoji and illegal/truncated UTF-8, ready-state
+cancellation, failed replacement start and source identity invalidation. The CLI
+integration passed in 1.44 seconds; the 122-file spelling audit passed. This closes
+the earlier cooperative-protocol gap; final flush/publication remains synchronous.

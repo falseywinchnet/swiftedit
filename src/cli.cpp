@@ -4,6 +4,7 @@
 #include "session_word_count.hpp"
 #include "session_copy.hpp"
 #include "session_search.hpp"
+#include "session_text_copy.hpp"
 #include <charconv>
 #include <iostream>
 #include <stdexcept>
@@ -100,6 +101,7 @@ int main(int argc, char **argv) {
     std::unique_ptr<swiftedit::SessionWordCount> counting{};
     std::unique_ptr<swiftedit::SessionCopy> copying{};
     std::unique_ptr<swiftedit::SessionSearch> searching{};
+    std::unique_ptr<swiftedit::SessionTextCopy> text_copy{};
     swiftedit::SourceClipboard clipboard{};
     std::string line{};
     std::cout << "ready\tSwiftEdit\t1\n" << std::flush;
@@ -360,6 +362,32 @@ int main(int argc, char **argv) {
             } else if (cmd == "save-as") {
                 require_field_count(f, 2);
                 session.save_as(path(f[1]));
+            } else if (cmd == "text-copy-start") {
+                require_field_count(f, 2);
+                text_copy = std::make_unique<swiftedit::SessionTextCopy>(session, path(f[1]));
+                std::cout << "text-copy-progress\t0\t" << (*text_copy).size() << "\t0\n";
+            } else if (cmd == "text-copy-next") {
+                require_field_count(f, 2);
+                const std::uint64_t budget = number(f[1]);
+                if (!budget || budget > swiftedit::maximum_page)
+                    throw std::runtime_error("Text copy read budget must be 1..65536 bytes.");
+                if (!text_copy)
+                    throw std::runtime_error("Start a text copy first.");
+                const bool ready = (*text_copy).step(session, static_cast<std::size_t>(budget));
+                std::cout << (ready ? "text-copy-ready" : "text-copy-progress") << '\t'
+                          << (*text_copy).offset() << '\t' << (*text_copy).size() << '\t'
+                          << (*text_copy).invalid_bytes() << '\n';
+            } else if (cmd == "text-copy-publish") {
+                require_field_count(f, 1);
+                if (!text_copy)
+                    throw std::runtime_error("Start a text copy first.");
+                (*text_copy).publish(session);
+                std::cout << "text-copy-saved\t" << (*text_copy).size() << '\t'
+                          << (*text_copy).invalid_bytes() << '\n';
+                text_copy.reset();
+            } else if (cmd == "text-copy-cancel") {
+                require_field_count(f, 1);
+                text_copy.reset();
             } else if (cmd == "save-text-copy") {
                 require_field_count(f, 2);
                 session.save_text_copy(path(f[1]));

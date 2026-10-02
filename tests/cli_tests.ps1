@@ -151,6 +151,22 @@ try {
     Assert ($sourceHash -eq $copyHash) 'Paged CLI text copy preserves valid source bytes'
     $response = Send-Request -Process $process -Fields @('save-text-copy',$largeTextCopy.Replace('\','\\'))
     Assert ($response[-1].StartsWith("error`t")) 'Paged CLI text copy refuses an existing destination'
+    $cooperativeCopy = Join-Path $fixture 'cooperative-copy.txt'
+    $response = Send-Request -Process $process -Fields @('text-copy-start',$cooperativeCopy.Replace('\','\\'))
+    Assert ($response[0] -eq "text-copy-progress`t0`t16777216`t0") 'Text copy starts without source reads'
+    $response = Send-Request -Process $process -Fields @('text-copy-publish')
+    Assert ($response[-1].StartsWith("error`tText copy is not ready")) 'Unfinished text copy cannot publish'
+    $response = Send-Request -Process $process -Fields @('text-copy-next','0')
+    Assert ($response[-1].StartsWith("error`tText copy read budget")) 'Invalid copy budget preserves pending task'
+    for ($textStep = 0; $textStep -lt 256; ++$textStep) {
+        $response = Send-Request -Process $process -Fields @('text-copy-next','65536')
+        Assert ($response[-1].StartsWith("ok`ttext-copy-next`t")) 'Text copy advances cooperatively'
+    }
+    Assert ($response[0] -eq "text-copy-ready`t16777216`t16777216`t0") 'Complete text copy waits for publication'
+    Assert (-not [IO.File]::Exists($cooperativeCopy)) 'Ready copy has not installed its destination'
+    $response = Send-Request -Process $process -Fields @('text-copy-publish')
+    Assert ($response[0] -eq "text-copy-saved`t16777216`t0") 'Explicit publish installs the complete copy'
+    Assert ((Get-FileHash -LiteralPath $cooperativeCopy -Algorithm SHA256).Hash -eq $sourceHash) 'Cooperative CLI copy is byte faithful'
     $response = Send-Request -Process $process -Fields @('word-count-start')
     Assert ($response[0] -eq "word-count-progress`t0`t16777216") 'Paged count begins without scanning'
     for ($countStep = 0; $countStep -lt 256; ++$countStep) {
@@ -190,6 +206,26 @@ try {
     Assert ($response[-1].StartsWith("error`tCopy document changed")) 'Copy rejects changed document identity'
     $response = Send-Request -Process $process -Fields @('clipboard-page','0','4')
     Assert ($response[0] -eq "clipboard`t0`t4`t4`t x x") 'Failed copy preserves previous clipboard'
+    $invalidCopySource = Join-Path $fixture 'invalid-copy-source.txt'
+    [IO.File]::WriteAllBytes($invalidCopySource,[byte[]](240,159,152,128,255,226,130))
+    $response = Send-Request -Process $process -Fields @('open',$invalidCopySource.Replace('\','\\'))
+    $invalidCopyTarget = Join-Path $fixture 'invalid-copy-target.txt'
+    $response = Send-Request -Process $process -Fields @('text-copy-start',$invalidCopyTarget.Replace('\','\\'))
+    $response = Send-Request -Process $process -Fields @('text-copy-start',$invalidCopySource.Replace('\','\\'))
+    Assert ($response[-1].StartsWith("error`t")) 'Invalid replacement copy request preserves prior task'
+    for ($byteStep = 0; $byteStep -lt 7; ++$byteStep) {
+        $response = Send-Request -Process $process -Fields @('text-copy-next','1')
+    }
+    Assert ($response[0] -eq "text-copy-ready`t7`t7`t3") 'Split emoji preserved and three illegal bytes counted'
+    $response = Send-Request -Process $process -Fields @('text-copy-cancel')
+    Assert (-not [IO.File]::Exists($invalidCopyTarget)) 'Cancelling a ready copy leaves destination absent'
+    $response = Send-Request -Process $process -Fields @('text-copy-start',$invalidCopyTarget.Replace('\','\\'))
+    $response = Send-Request -Process $process -Fields @('text-copy-next','65536')
+    $response = Send-Request -Process $process -Fields @('discard')
+    $response = Send-Request -Process $process -Fields @('text-copy-publish')
+    Assert ($response[-1].StartsWith("error`tText copy source changed")) 'Ready copy refuses changed source identity'
+    Assert (-not [IO.File]::Exists($invalidCopyTarget)) 'Stale publication leaves destination absent'
+    $response = Send-Request -Process $process -Fields @('text-copy-cancel')
     $response = Send-Request -Process $process -Fields @('quit')
     [bool]$exited = $process.WaitForExit(5000)
     Assert ($exited -and $process.ExitCode -eq 0) 'Clean process exit'
