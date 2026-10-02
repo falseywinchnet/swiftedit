@@ -126,4 +126,8 @@ pasted Y, Ctrl+Y or other commands cannot approve or bypass the choice.
 The editable terminal now binds Ctrl+A to its existing Select All operation;
 the read-only path already had that binding. Shared-loop regression scenarios
 exercise both clipboard paths, exact threshold, cancellation, one undo returning
-to a clean document, redo and exact saved bytes. Native validation is pending.
+to a clean document, redo and exact saved bytes. Source
+`7c4fedafe9f5b8dd3ede41a1d7e16ad529c415a3` passed all 22 local tests (6.11 s),
+native run 36954678518 on Windows/macOS/Linux, and portable-core run 36954678433
+on all three platforms. This verifies the shared-loop behavior on each platform;
+physical terminal-emulator clipboard interaction still needs broader dogfooding.
