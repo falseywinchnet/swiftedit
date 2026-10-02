@@ -62,6 +62,27 @@ struct ListState {
     bool ordered{};
     unsigned next{1};
 };
+// MD4C owns the attribute slices for the duration of its callback. Copy the
+// decoded destination into our model; never retain the borrowed slice pointers.
+std::string attribute_text(const MD_ATTRIBUTE &attribute) {
+    std::string result{};
+    std::size_t index = 0;
+    MD_OFFSET offset = 0;
+    while (offset < attribute.size) {
+        const MD_OFFSET end = attribute.substr_offsets[index + 1];
+        const std::string_view part(attribute.text + offset, end - offset);
+        if (attribute.substr_types[index] == MD_TEXT_ENTITY) {
+            const std::string decoded = entity_text(part);
+            result += decoded;
+        } else if (attribute.substr_types[index] == MD_TEXT_NULLCHAR)
+            append_scalar(result, 0xfffd);
+        else
+            result += part;
+        offset = end;
+        ++index;
+    }
+    return result;
+}
 struct MarkdownParser {
     std::vector<MarkdownBlock> blocks{};
     std::optional<std::size_t> current{};
@@ -195,7 +216,8 @@ struct MarkdownParser {
             ++strike;
         else if (type == MD_SPAN_A) {
             const MD_SPAN_A_DETAIL &link = *static_cast<MD_SPAN_A_DETAIL *>(detail);
-            links.emplace_back(link.href.text, link.href.size);
+            std::string destination = attribute_text(link.href);
+            links.push_back(std::move(destination));
         } else if (type == MD_SPAN_IMG)
             append("[Image: ");
     }

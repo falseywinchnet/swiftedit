@@ -35,6 +35,21 @@ int main() {
         check(heading && bold && italic && link && task && quoted && code && table,
               "Common blocks, styled spans, task lists, links and tables parsed");
         check(html_text && entity, "HTML is inert text and entities decode");
+        const std::vector<swiftedit::MarkdownBlock> destinations =
+            swiftedit::parse_markdown(
+                "[decoded](https://example.com/?a=1&amp;b=&#xE9;) [empty]()\n");
+        bool decoded_destination = false;
+        bool empty_destination = false;
+        for (const swiftedit::MarkdownBlock &block : destinations) {
+            for (const swiftedit::MarkdownSpan &span : block.spans) {
+                if (span.text == "decoded")
+                    decoded_destination = span.url == "https://example.com/?a=1&b=\xc3\xa9";
+                if (span.text == "empty")
+                    empty_destination = span.url.empty();
+            }
+        }
+        check(decoded_destination && empty_destination,
+              "Link destinations decode entities and preserve empty destinations");
         const std::vector<swiftedit::MarkdownBlock> image =
             swiftedit::parse_markdown("![alt](file:///private/image.svg)");
         check(!image.empty(), "Image is represented by inert alternate text");

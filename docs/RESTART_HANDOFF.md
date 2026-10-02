@@ -663,3 +663,11 @@ Provider4d24f43 native run is terminal failure (Mac/Linux passed). Coordinator
 pushed CI-only723cd7f9f8016d854f667f41e0c5dbcbe4cc0adf; native36945290227 is live.
 The corrected development step explicitly enables pinned FT/HB after ordinary
 SDK export. SDK032 remains pinned until complete verified replacement evidence.
+
+Markdown link destination decoding now consumes MD4C's attribute slices rather
+than copying the encoded attribute text. Named and numeric entities appear as
+the actual destination in the inert URL model/tooltip; empty destinations stay
+empty. Borrowed parser slices are copied during the callback, no file/network
+access is added, and the decoded URL still participates in retained byte limits.
+All 20 local suites passed4.99s;101-file spelling clean. Regression covers mixed
+normal/entity segments, Unicode numeric entity and empty URL.
