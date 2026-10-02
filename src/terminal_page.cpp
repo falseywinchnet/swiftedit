@@ -5,11 +5,20 @@
 #include <stdexcept>
 namespace swiftedit {
 namespace gf = gui_forms;
-static TerminalPageFrame build_terminal_page(const Session &session, TerminalPageCursor cursor,
-                                             std::size_t width, std::size_t rows, const bool paint_runs) {
+struct BuiltPage {
+    TerminalPageFrame page{};
+    std::size_t next_column{};
+    bool needs_context{};
+};
+template <bool PaintRuns>
+static BuiltPage build_terminal_page(const Session &session, const TerminalPageCursor cursor,
+                                     const std::size_t width, const std::size_t rows,
+                                     const std::size_t source_budget, const std::size_t initial_column) {
     if (!width || width > 1000 || !rows || rows > 32768)
         throw std::runtime_error("Terminal page dimensions exceed their bounded range.");
-    const Page source = session.page(cursor.offset, maximum_page);
+    if (initial_column >= width)
+        throw std::runtime_error("Invalid terminal scan column.");
+    const Page source = session.page(cursor.offset, source_budget);
     const bool eof = source.next == source.size;
     std::string metadata = source.bytes;
     for (std::size_t i = 0; i < metadata.size();) {
@@ -34,16 +43,19 @@ static TerminalPageFrame build_terminal_page(const Session &session, TerminalPag
     std::size_t count = text.grapheme_count().value();
     if (!eof && count)
         --count;
-    if (!eof && !count)
-        throw std::runtime_error(
-            "A complete grapheme exceeds the terminal page context limit. Source is unchanged.");
-    TerminalPageFrame result{};
-    if (paint_runs)
+    BuiltPage built{};
+    if (!eof && !count) {
+        built.needs_context = true;
+        return built;
+    }
+    TerminalPageFrame &result = built.page;
+    if constexpr (PaintRuns)
         result.runs.reserve(std::min<std::size_t>(metadata.size(), width * rows));
     result.next = cursor;
-    result.row_starts.push_back(cursor);
+    if (!initial_column)
+        result.row_starts.push_back(cursor);
     std::size_t row = 0;
-    std::size_t column = 0;
+    std::size_t column = initial_column;
     bool after_wrap = cursor.after_wrap;
     for (std::size_t index = 0; index < count && row < rows; ++index) {
         const gf::Utf8Range range = text.grapheme_range(gf::GraphemeIndex(index));
@@ -53,12 +65,13 @@ static TerminalPageFrame build_terminal_page(const Session &session, TerminalPag
         if (bytes == "\r" || bytes == "\n" || bytes == "\r\n") {
             if (index == 0 && cursor.label_cell)
                 throw std::runtime_error("Invalid terminal label continuation.");
-            if (!after_wrap)
+            const bool advance_row = !after_wrap;
+            if (advance_row)
                 ++row;
             after_wrap = false;
             column = 0;
             result.next = {cursor.offset + offset + length, 0, false};
-            if (row > result.row_starts.size() - 1)
+            if (advance_row)
                 result.row_starts.push_back(result.next);
             continue;
         }
@@ -83,7 +96,7 @@ static TerminalPageFrame build_terminal_page(const Session &session, TerminalPag
         while (consumed < glyph.cells && row < rows) {
             const std::size_t available = width - column;
             const std::size_t take = std::min(available, glyph.cells - consumed);
-            if (paint_runs) {
+            if constexpr (PaintRuns) {
                 TerminalPageRun run{};
                 run.row = row;
                 run.column = column;
@@ -108,20 +121,27 @@ static TerminalPageFrame build_terminal_page(const Session &session, TerminalPag
         }
     }
     result.more = result.next.offset < source.size || result.next.label_cell != 0;
-    return result;
+    built.next_column = column;
+    return built;
 }
 TerminalPageFrame terminal_page(const Session &session, TerminalPageCursor cursor,
                                 std::size_t width, std::size_t rows) {
     if (!rows || rows > 300)
         throw std::runtime_error("Terminal page dimensions exceed their bounded range.");
-    TerminalPageFrame result = build_terminal_page(session, cursor, width, rows, true);
+    BuiltPage built = build_terminal_page<true>(session, cursor, width, rows, maximum_page, 0);
+    if (built.needs_context)
+        throw std::runtime_error(
+            "A complete grapheme exceeds the terminal page context limit. Source is unchanged.");
+    TerminalPageFrame result = std::move(built.page);
     return result;
 }
 TerminalPageEnd::TerminalPageEnd(const Session &session, const std::size_t width,
-                               const std::size_t rows)
-    : stamp_(session.stamp()), size_(session.size()), width_(width), rows_(rows) {
+                               const std::size_t rows, const std::size_t source_budget)
+    : stamp_(session.stamp()), size_(session.size()), width_(width), rows_(rows), source_budget_(source_budget) {
     if (!width_ || width_ > 1000 || !rows_ || rows_ > 300)
         throw std::runtime_error("Terminal page dimensions exceed their bounded range.");
+    if (!source_budget_ || source_budget_ > maximum_page)
+        throw std::runtime_error("End scan source budget must be 1..65536 bytes.");
 }
 void TerminalPageEnd::validate(const Session &session) const {
     const DocumentStamp current = session.stamp();
@@ -133,9 +153,17 @@ bool TerminalPageEnd::step(const Session &session) {
     validate(session);
     if (complete_)
         return true;
-    // Avoid re-decoding the same 64 KiB for narrow/control-heavy rows. The scan
-    // uses the same geometry but does not construct per-run paint strings.
-    const TerminalPageFrame frame = build_terminal_page(session, cursor_, width_, 32768, false);
+    // Grow context only when the first grapheme is incomplete. Ordinary steps
+    // yield after 8 KiB; exceptionally long graphemes retain the 64 KiB ceiling.
+    std::size_t budget = source_budget_;
+    BuiltPage built = build_terminal_page<false>(session, cursor_, width_, 32768, budget, column_);
+    while (built.needs_context && budget < maximum_page) {
+        budget = std::min(maximum_page, budget * 2);
+        built = build_terminal_page<false>(session, cursor_, width_, 32768, budget, column_);
+    }
+    if (built.needs_context)
+        throw std::runtime_error("A complete grapheme exceeds the terminal page context limit. Source is unchanged.");
+    const TerminalPageFrame &frame = built.page;
     if (frame.more && frame.next == cursor_)
         throw std::runtime_error("End navigation made no source progress.");
     for (const TerminalPageCursor start : frame.row_starts) {
@@ -148,6 +176,7 @@ bool TerminalPageEnd::step(const Session &session) {
             tail_.pop_front();
     }
     cursor_ = frame.next;
+    column_ = built.next_column;
     complete_ = !frame.more;
     return complete_;
 }

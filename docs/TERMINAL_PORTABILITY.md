@@ -136,7 +136,7 @@ physical terminal-emulator clipboard interaction still needs broader dogfooding.
 
 Ctrl+End now scans to the final viewport of a read-only file. Shift+Ctrl+End
 extends the source selection to EOF; Ctrl+C uses the existing cooperative copy
-task. The scan reads at most 64 KiB per step, checks document identity/revision
+task. The released v0.2.8 scan reads at most 64 KiB per step, checks document identity/revision
 and size, and retains at most 32768 preceding row cursors plus the final viewport.
 Any key cancels between steps, and resize cancels the old-width scan. Incomplete
 or stale work cannot publish a destination. Source bytes are never modified.
@@ -153,3 +153,23 @@ Escape cancellation, stale/incomplete refusal, label continuation and Page Up.
 Source `ef156ec2ecbef1740c5301e3ec1dd4188b2bc4cb` passed native run 36955734691
 on Windows, macOS and Linux, and portable-core run 36955734686 on all three.
 The verified Mac package is published as v0.2.8-dogfood.20261001.
+
+
+## Smaller end-scan steps and read-boundary geometry
+
+The next implementation uses 8 KiB ordinary source steps. When the first
+complete grapheme needs more context, it doubles the read up to the existing
+64 KiB ceiling (at most 120 KiB of reads in one default adaptive step).
+This is a work bound, not a wall-time deadline. Cancellation remains between
+steps. The scan now carries its visual column between chunks: a source read
+boundary in the middle of a wrapped row must not create a new visual row.
+Regression tests compare the final viewport against analytical ASCII geometry
+and cover long combining graphemes, CRLF, labels and small adaptive budgets.
+
+The benchmark compares 8 KiB and 64 KiB on the same file and process using
+ABBAABBA order, four trials per budget. Both variants must produce the same
+final cursor and preserve the document. Raw wall and process CPU samples are
+retained separately. Local measurements are recorded in
+[the paired scan evidence](performance/2026-10-01-terminal-end/paired-8k.md).
+Native platform validation for this change is pending. This active terminal
+work does not resolve the owner's reported blank GUI idle CPU usage.

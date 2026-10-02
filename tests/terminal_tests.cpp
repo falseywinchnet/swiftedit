@@ -297,6 +297,30 @@ int main() {
             stale_end_refused = true;
         }
         check(stale_end_refused, "Completed end scan cannot publish against changed source");
+        swiftedit::Session streamed{};
+        const std::string long_line(swiftedit::maximum_page * 2 + 37, 'x');
+        streamed.replace_ranges({{0, 0}}, long_line, streamed.stamp());
+        const std::size_t expected_end = ((long_line.size() - 1) / 80 - 23) * 80;
+        for (const std::size_t budget : {std::size_t(8192), swiftedit::maximum_page}) {
+            swiftedit::TerminalPageEnd scan(streamed, 80, 24, budget);
+            while (!scan.step(streamed)) {}
+            check(scan.result(streamed).offset == expected_end,
+                  "Read chunks must not introduce artificial wrapped rows");
+        }
+        std::string combined = "e";
+        for (std::size_t index = 0; index < 6000; ++index)
+            combined += "\xcc\x81";
+        combined += "\r\nABCD\r\n\x1bZ";
+        streamed.replace_ranges({{0, streamed.text().size()}}, combined, streamed.stamp());
+        swiftedit::TerminalPageEnd reference_end(streamed, 4, 3, swiftedit::maximum_page);
+        while (!reference_end.step(streamed)) {}
+        const swiftedit::TerminalPageCursor expected_cursor = reference_end.result(streamed);
+        for (const std::size_t budget : {std::size_t(1), std::size_t(31), std::size_t(8192)}) {
+            swiftedit::TerminalPageEnd scan(streamed, 4, 3, budget);
+            while (!scan.step(streamed)) {}
+            check(scan.result(streamed) == expected_cursor,
+                  "Adaptive context preserves long graphemes, CRLF and control-label geometry");
+        }
         const std::filesystem::path large_path = dir / "large.txt";
         {
             std::ofstream file(large_path, std::ios::binary);

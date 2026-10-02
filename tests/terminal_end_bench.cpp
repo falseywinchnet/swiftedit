@@ -1,5 +1,6 @@
 #include "terminal_page.hpp"
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <ctime>
 #include <fstream>
@@ -47,6 +48,9 @@ void report(const std::string_view fixture, const std::string_view operation,
               << ",p50=" << samples[p50] << ",p95=" << samples[p95]
               << ",p99=" << samples[p99] << ",worst=" << samples.back() << '\n';
 }
+struct Measurements {
+    std::vector<double> slices{}, cpu_slices{}, totals{}, cpu_totals{}, publications{}, releases{}, cancellations{};
+};
 void measure(const std::filesystem::path &directory, const std::string &name,
              const std::string &pattern, std::ofstream &raw) {
     const std::filesystem::path path = directory / (name + ".txt");
@@ -69,14 +73,26 @@ void measure(const std::filesystem::path &directory, const std::string &name,
     session.open(path);
     if (!session.read_only() || session.size() != swiftedit::editable_limit)
         throw std::runtime_error("Benchmark fixture did not enter paged read-only mode.");
-    std::vector<double> slices{}, cpu_slices{}, totals{}, cpu_totals{}, publications{}, releases{}, cancellations{};
-    slices.reserve(16384);
-    cpu_slices.reserve(16384);
-    for (std::size_t trial = 0; trial < 5; ++trial) {
+    std::array<Measurements, 2> measurements{};
+    const std::array<std::size_t, 2> budgets{8192, 65536};
+    const std::array<std::string, 2> labels{name + "-8k", name + "-64k"};
+    for (Measurements &measured : measurements) {
+        measured.slices.reserve(16384);
+        measured.cpu_slices.reserve(16384);
+    }
+    swiftedit::TerminalPageCursor expected_cursor{};
+    bool have_expected_cursor = false;
+    // ABBAABBA balances order while both budgets read the same owned file.
+    for (std::size_t trial = 0; trial < 8; ++trial) {
+        const std::size_t position = trial % 4;
+        const std::size_t variant = position == 0 || position == 3 ? 0 : 1;
+        const std::size_t budget = budgets[variant];
+        const std::string &label = labels[variant];
+        Measurements &measured = measurements[variant];
         swiftedit::TerminalPager pager{};
         pager.reset(session);
         std::unique_ptr<swiftedit::TerminalPageEnd> task =
-            std::make_unique<swiftedit::TerminalPageEnd>(session, 80, 24);
+            std::make_unique<swiftedit::TerminalPageEnd>(session, 80, 24, budget);
         const Clock::time_point total_start = Clock::now();
         const double total_cpu_start = process_cpu_ms();
         std::vector<double> steps{};
@@ -97,6 +113,11 @@ void measure(const std::filesystem::path &directory, const std::string &name,
             if (steps.size() > 16384)
                 throw std::runtime_error("End scan exceeded the fixture work bound.");
         }
+        const swiftedit::TerminalPageCursor completed_cursor = (*task).result(session);
+        if (have_expected_cursor && !(completed_cursor == expected_cursor))
+            throw std::runtime_error("End scan budgets disagree on final viewport geometry.");
+        expected_cursor = completed_cursor;
+        have_expected_cursor = true;
         const Clock::time_point publish_start = Clock::now();
         pager.finish_end(session, *task);
         const swiftedit::TerminalPageFrame &frame = pager.frame(session, 80, 24);
@@ -111,22 +132,22 @@ void measure(const std::filesystem::path &directory, const std::string &name,
         const double total_cpu = process_cpu_ms() - total_cpu_start;
         if (total_cpu < 0)
             throw std::runtime_error("Benchmark process CPU clock moved backwards.");
-        totals.push_back(total);
-        cpu_totals.push_back(total_cpu);
-        publications.push_back(publication);
-        releases.push_back(release);
+        measured.totals.push_back(total);
+        measured.cpu_totals.push_back(total_cpu);
+        measured.publications.push_back(publication);
+        measured.releases.push_back(release);
         for (std::size_t index = 0; index < steps.size(); ++index) {
-            slices.push_back(steps[index]);
-            cpu_slices.push_back(cpu_steps[index]);
-            raw << name << ',' << trial << ",step," << index << ',' << steps[index] << '\n';
-            raw << name << ',' << trial << ",step-cpu," << index << ',' << cpu_steps[index] << '\n';
+            measured.slices.push_back(steps[index]);
+            measured.cpu_slices.push_back(cpu_steps[index]);
+            raw << label << ',' << trial << ",step," << index << ',' << steps[index] << '\n';
+            raw << label << ',' << trial << ",step-cpu," << index << ',' << cpu_steps[index] << '\n';
         }
-        raw << name << ',' << trial << ",publish-frame,0," << publication << '\n';
-        raw << name << ',' << trial << ",release,0," << release << '\n';
-        raw << name << ',' << trial << ",total,0," << total << '\n';
-        raw << name << ',' << trial << ",total-cpu,0," << total_cpu << '\n';
+        raw << label << ',' << trial << ",publish-frame,0," << publication << '\n';
+        raw << label << ',' << trial << ",release,0," << release << '\n';
+        raw << label << ',' << trial << ",total,0," << total << '\n';
+        raw << label << ',' << trial << ",total-cpu,0," << total_cpu << '\n';
         pager.first();
-        task = std::make_unique<swiftedit::TerminalPageEnd>(session, 80, 24);
+        task = std::make_unique<swiftedit::TerminalPageEnd>(session, 80, 24, budget);
         for (std::size_t index = 0; index < 32; ++index)
             if ((*task).step(session))
                 throw std::runtime_error("Cancellation fixture completed too soon.");
@@ -135,16 +156,20 @@ void measure(const std::filesystem::path &directory, const std::string &name,
         const double cancelled = milliseconds(cancel_start);
         if (pager.source_offset() != 0 || session.dirty())
             throw std::runtime_error("Cancellation changed the visible page or document.");
-        cancellations.push_back(cancelled);
-        raw << name << ',' << trial << ",cancel-release,0," << cancelled << '\n';
+        measured.cancellations.push_back(cancelled);
+        raw << label << ',' << trial << ",cancel-release,0," << cancelled << '\n';
     }
-    report(name, "step", slices);
-    report(name, "step-cpu", cpu_slices);
-    report(name, "publish-frame", publications);
-    report(name, "release", releases);
-    report(name, "cancel-release", cancellations);
-    report(name, "total", totals);
-    report(name, "total-cpu", cpu_totals);
+    for (std::size_t variant = 0; variant < measurements.size(); ++variant) {
+        const Measurements &measured = measurements[variant];
+        const std::string &label = labels[variant];
+        report(label, "step", measured.slices);
+        report(label, "step-cpu", measured.cpu_slices);
+        report(label, "publish-frame", measured.publications);
+        report(label, "release", measured.releases);
+        report(label, "cancel-release", measured.cancellations);
+        report(label, "total", measured.totals);
+        report(label, "total-cpu", measured.cpu_totals);
+    }
 }
 } // namespace
 int main(int argc, char **argv) {

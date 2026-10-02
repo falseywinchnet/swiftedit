@@ -27,12 +27,14 @@ struct TerminalPageFrame {
 // as complete. Source-independent labels may continue across rows/pages.
 [[nodiscard]] TerminalPageFrame terminal_page(const Session &, TerminalPageCursor,
                                               std::size_t width, std::size_t rows);
-// Advances at most one 64 KiB source page per step, retaining the final
+// Normally reads 8 KiB per step. Incomplete first graphemes grow context up to
+// 64 KiB (at most 120 KiB total reads for the default adaptive step). Retains the final
 // viewport and at most 32768 preceding row cursors for backward navigation.
 // The caller owns cancellation by dropping this task.
 class TerminalPageEnd final {
 public:
-    TerminalPageEnd(const Session &, std::size_t width, std::size_t rows);
+    TerminalPageEnd(const Session &, std::size_t width, std::size_t rows,
+                    std::size_t source_budget = 8192);
     [[nodiscard]] bool step(const Session &);
     [[nodiscard]] TerminalPageCursor result(const Session &) const;
 private:
@@ -41,6 +43,7 @@ private:
     DocumentStamp stamp_{};
     std::uint64_t size_{};
     std::size_t width_{}, rows_{};
+    std::size_t source_budget_{}, column_{};
     TerminalPageCursor cursor_{};
     std::deque<TerminalPageCursor> tail_{};
     bool complete_{};
