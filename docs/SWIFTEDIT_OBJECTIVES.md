@@ -583,3 +583,12 @@ Editor and views then passed together (2.34 seconds), covering all 23 suites
 across these checks. No native GUI launch or physical responsiveness claim.
 House-style audit passed 124 files; source review checked bounded history,
 owned snapshots, literal reset semantics and rollback of failed routed edits.
+
+Query edit responsiveness: added a reproducible headless routed-input benchmark
+with 4094/4095-byte ASCII, Unicode and combining queries, every grapheme flagged.
+After 20 warmup pairs per fixture, 200 insert/undo pairs per fixture produced
+1200 checked raw samples. Windows x64 Release observed worst insertion 3.2811 ms
+and worst undo 1.7033 ms; details and all percentiles are preserved under
+performance/2026-10-02-query-edit. Timing includes the query operation and history,
+but excludes painting, native input and physical presentation. No hard latency
+guarantee or final GUI performance signoff follows from this component run.
