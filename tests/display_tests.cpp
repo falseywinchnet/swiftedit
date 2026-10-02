@@ -35,6 +35,25 @@ int main() {
         check(end.offset == 0 && end.length == 0, "Empty insertion maps correctly");
         const swiftedit::DisplayPage literal("[BYTE FF]");
         check(literal.units().size() == 9, "Literal label text remains ordinary source text");
+        const std::string clusters = "e\xcc\x81\xf0\x9f\x91\xa9\xe2\x80\x8d\xf0\x9f\x92\xbb";
+        const swiftedit::DisplayPage graphemes(clusters);
+        check(graphemes.text() == clusters && graphemes.units().size() == 2,
+              "Combining text and joined emoji preserve bytes as complete display units");
+        for (std::size_t interior = 1; interior < clusters.size(); ++interior) {
+            if (interior == 3)
+                continue;
+            bool forward_refused = false;
+            bool inverse_refused = false;
+            try { static_cast<void>(graphemes.source_range({0, interior})); }
+            catch (const std::runtime_error &) { forward_refused = true; }
+            try { static_cast<void>(graphemes.display_offset(interior)); }
+            catch (const std::runtime_error &) { inverse_refused = true; }
+            check(forward_refused && inverse_refused, "Both mapping directions reject grapheme interiors");
+        }
+        const swiftedit::DisplayPage invalid_neighbors(std::string("e\xcc\x81\xff", 4) + "\xcc\x81");
+        check(invalid_neighbors.units().size() == 3 &&
+                  invalid_neighbors.units()[1].kind == swiftedit::DisplayKind::illegal_byte,
+              "Illegal byte labels remain atomic between combining graphemes");
         std::string maximum_source(swiftedit::maximum_page, 'a');
         for (std::size_t index = 1; index < maximum_source.size(); index += 2)
             maximum_source[index] = static_cast<char>(0xff);

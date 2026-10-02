@@ -419,3 +419,22 @@ SwiftEdit requested an explicit owner and public-capability checkpoint for its
 remaining document-view/mapping, multi-selection and print dependencies. These
 must not be described as actively progressing without fresh evidence. The frozen
 SDK remains unchanged and no provider source was modified.
+
+DisplayPage source/display selections now use complete source graphemes rather
+than individual Unicode scalars. Combining accents and joined emoji cannot be
+split by either mapping direction. Byte-preserving segmentation metadata treats
+each illegal byte as an independent control sentinel; displayed labels and source
+bytes remain unchanged. Regressions cover combining text, joined emoji, illegal
+bytes adjacent to combining marks, literal label-looking source, CRLF and maximum
+expanded pages. All 23 local tests passed in 31.44 seconds; spelling audit passed
+(124 files). This does not supply missing page-boundary context or claim GUI
+DocumentView integration.
+
+The coordinator subsequently transferred bounded ownership of the provider
+prepared-window input/identity/admission prototype and focused tests to this
+SwiftEdit chat. Initial edits must be new files only, with exact paths reported
+before editing. Existing host/rendering/A2-worker files, canonical contracts,
+public SDK availability, root CMake and workflows remain coordinator-owned.
+Provider commits/pushes are prohibited for this assignment; source-review and
+test evidence go back for independent integration. No workers or subagents.
+This supersedes the idle-prototype ownership statement, not the capability gaps.

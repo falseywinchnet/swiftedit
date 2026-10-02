@@ -10,7 +10,9 @@ struct DisplayUnit {
     DisplayKind kind{DisplayKind::text};
 };
 // Bounded view only. Source bytes remain owned by Session; generated labels are
-// never interpreted as source text. A label is indivisible for edit mapping.
+// never interpreted as source text. Labels, CRLF and complete source graphemes
+// are indivisible for edit mapping. Input is a complete bounded source fragment;
+// callers must establish surrounding boundary context before projecting pages.
 class DisplayPage {
 public:
     explicit DisplayPage(std::string_view source);

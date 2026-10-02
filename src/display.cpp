@@ -1,5 +1,6 @@
 #include "display.hpp"
 #include <algorithm>
+#include <gui_forms/text.hpp>
 #include <stdexcept>
 
 namespace swiftedit {
@@ -49,28 +50,37 @@ DisplayPage::DisplayPage(std::string_view source) : source_size_(source.size()) 
         throw std::runtime_error("Display page exceeds 65536 source bytes.");
     text_.reserve(source.size());
     units_.reserve(source.size());
+    // Preserve byte offsets in the segmentation metadata. Illegal bytes become
+    // single-byte control sentinels, which cannot join neighboring graphemes.
+    std::string metadata(source);
+    for (std::size_t index = 0; index < metadata.size();) {
+        const std::size_t scalar_length = utf8_sequence_length(source, index);
+        if (scalar_length)
+            index += scalar_length;
+        else {
+            metadata[index] = '\x01';
+            ++index;
+        }
+    }
+    const gui_forms::TextStore boundaries(metadata);
     for (std::size_t offset = 0; offset < source.size();) {
-        std::size_t length = utf8_sequence_length(source, offset);
+        const std::size_t next = boundaries.next_grapheme_boundary(gui_forms::Utf8Offset(offset)).value();
+        const std::size_t length = next - offset;
+        const std::size_t scalar_length = utf8_sequence_length(source, offset);
         const unsigned char first = static_cast<unsigned char>(source[offset]);
         DisplayUnit unit{{offset, length}, {text_.size(), 0}, DisplayKind::text};
-        if (!length) {
-            length = 1;
-            unit.source.length = 1;
+        if (!scalar_length) {
             unit.kind = DisplayKind::illegal_byte;
             const std::string label = hex_label(first, "[BYTE ", 2);
             text_.append(label);
         } else if (first == '\r' || first == '\n' || first == '\t') {
-            // CRLF remains one selection unit, even though it has two bytes.
-            if (first == '\r' && offset + 1 < source.size() && source[offset + 1] == '\n') {
-                length = 2;
-                unit.source.length = 2;
-            }
+            // Grapheme segmentation keeps CRLF as one source selection unit.
             text_.append(source.substr(offset, length));
         } else {
             char32_t scalar = first;
-            if (length > 1) {
-                scalar = first & (length == 2 ? 31 : length == 3 ? 15 : 7);
-                for (std::size_t index = 1; index < length; ++index) {
+            if (scalar_length > 1) {
+                scalar = first & (scalar_length == 2 ? 31 : scalar_length == 3 ? 15 : 7);
+                for (std::size_t index = 1; index < scalar_length; ++index) {
                     const unsigned char next = static_cast<unsigned char>(source[offset + index]);
                     scalar = (scalar << 6) | (next & 63);
                 }
