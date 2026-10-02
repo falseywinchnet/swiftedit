@@ -555,3 +555,15 @@ handed to the coordinator for independent review and native platform validation.
 It is not an exported SDK and is not included in v0.3.1. SwiftEdit's duplicate
 filename row remains until adoption of a reviewed public SDK. Markdown check
 state and recessed status-bar painting are already included in v0.3.1.
+
+Wildcard bug scan: TerminalQuery formerly preserved flags by equal text prefix
+and suffix. Inserting an identical character before a flagged occurrence could
+transfer its flag to the insertion; deleting that occurrence could leave a flag
+on its neighbor. Preservation now maps unchanged source ranges through the exact
+edit and requires the original whole grapheme to survive. Combining-character
+edits that merge a grapheme clear its prior flag. Terminal regression suite passed
+(4.52 seconds); house-style spelling audit passed all 124 source files. Source
+review confirmed private preparation before publication and bounded query size.
+The GUI QueryField has the same old matching heuristic and remains an open bug:
+its string-only notification needs edit provenance and query undo reconciliation.
+This is a terminal correction, not a claim that GUI wildcard editing is complete.

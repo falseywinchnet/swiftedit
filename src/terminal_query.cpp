@@ -13,19 +13,28 @@ void TerminalQuery::replace(std::size_t start, std::size_t length, std::string_v
         const SearchPattern parsed(source);
         slots = parsed.slots();
     }
-    std::size_t first = 0;
-    while (first < slots.size() && first < slots_.size() &&
-           slots[first].literal == slots_[first].literal) {
-        slots[first].wildcard = slots_[first].wildcard;
-        ++first;
-    }
-    std::size_t old_end = slots_.size();
-    std::size_t new_end = slots.size();
-    while (old_end > first && new_end > first &&
-           slots[new_end - 1].literal == slots_[old_end - 1].literal) {
-        slots[new_end - 1].wildcard = slots_[old_end - 1].wildcard;
-        --old_end;
-        --new_end;
+    // Flags belong to source occurrences, not matching text. A repeated
+    // character inserted before a flagged character must not steal its flag.
+    // Retain a flag only when the entire unchanged source grapheme survives
+    // as a whole grapheme; Unicode edits can merge neighboring graphemes.
+    for (std::size_t index = 0; index < slots_.size(); ++index) {
+        if (!slots_[index].wildcard)
+            continue;
+        const gf::Utf8Range old = store_.grapheme_range(gf::GraphemeIndex(index));
+        const std::size_t begin = old.start.value();
+        const std::size_t end = old.end.value();
+        std::size_t mapped = begin;
+        if (begin >= start + length)
+            mapped = begin - length + inserted.size();
+        else if (end > start)
+            continue;
+        const std::size_t mapped_end = mapped + end - begin;
+        if (!next.is_grapheme_boundary(gf::Utf8Offset(mapped)) ||
+            !next.is_grapheme_boundary(gf::Utf8Offset(mapped_end)))
+            continue;
+        const std::size_t target = next.grapheme_index(gf::Utf8Offset(mapped)).value();
+        if (target < slots.size() && slots[target].literal == slots_[index].literal)
+            slots[target].wildcard = true;
     }
     std::size_t caret = start + inserted.size();
     if (!next.is_grapheme_boundary(gf::Utf8Offset(caret)))

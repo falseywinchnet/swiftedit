@@ -635,6 +635,30 @@ int main() {
               "Query grapheme deletion preserves other flags");
         query.toggle();
         check(!query.pattern().slots()[2].wildcard, "Toggle at query end addresses last slot");
+        swiftedit::TerminalQuery repeated{};
+        repeated.insert("aa");
+        repeated.home();
+        repeated.toggle();
+        repeated.insert("a");
+        check(!repeated.pattern().slots()[0].wildcard && repeated.pattern().slots()[1].wildcard &&
+                  !repeated.pattern().slots()[2].wildcard,
+              "Inserted duplicate must not steal original occurrence wildcard");
+        repeated.erase(false);
+        check(repeated.text() == "aa" && !repeated.pattern().slots()[0].wildcard &&
+                  !repeated.pattern().slots()[1].wildcard,
+              "Deleting flagged occurrence must not transfer wildcard to identical neighbor");
+        repeated.end();
+        repeated.toggle();
+        repeated.home();
+        repeated.erase(false);
+        check(repeated.text() == "a" && repeated.pattern().slots()[0].wildcard,
+              "Deleting unflagged duplicate preserves surviving occurrence flag");
+        swiftedit::TerminalQuery combined_query{};
+        combined_query.insert("a");
+        combined_query.toggle();
+        combined_query.insert("\xcc\x81");
+        check(combined_query.pattern().slots().size() == 1 && !combined_query.pattern().slots()[0].wildcard,
+              "Combining insertion changes grapheme and clears its old wildcard");
         terminal.reset(true);
         terminal.insert("cat cat cat");
         swiftedit::TerminalReplace replacement{};
