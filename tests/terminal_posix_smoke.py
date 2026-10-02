@@ -53,7 +53,8 @@ def finish(master: int, child: subprocess.Popen[bytes]) -> int:
     raise RuntimeError('Terminal child did not finish')
 
 
-def exercise(executable: Path, path: Path, interrupt: bool) -> None:
+def exercise(executable: Path, path: Path, interrupt: int | None,
+             partial_input: bytes = b'') -> None:
     master: int
     slave: int
     master, slave = pty.openpty()
@@ -66,8 +67,12 @@ def exercise(executable: Path, path: Path, interrupt: bool) -> None:
         await_bytes(master, child, b'\x1b[?2004h')
         if termios.tcgetattr(slave) == original:
             raise RuntimeError('Terminal did not enter raw input mode')
-        if interrupt:
-            child.send_signal(signal.SIGTERM)
+        if interrupt is not None:
+            if partial_input and os.write(master, partial_input) != len(partial_input):
+                raise RuntimeError('Incomplete partial input write')
+            fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 25, 81, 0, 0))
+            child.send_signal(signal.SIGWINCH)
+            child.send_signal(interrupt)
         else:
             payload: bytes = 'é😀\r\n'.encode('utf-8') + b'\x13\x18'
             keys: bytes = b'\x1b[200~' + payload + b'\x1b[201~\x1a\x19\x13\x18'
@@ -75,7 +80,7 @@ def exercise(executable: Path, path: Path, interrupt: bool) -> None:
             if written != len(keys):
                 raise RuntimeError('Incomplete smoke input write')
         result: int = finish(master, child)
-        if (interrupt and result == 0) or (not interrupt and result != 0):
+        if (interrupt is not None and result == 0) or (interrupt is None and result != 0):
             raise RuntimeError('Unexpected terminal exit status: ' + str(result))
         restored: list[object] = terminal_mode(slave)
         if restored != original:
@@ -84,7 +89,7 @@ def exercise(executable: Path, path: Path, interrupt: bool) -> None:
             print('Interrupted case:', interrupt, flush=True)
             raise RuntimeError('Terminal mode was not restored')
         expected: bytes = b'base\n'
-        if not interrupt:
+        if interrupt is None:
             expected = 'é😀\r\n'.encode('utf-8') + b'\x13\x18base\n'
         if path.read_bytes() != expected:
             raise RuntimeError('Paste, undo/redo, save or interruption changed incorrect bytes')
@@ -104,10 +109,15 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix='swiftedit-terminal-') as directory:
         path: Path = Path(directory) / 'café.txt'
         path.write_bytes(b'base\n')
-        exercise(executable, path, False)
-        path.write_bytes(b'base\n')
-        exercise(executable, path, True)
-    print('POSIX terminal: atomic Unicode/control paste, undo/redo, save, exit and mode restoration passed.')
+        exercise(executable, path, None)
+        interruption: int
+        partial: bytes
+        for interruption in [signal.SIGINT, signal.SIGTERM, signal.SIGHUP, signal.SIGTSTP]:
+            for partial in [b'', b'\x1b', b'\xf0', b'\x1b[200~unfinished']:
+                path.write_bytes(b'base\n')
+                exercise(executable, path, interruption, partial)
+    print('POSIX terminal: atomic Unicode/control paste, undo/redo, save, exit, resize and '
+          'mode restoration across 16 signal/partial-input cases passed.')
 
 
 if __name__ == '__main__':

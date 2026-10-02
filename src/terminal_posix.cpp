@@ -5,6 +5,7 @@
 #include <csignal>
 #include <poll.h>
 #include <sys/ioctl.h>
+#include <sys/select.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -17,6 +18,27 @@ void terminal_signal(const int signal) {
     else
         interrupted = signal;
 }
+// The terminal host is single-threaded. Block handled signals across the flag
+// check; pselect atomically restores the old mask while it waits. Destruction
+// restores the caller's mask on every return and exception.
+class SignalBlock final {
+public:
+    explicit SignalBlock(const std::array<int, 5> &signals) {
+        sigset_t blocked{};
+        sigemptyset(&blocked);
+        for (const int signal : signals)
+            sigaddset(&blocked, signal);
+        if (sigprocmask(SIG_BLOCK, &blocked, &previous_) != 0)
+            throw std::runtime_error("Cannot protect terminal signal wait.");
+    }
+    SignalBlock(const SignalBlock &) = delete;
+    SignalBlock &operator=(const SignalBlock &) = delete;
+    ~SignalBlock() { sigprocmask(SIG_SETMASK, &previous_, nullptr); }
+    const sigset_t &previous() const { return previous_; }
+private:
+    sigset_t previous_{};
+};
+enum class InputWake { input, timeout, signal };
 class PosixConsole final : public swiftedit::TerminalConsole {
 public:
     PosixConsole() = default;
@@ -129,14 +151,10 @@ public:
                 ++offset_;
                 continue;
             }
-            struct pollfd descriptor{STDIN_FILENO, POLLIN, 0};
-            const int timeout = decoder_.escape_pending() ? 50 : -1;
-            const int ready = poll(&descriptor, 1, timeout);
-            if (ready < 0 && errno == EINTR)
+            const InputWake wake = wait_input();
+            if (wake == InputWake::signal)
                 continue;
-            if (ready < 0)
-                throw std::runtime_error("Cannot wait for terminal input.");
-            if (!ready) {
+            if (wake == InputWake::timeout) {
                 decoder_.expire();
                 continue;
             }
@@ -162,6 +180,24 @@ public:
         return false;
     }
 private:
+    InputWake wait_input() const {
+        const SignalBlock blocked(signals_);
+        if (interrupted || resized)
+            return InputWake::signal;
+        fd_set input{};
+        FD_ZERO(&input);
+        FD_SET(STDIN_FILENO, &input);
+        const struct timespec escape_timeout{0, 50000000};
+        const struct timespec *timeout = decoder_.escape_pending() ? &escape_timeout : nullptr;
+        const int ready = pselect(STDIN_FILENO + 1, &input, nullptr, nullptr,
+                                  timeout, &blocked.previous());
+        if (ready < 0 && errno == EINTR)
+            return InputWake::signal;
+        if (ready < 0)
+            throw std::runtime_error("Cannot wait for terminal input.");
+        const InputWake result = ready ? InputWake::input : InputWake::timeout;
+        return result;
+    }
     static constexpr std::array<int, 5> signals_{SIGWINCH, SIGINT, SIGTERM, SIGHUP, SIGTSTP};
     std::array<struct sigaction, 5> previous_{};
     std::size_t installed_{};
