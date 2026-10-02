@@ -18,13 +18,23 @@ struct TerminalPageRun {
     std::size_t row{}, column{};
     std::uint64_t source_offset{}, source_length{};
     std::string text{};
+    std::size_t cells{};
+    bool starts_grapheme{}, ends_grapheme{};
 };
 struct TerminalPageFrame {
     std::vector<TerminalPageRun> runs{};
     std::vector<TerminalPageCursor> row_starts{};
+    std::vector<SourceRange> graphemes{};
     TerminalPageCursor next{};
     bool more{};
 };
+struct TerminalPageCaret {
+    std::size_t row{}, column{};
+};
+[[nodiscard]] std::optional<std::uint64_t> terminal_page_horizontal(
+    const TerminalPageFrame &, std::uint64_t caret, bool right);
+[[nodiscard]] std::optional<TerminalPageCaret> terminal_page_caret(
+    const TerminalPageFrame &, std::uint64_t caret, std::size_t width, std::size_t rows);
 // Reads at most 64 KiB per frame; never treats an unfinished trailing grapheme
 // as complete. Source-independent labels may continue across rows/pages.
 [[nodiscard]] TerminalPageFrame terminal_page(const Session &, TerminalPageCursor,

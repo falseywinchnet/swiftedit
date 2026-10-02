@@ -49,8 +49,10 @@ static BuiltPage build_terminal_page(const Session &session, const TerminalPageC
         return built;
     }
     TerminalPageFrame &result = built.page;
-    if constexpr (PaintRuns)
+    if constexpr (PaintRuns) {
         result.runs.reserve(std::min<std::size_t>(metadata.size(), width * rows));
+        result.graphemes.reserve(std::min<std::size_t>(count, width * rows));
+    }
     result.next = cursor;
     if (!initial_column)
         result.row_starts.push_back(cursor);
@@ -62,6 +64,8 @@ static BuiltPage build_terminal_page(const Session &session, const TerminalPageC
         const std::size_t offset = range.start.value();
         const std::size_t length = range.end.value() - offset;
         const std::string_view bytes(source.bytes.data() + offset, length);
+        if constexpr (PaintRuns)
+            result.graphemes.push_back({static_cast<std::size_t>(cursor.offset + offset), length});
         if (bytes == "\r" || bytes == "\n" || bytes == "\r\n") {
             if (index == 0 && cursor.label_cell)
                 throw std::runtime_error("Invalid terminal label continuation.");
@@ -102,6 +106,9 @@ static BuiltPage build_terminal_page(const Session &session, const TerminalPageC
                 run.column = column;
                 run.source_offset = cursor.offset + offset;
                 run.source_length = length;
+                run.cells = take;
+                run.starts_grapheme = consumed == 0;
+                run.ends_grapheme = consumed + take == glyph.cells;
                 run.text = glyph.label ? glyph.text.substr(consumed, take) : glyph.text;
                 result.runs.push_back(std::move(run));
             }
@@ -123,6 +130,57 @@ static BuiltPage build_terminal_page(const Session &session, const TerminalPageC
     result.more = result.next.offset < source.size || result.next.label_cell != 0;
     built.next_column = column;
     return built;
+}
+std::optional<std::uint64_t> terminal_page_horizontal(const TerminalPageFrame &frame,
+                                                       const std::uint64_t caret, const bool right) {
+    std::optional<std::uint64_t> result{};
+    if (right) {
+        for (const SourceRange range : frame.graphemes) {
+            const std::uint64_t end = range.offset + range.length;
+            if (caret >= range.offset && caret < end) {
+                result = end;
+                break;
+            }
+        }
+    } else {
+        for (const SourceRange range : frame.graphemes) {
+            const std::uint64_t end = range.offset + range.length;
+            if (caret > range.offset && caret <= end) {
+                result = range.offset;
+                break;
+            }
+        }
+    }
+    return result;
+}
+std::optional<TerminalPageCaret> terminal_page_caret(const TerminalPageFrame &frame,
+                                                   const std::uint64_t caret,
+                                                   const std::size_t width, const std::size_t rows) {
+    std::optional<TerminalPageCaret> result{};
+    for (const TerminalPageRun &run : frame.runs) {
+        if (run.starts_grapheme && run.source_offset == caret) {
+            result = TerminalPageCaret{run.row, run.column};
+            break;
+        }
+        if (run.ends_grapheme && run.source_offset + run.source_length == caret) {
+            const std::size_t column = run.column + run.cells;
+            result = column == width ? TerminalPageCaret{run.row + 1, 0}
+                                     : TerminalPageCaret{run.row, column};
+        }
+    }
+    if (!result) {
+        for (std::size_t row = 0; row < frame.row_starts.size(); ++row) {
+            if (!frame.row_starts[row].label_cell && frame.row_starts[row].offset == caret) {
+                result = TerminalPageCaret{row, 0};
+                break;
+            }
+        }
+    }
+    if (!result && !frame.more && frame.next.offset == caret && !frame.row_starts.empty())
+        result = TerminalPageCaret{frame.row_starts.size() - 1, 0};
+    if (result && ((*result).row >= rows || (*result).column >= width))
+        result.reset();
+    return result;
 }
 TerminalPageFrame terminal_page(const Session &session, TerminalPageCursor cursor,
                                 std::size_t width, std::size_t rows) {

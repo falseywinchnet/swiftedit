@@ -12,6 +12,7 @@ public:
     mutable bool previous_pending{}, previous_seen{}, search_pending{}, single_copy_seen{};
     bool wait_for_search{};
     mutable std::size_t found_count{};
+    mutable bool three_copy_seen{}, two_copy_seen{}, caret_completed{};
     bool started{};
     void start() override { started = true; }
     swiftedit::TerminalSize size() const override { return {80, 24}; }
@@ -19,6 +20,16 @@ public:
         if (text.empty() || !started)
             throw std::runtime_error("Unexpected empty or premature terminal frame.");
         ++writes;
+        if (text.find("Finding previous grapheme...") != std::string_view::npos)
+            previous_pending = true;
+        if (text.find("Read-only caret moved") != std::string_view::npos && previous_pending) {
+            caret_completed = true;
+            previous_pending = false;
+        }
+        if (text.find("Copied 3 bytes") != std::string_view::npos)
+            three_copy_seen = true;
+        if (text.find("Copied 2 bytes") != std::string_view::npos)
+            two_copy_seen = true;
         if (text.find("Searching...") != std::string_view::npos)
             search_pending = true;
         if (text.find("Found") != std::string_view::npos) {
@@ -232,6 +243,47 @@ int main() {
         swiftedit::Terminal cancelled_find_terminal(cancelled_find);
         if (cancelled_find_terminal.run(large_path) != 0 || cancelled_find.found_count)
             throw std::runtime_error("Paged Find did not cancel before publishing a match.");
+        const std::filesystem::path horizontal_path = directory / "horizontal-read-only.txt";
+        {
+            std::ofstream output(horizontal_path, std::ios::binary);
+            output << "e\xcc\x81\r\n\x1bZ";
+            output.seekp(swiftedit::editable_limit - 1);
+            output.put('z');
+        }
+        ScriptConsole horizontal{};
+        horizontal.press(swiftedit::terminal_key::right, 0, false, true);
+        horizontal.press('C', 0, true);
+        horizontal.press(swiftedit::terminal_key::right);
+        horizontal.press(swiftedit::terminal_key::right, 0, false, true);
+        horizontal.press('C', 0, true);
+        horizontal.press(swiftedit::terminal_key::right);
+        horizontal.press(swiftedit::terminal_key::right, 0, false, true);
+        horizontal.press('C', 0, true);
+        horizontal.press('X', 0, true);
+        swiftedit::Terminal horizontal_terminal(horizontal);
+        if (horizontal_terminal.run(horizontal_path) != 0 || !horizontal.three_copy_seen ||
+            !horizontal.two_copy_seen || !horizontal.single_copy_seen)
+            throw std::runtime_error("Shift+Right did not select atomic Unicode, CRLF and control source bytes.");
+        ScriptConsole distant_left{};
+        distant_left.wait_for_previous = true;
+        distant_left.press('A', 0, true);
+        distant_left.press(swiftedit::terminal_key::right);
+        distant_left.press(swiftedit::terminal_key::left, 0, false, true);
+        distant_left.press('C', 0, true);
+        distant_left.press('X', 0, true);
+        swiftedit::Terminal left_terminal(distant_left);
+        if (left_terminal.run(horizontal_path) != 0 || !distant_left.caret_completed ||
+            !distant_left.single_copy_seen)
+            throw std::runtime_error("Shift+Left from an off-screen EOF did not reconstruct and copy the final grapheme.");
+        ScriptConsole cancelled_left{};
+        cancelled_left.press('A', 0, true);
+        cancelled_left.press(swiftedit::terminal_key::right);
+        cancelled_left.press(swiftedit::terminal_key::left, 0, false, true);
+        cancelled_left.press(swiftedit::terminal_key::escape);
+        cancelled_left.press('X', 0, true);
+        swiftedit::Terminal cancelled_left_terminal(cancelled_left);
+        if (cancelled_left_terminal.run(horizontal_path) != 0 || cancelled_left.caret_completed)
+            throw std::runtime_error("Previous-grapheme scan did not cancel before publication.");
         ScriptConsole cancelled_end{};
         cancelled_end.press(swiftedit::terminal_key::end, 0, true);
         cancelled_end.press(swiftedit::terminal_key::escape);

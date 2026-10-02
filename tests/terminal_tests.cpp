@@ -391,6 +391,35 @@ int main() {
               "Publishing matching-width reconstruction retains its earlier rows");
         resized_pager.up();
         check(resized_pager.source_offset() == 0, "Rebuilt history reaches source start");
+        swiftedit::Session horizontal{};
+        horizontal.replace_ranges({{0, 0}}, "e\xcc\x81\r\n\x1bZ", horizontal.stamp());
+        const swiftedit::TerminalPageFrame horizontal_frame = swiftedit::terminal_page(horizontal, {}, 4, 3);
+        check(swiftedit::terminal_page_horizontal(horizontal_frame, 0, true) == 3 &&
+                  swiftedit::terminal_page_horizontal(horizontal_frame, 3, false) == 0,
+              "Horizontal movement preserves a combining grapheme");
+        check(swiftedit::terminal_page_horizontal(horizontal_frame, 3, true) == 5 &&
+                  swiftedit::terminal_page_horizontal(horizontal_frame, 5, false) == 3,
+              "Horizontal movement treats CRLF as one source grapheme");
+        check(swiftedit::terminal_page_horizontal(horizontal_frame, 5, true) == 6,
+              "Horizontal movement crosses a displayed control label atomically");
+        const std::optional<swiftedit::TerminalPageCaret> control_caret =
+            swiftedit::terminal_page_caret(horizontal_frame, 5, 4, 3);
+        check(control_caret && (*control_caret).row == 1 && (*control_caret).column == 0,
+              "Caret maps the control's source start to the first visible label cell");
+        check(!swiftedit::terminal_page_caret(horizontal_frame, 6, 4, 3),
+              "Caret after a wrapped label outside the viewport needs revealing");
+        const swiftedit::TerminalPageFrame partial_control =
+            swiftedit::terminal_page(horizontal, {5, 4, true}, 4, 2);
+        check(swiftedit::terminal_page_horizontal(partial_control, 6, false) == 5 &&
+                  !swiftedit::terminal_page_caret(partial_control, 5, 4, 2),
+              "Partial label rows retain atomic movement without a false source-start caret");
+        swiftedit::Session newline_caret{};
+        newline_caret.replace_ranges({{0, 0}}, "ABCD\r\n", newline_caret.stamp());
+        const swiftedit::TerminalPageFrame newline_frame = swiftedit::terminal_page(newline_caret, {}, 4, 3);
+        const std::optional<swiftedit::TerminalPageCaret> eof_caret =
+            swiftedit::terminal_page_caret(newline_frame, 6, 4, 3);
+        check(eof_caret && (*eof_caret).row == 1 && (*eof_caret).column == 0,
+              "Caret at EOF after wrap plus CRLF occupies the next empty row");
         const std::filesystem::path large_path = dir / "large.txt";
         {
             std::ofstream file(large_path, std::ios::binary);

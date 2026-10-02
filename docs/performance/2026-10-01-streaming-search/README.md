@@ -50,3 +50,18 @@ open.
 
 Harness integration validation: full local suite 23/23 passed in 8.62 s;
 source spelling audit passed 117 files and CI Python syntax parsed successfully.
+
+
+## Native Mac baseline
+
+Source 0211b71 passed native run 36960607857 and portable-core run 36960607777
+on Windows, macOS and Linux. Mac's [receipt](native-mac-0211b71/receipt.json),
+[summary](native-mac-0211b71/summary.txt) and [compressed raw samples](native-mac-0211b71/samples.csv.gz)
+retain the same workload and all 258174 finite nonnegative measurements.
+
+Across these six simple-query workloads, Mac step p99 ranged from 0.302000 to
+0.456250 ms; the largest wall-time step was 2.871709 ms (mixed literal).
+Whole-search medians ranged from 578.511542 to 842.259709 ms. Largest task
+release during cancellation was 0.001792 ms. These are headless search results,
+not a general UI responsiveness guarantee or blank-window CPU measurement.
+The protocol/cache/query-complexity caveats above still apply.

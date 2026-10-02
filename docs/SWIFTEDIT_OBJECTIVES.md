@@ -109,14 +109,14 @@ whole-selection copy. Cancellation/failure preserves the previous clipboard.
 Actual 16 MiB file tests cover whole-selection copying, source-close lifetime,
 malformed/control bytes, CRLF, split Unicode and undoable byte-faithful paste.
 Terminal row/page selection and cooperative copying are implemented below;
-horizontal read-only caret movement and GUI integration remain pending.
+horizontal read-only caret movement is now implemented below; GUI integration remains pending.
 
 The shared Windows/macOS/Linux terminal connects paged copying to Shift+row/page navigation,
 Ctrl+A whole-document selection and Ctrl+C cooperative copying. Visible runs
 carry exact source ranges for highlighting; inert label fragments map back to
 one source control byte. The owned-console regression checks successful copying
 and cancelled whole-document copying preserving the prior clipboard. Horizontal
-read-only caret/selection movement and GUI integration remain open.
+read-only caret/selection movement is now implemented below; GUI integration remains open.
 
 CSV viewport computation now yields between formulas in a revocable frame queue.
 Source/view changes revoke stale work; leaving table view cancels pending work.
@@ -149,8 +149,9 @@ graphemes. Expired backward history is reconstructed cooperatively rather than
 forcing Ctrl+Home. Resizing invalidates row/page geometry according to its width
 and height dependencies while preserving the source anchor. Detailed tests and
 remaining performance outliers are recorded in TERMINAL_PORTABILITY.md and
-performance/2026-10-01-terminal-end/paired-8k.md. These changes do not complete
-horizontal read-only caret navigation or GUI virtualization. Streaming terminal
+performance/2026-10-01-terminal-end/paired-8k.md. These earlier changes did not complete
+horizontal read-only caret navigation or GUI virtualization; horizontal movement
+is implemented in the later checkpoint below. Streaming terminal
 large-file Find/F3 is now implemented through SessionSearch; CLI search-start/next/cancel expose the same task;
 large GUI integration remains pending (see TERMINAL_PORTABILITY.md).
 
@@ -174,3 +175,11 @@ Markdown displays need separate derived projections where display offsets are
 not raw source offsets. Mirroring is valid only for the exact same immutable
 projection; independent controls must not revoke the document's layout work.
 These conditions were sent to the provider coordinator; no new SDK is accepted.
+
+
+Horizontal read-only Left/Right and Shift selection are now connected to source
+grapheme boundaries and visible caret geometry. An off-screen backward move
+reconstructs the earlier row cooperatively; source and pending selection stay
+unchanged until completion. Details and validation are in TERMINAL_PORTABILITY.md.
+This closes the basic terminal horizontal-motion gap; GUI integration and broader
+physical terminal dogfooding remain unfinished.

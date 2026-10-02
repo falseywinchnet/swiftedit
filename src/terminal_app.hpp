@@ -27,6 +27,7 @@ inline void status_line(std::string &output, std::size_t row, std::string_view s
     const std::string safe = swiftedit::escape_field(source);
     output.append(safe, 0, std::min(width, safe.size()));
 }
+enum class PageNavigation { end, previous, left };
 enum class Prompt { none, save_path, text_copy_path, open_path, exit_choice, paste_choice, find, replacement };
 class Terminal {
 public:
@@ -96,11 +97,26 @@ public:
             try {
                 if (ending_) {
                     if ((*ending_).step(buffer_.session())) {
+                        std::optional<std::uint64_t> left_target{};
+                        bool reveal_left = false;
+                        if (page_navigation_ == PageNavigation::left) {
+                            const swiftedit::TerminalPageCursor first = (*ending_).result(buffer_.session());
+                            const swiftedit::TerminalPageFrame frame =
+                                swiftedit::terminal_page(buffer_.session(), first, width_, rows_);
+                            left_target = swiftedit::terminal_page_horizontal(frame, end_caret_, false);
+                            if (!left_target)
+                                throw std::runtime_error("Previous source grapheme could not be located.");
+                            reveal_left = !swiftedit::terminal_page_caret(frame, *left_target, width_, rows_);
+                        }
                         pager_.finish_end(buffer_.session(), *ending_);
-                        page_caret_ = end_previous_ ? pager_.source_offset() : buffer_.session().size();
+                        if (reveal_left)
+                            pager_.reveal(buffer_.session(), *left_target);
+                        page_caret_ = page_navigation_ == PageNavigation::left ? *left_target
+                                     : page_navigation_ == PageNavigation::previous ? pager_.source_offset() : buffer_.session().size();
                         page_anchor_ = end_extend_ ? end_anchor_ : page_caret_;
                         ending_.reset();
-                        status_ = end_previous_ ? "Earlier read-only page" : "End of read-only document";
+                        status_ = page_navigation_ == PageNavigation::left ? "Read-only caret moved"
+                                  : page_navigation_ == PageNavigation::previous ? "Earlier read-only page" : "End of read-only document";
                         redraw = true;
                         continue;
                     }
@@ -250,6 +266,12 @@ private:
         if (buffer_.session().read_only()) {
             const swiftedit::TerminalPageFrame &page =
                 pager_.frame(buffer_.session(), width_, rows_);
+            const std::optional<swiftedit::TerminalPageCaret> caret =
+                swiftedit::terminal_page_caret(page, page_caret_, width_, rows_);
+            if (caret) {
+                cursor_column = (*caret).column;
+                cursor_row = (*caret).row + 1;
+            }
             for (const swiftedit::TerminalPageRun &run : page.runs) {
                 position(screen, run.row + 1, run.column);
                 const std::uint64_t first = std::min(page_anchor_, page_caret_);
@@ -335,7 +357,7 @@ private:
                 width_);
         if (buffer_.session().read_only())
             status_line(screen, height - 1,
-                        "Read-only: Shift+Up/Down/Pg Select  ^A All  ^C Copy  F6 Words",
+                        "Read-only: Shift+arrows/Pg Select  ^A All  ^C Copy  F6 Words",
                         width_);
         else
             status_line(
@@ -435,6 +457,40 @@ private:
             throw std::runtime_error("Paste cancelled because the document or selection changed.");
         buffer_.insert(prepared.text);
         status_ = "Pasted as one edit";
+    }
+    void page_horizontal(const bool right, const bool extend) {
+        std::optional<std::uint64_t> target{};
+        if (!extend && page_anchor_ != page_caret_)
+            target = right ? std::max(page_anchor_, page_caret_) : std::min(page_anchor_, page_caret_);
+        else if ((right && page_caret_ == buffer_.session().size()) || (!right && !page_caret_))
+            target = page_caret_;
+        else {
+            const swiftedit::TerminalPageFrame &frame = pager_.frame(buffer_.session(), width_, rows_);
+            target = swiftedit::terminal_page_horizontal(frame, page_caret_, right);
+            if (!target && right) {
+                const swiftedit::TerminalPageFrame next =
+                    swiftedit::terminal_page(buffer_.session(), {page_caret_, 0, false}, width_, rows_);
+                target = swiftedit::terminal_page_horizontal(next, page_caret_, true);
+                if (!target)
+                    throw std::runtime_error("Next source grapheme could not be located.");
+            } else if (!target) {
+                ending_ = std::make_unique<swiftedit::TerminalPageEnd>(
+                    buffer_.session(), width_, 1, swiftedit::TerminalPageCursor{page_caret_, 0, false});
+                page_navigation_ = PageNavigation::left;
+                end_extend_ = extend;
+                end_anchor_ = page_anchor_;
+                end_caret_ = page_caret_;
+                status_ = "Finding previous grapheme... Any key cancels";
+                return;
+            }
+        }
+        const swiftedit::TerminalPageFrame &frame = pager_.frame(buffer_.session(), width_, rows_);
+        if (!swiftedit::terminal_page_caret(frame, *target, width_, rows_))
+            pager_.reveal(buffer_.session(), *target);
+        page_caret_ = *target;
+        if (!extend)
+            page_anchor_ = page_caret_;
+        status_ = "Read-only caret moved";
     }
     void key(const TerminalInput &event) {
         const bool ctrl = event.control;
@@ -581,9 +637,13 @@ private:
             return;
         }
         if (buffer_.session().read_only()) {
+            if (!ctrl && !alt && (key == terminal_key::left || key == terminal_key::right)) {
+                page_horizontal(key == terminal_key::right, shift);
+                return;
+            }
             if (ctrl && !alt && key == terminal_key::end) {
                 ending_ = std::make_unique<swiftedit::TerminalPageEnd>(buffer_.session(), width_, rows_);
-                end_previous_ = false;
+                page_navigation_ = PageNavigation::end;
                 end_extend_ = shift;
                 end_anchor_ = page_anchor_;
                 status_ = "Finding final page... Any key cancels";
@@ -611,7 +671,7 @@ private:
                 if (key == terminal_key::up || key == terminal_key::page_up) {
                     ending_ = pager_.prepare_previous(buffer_.session(), key == terminal_key::page_up);
                     if (ending_) {
-                        end_previous_ = true;
+                        page_navigation_ = PageNavigation::previous;
                         end_extend_ = shift;
                         end_anchor_ = page_anchor_ == page_caret_ ? before : page_anchor_;
                         status_ = "Finding earlier page... Any key cancels";
@@ -784,8 +844,9 @@ private:
     std::unique_ptr<swiftedit::SessionWordCount> counting_{};
     std::unique_ptr<swiftedit::SessionCopy> copying_{};
     std::unique_ptr<swiftedit::TerminalPageEnd> ending_{};
-    bool end_extend_{}, end_previous_{};
-    std::uint64_t end_anchor_{};
+    bool end_extend_{};
+    PageNavigation page_navigation_{PageNavigation::end};
+    std::uint64_t end_anchor_{}, end_caret_{};
     std::uint64_t page_anchor_{}, page_caret_{};
     bool replace_query_{};
     swiftedit::TerminalQuery query_{};

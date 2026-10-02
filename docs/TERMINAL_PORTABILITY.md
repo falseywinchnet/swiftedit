@@ -257,3 +257,30 @@ Streaming terminal search source 53abb7c passed native run 36959673036 and
 portable-core run 36959673110 on all three platforms. Its verified Mac package
 is published as v0.2.9-dogfood.20261001. The CLI protocol follow-up (source c2569a3) passed native run 36960180849
 and portable-core run 36960180791 on all three platforms.
+
+
+## Horizontal read-only caret and selection
+
+Left/Right now move between source grapheme boundaries in paged read-only
+files. Shift extends selection; an unmodified arrow collapses a selection to
+its corresponding edge. CRLF stays one unit, combining text stays atomic, and
+control labels select their source bytes rather than label characters.
+Page frames retain source ranges and actual run cell extents/first-last flags,
+so a visible source caret can be drawn without inventing a position in a
+partial control label. Movement reveals an off-screen destination.
+
+Most moves use cached visible geometry. Right beyond the current frame reads
+one bounded source frame. Left outside known geometry reconstructs the preceding
+row cooperatively from the source start, with unchanged viewport/selection until
+completion. Any key cancels between steps; resize cancels old-width work.
+This fallback is linear in source distance and still needs further latency
+assessment for very large files. Existing 64 KiB grapheme context limits apply.
+
+Tests cover combining graphemes, CRLF, wrapped control labels, partial label
+rows and EOF after a wrap/newline. Shared-loop tests on actual 16 MiB files
+verify Shift+Right copy lengths of 3/2/1 bytes, selection collapse, Shift+Left
+from off-screen EOF, and cancellation before backward publication. Native
+validation for this feature is pending.
+
+Horizontal-navigation local validation: 23/23 tests passed in 9.30 s; source
+spelling audit passed all 117 files. Native validation remains pending.
