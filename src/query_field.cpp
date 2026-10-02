@@ -90,6 +90,9 @@ void QueryField::on_paint(gf::Painter &painter, gf::Rect) {
     const gf::Rect bounds = arranged_bounds();
     const gf::BasicControlStyle &style = effective_theme().basic_style();
     const gf::FontSpec font{gf::FontRole::content, 14, 400, false};
+    const gf::ResolvedTextLayout font_metrics = painter.resolve_text_layout_utf8("Mg", font);
+    const double baseline = (bounds.height - font_metrics.ascent - font_metrics.descent) * 0.5 +
+                            font_metrics.ascent;
     if (layout_dirty_) {
         std::vector<double> next{0};
         std::vector<std::string> labels{};
@@ -129,7 +132,7 @@ void QueryField::on_paint(gf::Painter &painter, gf::Rect) {
             painter.fill_rect(box, style.face_light);
         if (hovered_ == index)
             painter.stroke_rect(box, style.border, 1);
-        painter.draw_text_utf8({x + 2, 6}, labels_[index], font,
+        painter.draw_text_utf8({x + 2, baseline}, labels_[index], font,
                                slots_[index].wildcard ? style.link : style.text);
     }
     if (focused_) {

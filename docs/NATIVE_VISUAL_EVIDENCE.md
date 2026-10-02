@@ -59,3 +59,26 @@ immutable CI artifact remains attached to the run. These corrections and the
 Markdown fixture passed the local build and all 20 headless tests in 4.03 seconds;
 105 authored source/header files passed the spelling scan. Mac bundle execution
 and corrected pixel inspection are pending the next native run.
+
+## Loaded fonts exposed text baseline defects
+
+Source1504e2b passed native36949960740 on all three platforms, and core36949960720.
+The Mac CSV and Markdown PNGs now show text, confirming bundle provisioning.
+Visual inspection found product defects: CSV labels clip against row tops,
+Markdown table text sits across borders, the ruler is clipped at the top and
+text decorations are displaced. The custom search field used the same erroneous
+top-origin draw convention. The native draw API expects a baseline.
+
+The correction uses public resolved ascent/descent metrics for CSV and query
+vertical alignment. Markdown retains a baseline and decoration positions with
+each measured run and caches the ruler baseline with layout. Warm Markdown
+painting still performs no new layout measurements. No file/formula/search
+semantics changed. A headless regression injects tall renderer metrics and
+checks glyph extents against cell/block/field bounds; all20 suites pass in4.66s,
+and the105-file spelling audit passes. Native corrected-pixel inspection is
+still required before accepting the fix.
+
+The before images are retained beside the idle evidence as
+`csv-baseline-defect-1504e2b.png` and `markdown-baseline-defect-1504e2b.png`.
+The loaded-font idle result is recorded separately in that directory's README;
+it does not establish a product CPU improvement.

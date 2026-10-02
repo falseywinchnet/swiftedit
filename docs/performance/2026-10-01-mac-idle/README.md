@@ -17,9 +17,30 @@ their stated uncontrolled-focus/occlusion limitations. No numerical correction
 or loaded-font baseline can be inferred from these older observations.
 
 The correction bundles each Mac native GUI fixture with the installed font pack
-and refuses visual/idle runs when the host reports incomplete fonts. Corrected
-native results are pending. The provider coordinator independently confirmed
+and refuses visual/idle runs when the host reports incomplete fonts. The first
+corrected result is recorded below. The provider coordinator independently confirmed
 the same resource gap in its idle fixture and is correcting it there too.
+
+## First font-loaded controlled baseline: 1504e2b
+
+Source `1504e2b187507086f25fba01fcf2e51a6c52a656`, unchanged SDK723cd7f,
+passed native run `36949960740` on all three platforms and core run `36949960720`.
+All 18 Mac window rows have the positive bundled-font renderer identity.
+
+| Observation | Focused blank | Text focus cleared |
+|---|---:|---:|
+| CPU seconds | 0.023676 | 0.001006 |
+| Elapsed seconds | 5.06026 | 5.01014 |
+| One-core CPU | 0.467881% | 0.0200793% |
+| Main paints / deadlines / wakes | 9 / 9 / 9 | 0 / 0 / 0 |
+| Each of eight hidden dialogs: paints / deadlines / wakes | 0 / 0 / 0 | 0 / 0 / 0 |
+
+Main focused painted area is342 and recorded presentation wall time4,039,414ns.
+All hidden dialogs remain occluded. Rawrows are
+`baseline-1504e2b-fonts-controlled.txt`. This is one CI observation, not a
+statistical distribution, an improvement comparison with fontless results,
+a reproduction of the owner's7%, or a CPU fix. Model focus clearing still
+does not mean switching applications. Owner-reported focused idle remains open.
 
 Owner report: SwiftEdit consumes approximately 7% CPU on an Apple silicon Mac
 running macOS 26 while showing a blank document. No claim of acceptability or

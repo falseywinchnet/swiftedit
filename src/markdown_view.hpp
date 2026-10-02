@@ -27,6 +27,7 @@ private:
         gf::Rect bounds{};
         gf::FontSpec font{};
         std::string text{}, url{};
+        double baseline{}, underline{}, strike_y{};
         bool strike{}, code{}, border{}, rule{};
     };
     struct RunOrder {
@@ -47,6 +48,7 @@ private:
     std::vector<gf::SubscriptionToken> subscriptions_{};
     std::unique_ptr<gf::ToolTip> tooltip_{};
     double layout_width_{}, content_height_{}, content_width_{}, maximum_run_height_{32};
+    double ruler_baseline_{};
     bool layout_dirty_{true};
     std::string hovered_url_{};
     std::string layout_error_{};

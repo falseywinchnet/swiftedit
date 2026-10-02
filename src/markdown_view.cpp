@@ -146,8 +146,10 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
                 const std::size_t text_total = retained_bytes + word.size();
                 if (span.url.size() > storage_limit - text_total)
                     throw std::runtime_error("Markdown layout exceeds display storage budget.");
-                const gf::Size measured = painter.measure_text_utf8(word, font);
-                const double height = std::max(20.0, measured.height + 4);
+                const gf::ResolvedTextLayout metrics = painter.resolve_text_layout_utf8(word, font);
+                const gf::Size measured = metrics.logical_size;
+                const double height = std::max(20.0, std::max(measured.height,
+                    metrics.ascent + metrics.descent) + 4);
                 if (block.kind != swiftedit::MarkdownKind::code && x[column] > left &&
                     x[column] + measured.width > right) {
                     x[column] = left;
@@ -158,6 +160,9 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
                 Run run{};
                 run.bounds = {x[column], row_y[column], measured.width, height};
                 run.font = font;
+                run.baseline = 2 + metrics.ascent;
+                run.underline = run.baseline + std::max(1.0, metrics.descent * 0.5);
+                run.strike_y = run.baseline - metrics.ascent * 0.35;
                 run.text = word;
                 run.url = span.url;
                 run.strike = span.strike;
@@ -196,7 +201,10 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
     for (const Run &run : next)
         maximum_height = std::max(maximum_height, run.bounds.height);
     std::stable_sort(next.begin(), next.end(), RunOrder{});
+    const gf::FontSpec ruler_font{gf::FontRole::content, 11, 400, false};
+    const gf::ResolvedTextLayout ruler_metrics = painter.resolve_text_layout_utf8("0", ruler_font);
     runs_ = std::move(next);
+    ruler_baseline_ = 3 + ruler_metrics.ascent;
     content_height_ = y + page_margin;
     content_width_ = maximum_x;
     maximum_run_height_ = maximum_height;
@@ -258,9 +266,9 @@ void MarkdownView::on_paint(gf::Painter &painter, gf::Rect) {
         if (item.code)
             painter.fill_rect(item.bounds, style.face_light);
         const gf::Color color = item.url.empty() ? style.text : style.link;
-        painter.draw_text_utf8({item.bounds.x, item.bounds.y + 2}, item.text, item.font, color);
+        painter.draw_text_utf8({item.bounds.x, item.bounds.y + item.baseline}, item.text, item.font, color);
         if (item.strike || !item.url.empty()) {
-            const double baseline = item.bounds.y + item.bounds.height * (item.strike ? 0.5 : 0.9);
+            const double baseline = item.bounds.y + (item.strike ? item.strike_y : item.underline);
             painter.draw_line({item.bounds.x, baseline},
                               {item.bounds.x + item.bounds.width, baseline}, color, 1);
         }
@@ -271,7 +279,7 @@ void MarkdownView::on_paint(gf::Painter &painter, gf::Rect) {
     for (double tick = 0; tick < bounds.width - 18; tick += 48) {
         painter.draw_line({tick, 20}, {tick, ruler_height}, style.border, 1);
         const std::string label = std::to_string(static_cast<unsigned>(tick / 48));
-        painter.draw_text_utf8({tick + 3, 3}, label, ruler_font, style.disabled_text);
+        painter.draw_text_utf8({tick + 3, ruler_baseline_}, label, ruler_font, style.disabled_text);
     }
 }
 void MarkdownView::clear_hover() {

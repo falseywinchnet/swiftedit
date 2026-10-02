@@ -502,9 +502,12 @@ void CsvView::on_paint(gf::Painter &painter, gf::Rect) {
     const gf::Rect bounds = arranged_bounds();
     const gf::BasicControlStyle &style = effective_theme().basic_style();
     const gf::FontSpec font{gf::FontRole::content, 13, 400, false};
+    const gf::ResolvedTextLayout font_metrics = painter.resolve_text_layout_utf8("Mg", font);
+    const double text_height = font_metrics.ascent + font_metrics.descent;
+    const double row_baseline = (row_height - text_height) * 0.5 + font_metrics.ascent;
     painter.fill_rect({0, 0, bounds.width, bounds.height}, style.paper);
     const std::string address = swiftedit::cell_name(caret_);
-    painter.draw_text_utf8({4, 10}, address, font, style.text);
+    painter.draw_text_utf8({4, 4 + row_baseline}, address, font, style.text);
     const CellDisplay *hover = nullptr;
     if (hovered_) {
         const std::map<std::pair<std::size_t, std::size_t>, CellDisplay>::const_iterator found =
@@ -542,7 +545,7 @@ void CsvView::on_paint(gf::Painter &painter, gf::Rect) {
             painter.fill_rect({x + 6.25, y + 12, 1.5, 1.5}, style.text);
             text_x += 20;
         }
-        painter.draw_text_utf8({text_x, rect.y + 6}, entry.second.text, font, style.text);
+        painter.draw_text_utf8({text_x, rect.y + row_baseline}, entry.second.text, font, style.text);
         if (entry.second.formula)
             for (int stripe = 0; stripe < 5; ++stripe)
                 painter.draw_line({rect.x + rect.width - 6 + stripe, rect.y + 1 + stripe},
@@ -552,16 +555,17 @@ void CsvView::on_paint(gf::Painter &painter, gf::Rect) {
     for (std::size_t index = 0; index < visible_columns_ && left_ + index < columns_; ++index) {
         std::string column = swiftedit::cell_name({0, left_ + index});
         column.pop_back();
-        painter.draw_text_utf8({header_width + static_cast<double>(index) * column_width + 5, 46},
+        painter.draw_text_utf8({header_width + static_cast<double>(index) * column_width + 5,
+                               grid_top - row_height + row_baseline},
                                column, font, style.text);
     }
     if (table_)
         for (std::size_t index = 0; index < visible_rows_ && top_ + index < (*table_).rows().size();
              ++index) {
             const std::string row = std::to_string(top_ + index + 1);
-            painter.draw_text_utf8({4, grid_top + static_cast<double>(index) * row_height + 6}, row,
+            painter.draw_text_utf8({4, grid_top + static_cast<double>(index) * row_height + row_baseline}, row,
                                    font, style.text);
         }
-    painter.draw_text_utf8({4, std::max(0.0, bounds.height - 22)}, status_, font, style.text);
+    painter.draw_text_utf8({4, std::max(font_metrics.ascent, bounds.height - 6 - font_metrics.descent)}, status_, font, style.text);
 }
 } // namespace notepad

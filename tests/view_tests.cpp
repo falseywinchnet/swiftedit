@@ -11,6 +11,8 @@ public:
     std::size_t measurements{}, texts{};
     std::string drawn{};
     std::vector<std::string> labels{};
+    std::vector<gf::Point> origins{};
+    bool tall_metrics{};
     std::size_t reference_outlines{};
     bool fail_measurement{};
     gf::Point translation{};
@@ -27,10 +29,11 @@ public:
     void draw_image(gf::ImageId, gf::Rect, double) override {
         throw std::runtime_error("Markdown must not load image resources.");
     }
-    void draw_text_utf8(gf::Point, std::string_view text, gf::FontSpec, gf::Color) override {
+    void draw_text_utf8(gf::Point origin, std::string_view text, gf::FontSpec, gf::Color) override {
         ++texts;
         drawn.append(text);
         labels.emplace_back(text);
+        origins.push_back(origin);
     }
     gf::Size measure_text_utf8(std::string_view text, gf::FontSpec font) override {
         ++measurements;
@@ -39,12 +42,63 @@ public:
         const gf::Size result = gf::Painter::measure_text_utf8(text, font);
         return result;
     }
+    gf::ResolvedTextLayout resolve_text_layout_utf8(std::string_view text, gf::FontSpec font) override {
+        gf::ResolvedTextLayout result = gf::Painter::resolve_text_layout_utf8(text, font);
+        if (tall_metrics) {
+            result.ascent = 18;
+            result.descent = 5;
+            result.logical_size.height = 23;
+        }
+        return result;
+    }
 };
 void check(bool good, const char *message) {
     if (!good)
         throw std::runtime_error(message);
 }
 void settle_formulas(notepad::CsvView &);
+void verify_text_baselines() {
+    ObservingPainter painter{};
+    painter.tall_metrics = true;
+    const std::shared_ptr<notepad::CsvView> grid =
+        gf::make_control<notepad::CsvView>(gf::StableId("baseline.csv"));
+    gf::Window grid_window(grid, {800, 600});
+    (*grid).set_source("=1/0");
+    grid_window.perform_layout();
+    settle_formulas(*grid);
+    (*grid).on_paint(painter, {0, 0, 800, 600});
+    bool error_seen = false;
+    for (std::size_t index = 0; index < painter.labels.size(); ++index) {
+        if (painter.labels[index] == "#ERROR") {
+            error_seen = true;
+            check(painter.origins[index].y - 18 >= 68 && painter.origins[index].y + 5 <= 96,
+                  "CSV text ascent/descent fit inside its row, including non-default metrics");
+        }
+    }
+    check(error_seen, "Baseline fixture paints the error label");
+    painter.labels.clear();
+    painter.origins.clear();
+    const std::shared_ptr<notepad::MarkdownView> markdown =
+        gf::make_control<notepad::MarkdownView>(gf::StableId("baseline.markdown"));
+    gf::Window markdown_window(markdown, {640, 480});
+    (*markdown).set_source("body");
+    markdown_window.perform_layout();
+    (*markdown).on_paint(painter, {0, 0, 640, 480});
+    check(!painter.labels.empty() && painter.labels[0] == "body" &&
+              painter.origins[0].y - 18 >= 24,
+          "Markdown text remains below its block top using renderer ascent");
+    painter.labels.clear();
+    painter.origins.clear();
+    const std::shared_ptr<notepad::QueryField> query =
+        gf::make_control<notepad::QueryField>(gf::StableId("baseline.query"));
+    gf::Window query_window(query, {300, 32});
+    (*query).set_text("x");
+    query_window.perform_layout();
+    (*query).on_paint(painter, {0, 0, 300, 32});
+    check(painter.labels.size() == 1 && painter.origins[0].y - 18 >= 2 &&
+              painter.origins[0].y + 5 <= 30,
+          "Query glyph fits the inner field using renderer ascent and descent");
+}
 void verify_duplicate_formulas() {
     const std::shared_ptr<notepad::CsvView> grid =
         gf::make_control<notepad::CsvView>(gf::StableId("formulas.csv"));
@@ -165,6 +219,7 @@ void verify_cooperative_formulas() {
 }
 int main() {
     try {
+        verify_text_baselines();
         verify_duplicate_formulas();
         verify_cooperative_formulas();
         const std::shared_ptr<notepad::CsvView> grid =
