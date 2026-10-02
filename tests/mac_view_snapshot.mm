@@ -5,6 +5,44 @@
 #include <iostream>
 #include <stdexcept>
 
+void send_native_query_wildcard(const char *const title) {
+    if (![NSThread isMainThread])
+        throw std::runtime_error("Native query input requires the UI thread.");
+    @autoreleasepool {
+        NSString *const expected = [NSString stringWithUTF8String:title];
+        if (expected == nil)
+            throw std::runtime_error("Native query title is not UTF-8.");
+        NSWindow *selected = nil;
+        NSArray<NSWindow *> *const windows = [NSApp windows];
+        for (NSUInteger index = 0; index < [windows count]; ++index) {
+            NSWindow *const candidate = [windows objectAtIndex:index];
+            if ([[candidate title] isEqualToString:expected]) {
+                if (selected != nil)
+                    throw std::runtime_error("Native query title is ambiguous.");
+                selected = candidate;
+            }
+        }
+        if (selected == nil || ![selected isVisible])
+            throw std::runtime_error("Native query window is not visible.");
+        NSView *const content = [selected contentView];
+        if (content == nil || ![selected makeFirstResponder:content])
+            throw std::runtime_error("Native query view could not receive keyboard input.");
+        const NSEventModifierFlags modifiers = NSEventModifierFlagControl | NSEventModifierFlagShift;
+        NSEvent *const down = [NSEvent keyEventWithType:NSEventTypeKeyDown
+            location:NSZeroPoint modifierFlags:modifiers timestamp:0
+            windowNumber:[selected windowNumber] context:nil characters:@"?"
+            charactersIgnoringModifiers:@"?" isARepeat:NO keyCode:44];
+        NSEvent *const up = [NSEvent keyEventWithType:NSEventTypeKeyUp
+            location:NSZeroPoint modifierFlags:modifiers timestamp:0
+            windowNumber:[selected windowNumber] context:nil characters:@"?"
+            charactersIgnoringModifiers:@"?" isARepeat:NO keyCode:44];
+        if (down == nil || up == nil)
+            throw std::runtime_error("Native query key event allocation failed.");
+        [selected sendEvent:down];
+        [selected sendEvent:up];
+    }
+}
+
 void capture_native_view(const char *const title, const char *const evidence_name) {
     if (![NSThread isMainThread])
         throw std::runtime_error("Native view capture requires the UI thread.");

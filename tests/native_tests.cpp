@@ -111,6 +111,23 @@ public:
                     std::dynamic_pointer_cast<gf::TextBox>(
                         find_control((*find_window).root(), "find.replacement"));
                 require(query && replacement, "Find dialog public controls");
+#ifdef __APPLE__
+                (*query).set_text("n?tive");
+                (*query).select(gf::Utf8Offset(1), gf::Utf8Offset(1));
+                (*find_window).request_focus(query);
+                send_native_query_wildcard("Find and Replace - SwiftEdit");
+                const swiftedit::SearchPattern native_pattern = (*query).pattern();
+                require((*query).text() == "n?tive" && native_pattern.slots()[1].wildcard,
+                        "AppKit Control+Shift+/ toggles the selected query slot without inserting text");
+                (*std::dynamic_pointer_cast<gf::Button>(
+                     find_control((*find_window).root(), "find.next"))).perform_click();
+                require((*(*editor).text_control()).selected_text() == "native",
+                        "Native wildcard query finds the source match");
+                send_native_query_wildcard("Find and Replace - SwiftEdit");
+                const swiftedit::SearchPattern restored_pattern = (*query).pattern();
+                require(!restored_pattern.slots()[1].wildcard,
+                        "Repeating the native shortcut restores a literal query slot");
+#endif
                 (*query).set_text("native");
                 (*replacement).set_text("replaced");
                 (*std::dynamic_pointer_cast<gf::Button>(

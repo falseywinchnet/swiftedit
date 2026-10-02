@@ -662,3 +662,15 @@ now disable toolkit mnemonic parsing so literal ampersands are not consumed as
 keyboard markers. Menus retain their intentional mnemonic behavior. Editor tests
 pass (2.04 seconds including CTest); house-style audit remains clean at 129 files.
 Native validation of these label settings and the Markdown bounds fix is pending.
+
+Release v0.3.2 at 2000b72 is public with all nine Windows/Linux/macOS assets;
+release workflow 36977875265 passed all native jobs and publication. Master now
+matches the release source. Full local headless validation passed 24/24 in
+18.83 seconds. This release does not close the remaining feature objective.
+
+Native query validation now includes a macOS-owned-window AppKit Control+Shift+/
+event pair, asserting exact wildcard-slot toggling, unchanged query text, a source
+match, and toggle-off. It sends through NSWindow's event path, not a normalized
+GUI.Forms test event or global keyboard injection. Physical keyboard layouts and
+OS event delivery remain separate dogfood evidence. The Windows native test
+executable compiles; execution of this new Mac-only path is pending native CI.
