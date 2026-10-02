@@ -612,3 +612,13 @@ checks malformed/control bytes, CRLF, read-boundary Unicode, cancellation and
 files. This is producer integration only; no private provider API or current GUI
 content authority was substituted. See DOCUMENT_VIEW_FIXTURES.md for remaining
 rendering, timing and long-context limitations. Native validation is pending.
+
+Producer timing checkpoint: 990 raw construction/read/projection/publication
+samples are preserved in performance/2026-10-02-document-projection for full
+64 KiB ASCII, NUL and malformed-byte pages. Worst final projection in the recorded
+Windows Release run was 7.1728 ms; worst resident-source read was 0.0947 ms.
+This includes label/map construction and temporary cleanup, but not slow I/O,
+native shaping or presentation. The component result is not a completed GUI
+latency audit, and D1 admission does not establish the private renderer's tighter
+display/metadata admission. The coordinator confirmed controller reconciliation
+remains queued; shared worker/controller/API expansion is not yet assigned.
