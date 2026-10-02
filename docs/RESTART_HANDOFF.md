@@ -721,3 +721,13 @@ file-link probe. Published v0.2.5-dogfood.20261001 with exact17025dc target afte
 package/SDK/source/executable/hash verification; published ZIP digest matches.
 See DOGFOOD_2026-10-01.md for complete receipt. SDK723 remains pinned. Mac file
 symlink fix now available, focused blank CPU still open. Full goal incomplete.
+
+Prepared seven deterministic installed-DocumentView adoption fixtures with
+source byte probes/hashes and no private provider dependency. See
+DOCUMENT_VIEW_FIXTURES.md and tools/Prepare-DocumentView-Fixtures.py. Two fresh
+manifest generations match; Session CLI confirms16777227-byte fixture read-only
+and exact final11-byte page. GUI/stale-token outcomes await installed public API.
+SDK723 component benchmarks recorded rawsamples under performance/2026-10-01-
+sdk723-components: caret p95.0025ms,repeated CSV p952.1218ms,distinct initial
+p952.6318ms,worst-slice max5.0638ms,totalmax99.334ms across cooperative slices.
+No hard2ms or controlled comparative/GUI latency claim.
