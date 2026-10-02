@@ -45,8 +45,10 @@ struct TerminalPageCaret {
 [[nodiscard]] std::optional<std::uint64_t> terminal_page_target(
     const TerminalPageFrame &, std::size_t row, std::size_t column,
     std::size_t width, std::size_t rows);
-// Reads at most 64 KiB per frame; never treats an unfinished trailing grapheme
-// as complete. Source-independent labels may continue across rows/pages.
+// Starts with 8 KiB of context, doubling up to 64 KiB only to fill the viewport
+// or complete a grapheme (at most 120 KiB total reads across retries). Never
+// treats an unfinished trailing grapheme as complete. Source-independent
+// labels may continue across rows/pages.
 [[nodiscard]] TerminalPageFrame terminal_page(const Session &, TerminalPageCursor,
                                               std::size_t width, std::size_t rows);
 // Normally reads 8 KiB per step. Incomplete first graphemes grow context up to

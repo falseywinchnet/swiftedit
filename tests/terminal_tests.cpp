@@ -312,6 +312,11 @@ int main() {
             combined += "\xcc\x81";
         combined += "\r\nABCD\r\n\x1bZ";
         streamed.replace_ranges({{0, streamed.text().size()}}, combined, streamed.stamp());
+        const swiftedit::TerminalPageFrame combined_page = swiftedit::terminal_page(streamed, {}, 4, 3);
+        check(!combined_page.graphemes.empty() && combined_page.graphemes.front().length == 12001,
+              "Visible page grows its context to preserve a grapheme larger than 8 KiB");
+        check(combined_page.row_starts.size() >= 3,
+              "Context growth fills later rows after the long first grapheme");
         swiftedit::TerminalPageEnd reference_end(streamed, 4, 3, swiftedit::maximum_page);
         while (!reference_end.step(streamed)) {}
         const swiftedit::TerminalPageCursor expected_cursor = reference_end.result(streamed);

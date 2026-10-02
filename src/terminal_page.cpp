@@ -117,6 +117,7 @@ struct BuiltPage {
     TerminalPageFrame page{};
     std::size_t next_column{};
     bool needs_context{};
+    bool viewport_filled{};
 };
 template <bool PaintRuns>
 static BuiltPage build_terminal_page(const Session &session, const TerminalPageCursor cursor,
@@ -241,6 +242,7 @@ static BuiltPage build_terminal_page(const Session &session, const TerminalPageC
     }
     result.more = result.next.offset < source.size || result.next.label_cell != 0;
     built.next_column = column;
+    built.viewport_filled = row >= rows;
     return built;
 }
 std::optional<std::uint64_t> terminal_page_horizontal(const TerminalPageFrame &frame,
@@ -302,7 +304,15 @@ TerminalPageFrame terminal_page(const Session &session, TerminalPageCursor curso
                                 std::size_t width, std::size_t rows) {
     if (!rows || rows > 300)
         throw std::runtime_error("Terminal page dimensions exceed their bounded range.");
-    BuiltPage built = build_terminal_page<true>(session, cursor, width, rows, maximum_page, 0);
+    std::size_t budget = 8192;
+    BuiltPage built = build_terminal_page<true>(session, cursor, width, rows, budget, 0);
+    // Most viewports fit in a small source window. Grow only when more source
+    // is needed to fill the viewport or complete its first grapheme.
+    while (budget < maximum_page &&
+           (built.needs_context || (!built.viewport_filled && built.page.more))) {
+        budget = std::min(maximum_page, budget * 2);
+        built = build_terminal_page<true>(session, cursor, width, rows, budget, 0);
+    }
     if (built.needs_context)
         throw std::runtime_error(
             "A complete grapheme exceeds the terminal page context limit. Source is unchanged.");

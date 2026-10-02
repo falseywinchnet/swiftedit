@@ -363,3 +363,17 @@ seconds locally versus roughly five seconds before caret-aware movement; these
 are whole-test timings, not per-key latency. Repeated-key scheduling and frame
 mapping need explicit measurement in the remaining lag audit. Page Up/Down still
 use their older viewport-start semantics and remain a separate navigation task.
+
+Visible-page decoding now starts with 8 KiB and doubles its source context only
+when needed to fill the requested viewport or complete a grapheme. The maximum
+individual window remains 64 KiB; retries total at most 120 KiB. Previously each
+arrow-triggered rebuild decoded 64 KiB regardless of the visible text required.
+The unchanged terminal-app workload fell from 49.01 seconds at 6cd2c9c to 10.08
+seconds in the first local adaptive-window run and 10.64 seconds in the final
+full-suite run. These are sequential, uncontrolled whole-test wall times, not
+paired per-key latency samples or a platform-wide performance guarantee.
+All 23 local tests passed in 18.40 seconds. Regression coverage includes a
+12001-byte combining grapheme requiring growth beyond 8 KiB, subsequent visible
+rows, and a large viewport requiring the full 64 KiB with an unfinished trailing
+grapheme. House-style audit passed (123 files). Native validation remains pending;
+the prior vertical-navigation native run 36966475497 is still in progress.
