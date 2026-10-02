@@ -3,11 +3,44 @@
 #include <condition_variable>
 #include <mutex>
 #include <thread>
+#ifndef _WIN32
+#include <pthread.h>
+#include <signal.h>
+#include <array>
+#endif
 namespace swiftedit {
+#ifndef _WIN32
+// The worker must not receive terminal lifecycle signals. Block them around
+// creation so it inherits the mask, then restore only the calling thread.
+// This preserves the terminal's flag-check/pselect signal-delivery contract.
+class PublicationSignalMask final {
+public:
+    PublicationSignalMask() {
+        sigset_t blocked{};
+        sigemptyset(&blocked);
+        constexpr std::array<int, 5> signals{SIGWINCH, SIGINT, SIGTERM, SIGHUP, SIGTSTP};
+        for (const int signal : signals)
+            sigaddset(&blocked, signal);
+        const int error = pthread_sigmask(SIG_BLOCK, &blocked, &previous_);
+        if (error)
+            throw std::runtime_error("Cannot establish publication worker signal mask.");
+    }
+    ~PublicationSignalMask() { pthread_sigmask(SIG_SETMASK, &previous_, nullptr); }
+    PublicationSignalMask(const PublicationSignalMask &) = delete;
+    PublicationSignalMask &operator=(const PublicationSignalMask &) = delete;
+private:
+    sigset_t previous_{};
+};
+#endif
 class TextCopyPublication final {
 public:
     explicit TextCopyPublication(std::unique_ptr<notepad::NewFileWriter> writer)
-        : writer_(std::move(writer)), worker_(run, this) {}
+        : writer_(std::move(writer)) {
+#ifndef _WIN32
+        const PublicationSignalMask blocked{};
+#endif
+        worker_ = std::thread(run, this);
+    }
     ~TextCopyPublication() {
         if (worker_.joinable())
             worker_.join();
@@ -52,7 +85,7 @@ private:
     std::condition_variable completed_{};
     std::exception_ptr failure_{};
     bool complete_{};
-    // Constructed last: the worker can observe only fully initialized members.
+    // Started in the constructor body after all observed members are initialized.
     std::thread worker_{};
 };
 SessionTextCopy::~SessionTextCopy() = default;

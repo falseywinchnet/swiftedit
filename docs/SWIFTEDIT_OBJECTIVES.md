@@ -287,3 +287,19 @@ a raced destination remains unchanged, and resetting the source Session after
 publication dispatch cannot invalidate the worker's prepared-file ownership.
 The focused session test passed in 0.96 seconds. House-style audit passed across
 123 source files, and the updated native build script parsed successfully.
+
+Publication-thread signal review: POSIX workers now inherit a blocked mask for
+SIGWINCH/SIGINT/SIGTERM/SIGHUP/SIGTSTP, with the creating thread's mask restored
+immediately after thread creation. This keeps lifecycle signals on the terminal
+input thread and preserves its flag-check/pselect contract. Added POSIX mask
+preservation assertions and an owned PTY SIGTERM case after publication starts.
+Windows session tests passed in 0.96 seconds, house-style audit passed (123
+files), and the PTY script parsed. POSIX execution is pending CI, not claimed from
+Windows tests. The preceding ee23416 native run 36964143324 and portable run
+36964143300 both passed.
+
+A separate remaining input issue was identified by source review: POSIX
+input_ready can report raw partial input, after which read waits for a complete
+UTF-8/escape/paste event. During a background publication this can delay displaying
+completion until more input arrives. A bounded nonblocking decode path and native
+partial-input completion tests are the next fix; no idle polling is desired.

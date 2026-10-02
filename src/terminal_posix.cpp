@@ -18,7 +18,7 @@ void terminal_signal(const int signal) {
     else
         interrupted = signal;
 }
-// The terminal host is single-threaded. Block handled signals across the flag
+// Publication workers block these signals. Block them in the input thread across the flag
 // check; pselect atomically restores the old mask while it waits. Destruction
 // restores the caller's mask on every return and exception.
 class SignalBlock final {

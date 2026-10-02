@@ -101,6 +101,35 @@ def exercise(executable: Path, path: Path, interrupt: int | None,
         os.close(slave)
 
 
+
+def exercise_publication_signal(executable: Path, path: Path) -> None:
+    master: int
+    slave: int
+    master, slave = pty.openpty()
+    child: subprocess.Popen[bytes] | None = None
+    try:
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 24, 80, 0, 0))
+        original: list[object] = terminal_mode(slave)
+        child = subprocess.Popen([str(executable), str(path)], stdin=slave, stdout=slave,
+                                 stderr=slave, start_new_session=True)
+        await_bytes(master, child, b'\x1b[?2004h')
+        if os.write(master, b'\x14\r') != 2:
+            raise RuntimeError('Incomplete copy command write')
+        await_bytes(master, child, b'Publishing text copy...')
+        child.send_signal(signal.SIGTERM)
+        result: int = finish(master, child)
+        if result == 0 or terminal_mode(slave) != original:
+            raise RuntimeError('Publication interruption did not restore the terminal')
+        if path.stat().st_size != 16777216:
+            raise RuntimeError('Publication interruption changed the source size')
+    finally:
+        if child is not None and child.poll() is None:
+            child.kill()
+            child.wait()
+        os.close(master)
+        os.close(slave)
+
+
 def main() -> None:
     parser: argparse.ArgumentParser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--executable', type=Path, required=True)
@@ -116,8 +145,12 @@ def main() -> None:
             for partial in [b'', b'\x1b', b'\xf0', b'\x1b[200~unfinished']:
                 path.write_bytes(b'base\n')
                 exercise(executable, path, interruption, partial)
+        publication_source: Path = Path(directory) / 'publication-source.txt'
+        with publication_source.open('wb') as source:
+            source.truncate(16777216)
+        exercise_publication_signal(executable, publication_source)
     print('POSIX terminal: atomic Unicode/control paste, undo/redo, save, exit, resize and '
-          'mode restoration across 16 signal/partial-input cases passed.')
+          'mode restoration across 16 signal/partial-input cases and publication interruption passed.')
 
 
 if __name__ == '__main__':

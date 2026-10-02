@@ -6,6 +6,10 @@
 #include <iostream>
 #include <stdexcept>
 #include "platform.hpp"
+#ifndef _WIN32
+#include <pthread.h>
+#include <signal.h>
+#endif
 
 void check(bool b, const char *s) {
     if (!b)
@@ -140,7 +144,17 @@ int main() {
         {
             SessionTextCopy task(paged_copy_source, background_target);
             while (!task.step(paged_copy_source)) {}
+#ifndef _WIN32
+            sigset_t before_mask{}, after_mask{};
+            check(pthread_sigmask(SIG_SETMASK, nullptr, &before_mask) == 0, "Capture caller signal mask");
+#endif
             task.begin_publication(paged_copy_source);
+#ifndef _WIN32
+            check(pthread_sigmask(SIG_SETMASK, nullptr, &after_mask) == 0, "Capture restored caller signal mask");
+            for (int signal = 1; signal < NSIG; ++signal)
+                check(sigismember(&before_mask, signal) == sigismember(&after_mask, signal),
+                      "Starting publication preserves the caller signal mask");
+#endif
             check(task.state() == TextCopyState::publishing, "Publication transfers to owned worker");
             while (!task.publication_ready(std::chrono::milliseconds(8))) {}
             task.finish_publication();
