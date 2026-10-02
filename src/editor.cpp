@@ -274,8 +274,8 @@ void Editor::arrange(gf::Rect bounds) {
     set_child_layout(text_, {0, 52, bounds.width, std::max(0.0, bounds.height - 52 - bottom)});
     set_child_layout(csv_, {0, 52, bounds.width, std::max(0.0, bounds.height - 52 - bottom)});
     set_child_layout(markdown_, {0, 52, bounds.width, std::max(0.0, bounds.height - 52 - bottom)});
-    set_child_layout(status_, {8, std::max(52.0, bounds.height - bottom),
-                               std::max(0.0, bounds.width - 16), bottom});
+    set_child_layout(status_, {8, std::max(52.0, bounds.height - bottom) + 4,
+                               std::max(0.0, bounds.width - 16), std::max(0.0, bottom - 8)});
 }
 void Editor::on_paint(gf::Painter &painter, gf::Rect) {
     if (!show_status_)
@@ -285,7 +285,16 @@ void Editor::on_paint(gf::Painter &painter, gf::Rect) {
     const gf::BasicControlStyle &style = effective_theme().basic_style();
     painter.fill_rect({0, top, bounds.width, 26}, style.face);
     painter.draw_line({0, top + 0.5}, {bounds.width, top + 0.5}, style.border, 1);
-    painter.draw_line({0, top + 1.5}, {bounds.width, top + 1.5}, style.face_light, 1);
+    if (bounds.width < 10)
+        return;
+    const double left = 3.5;
+    const double right = bounds.width - 3.5;
+    const double inset_top = top + 3.5;
+    const double inset_bottom = top + 22.5;
+    painter.draw_line({left, inset_top}, {right, inset_top}, style.border, 1);
+    painter.draw_line({left, inset_top}, {left, inset_bottom}, style.border, 1);
+    painter.draw_line({left, inset_bottom}, {right, inset_bottom}, style.face_light, 1);
+    painter.draw_line({right, inset_top}, {right, inset_bottom}, style.face_light, 1);
 }
 void Editor::refresh() {
     if (!text_ || !status_)
