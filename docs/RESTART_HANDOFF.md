@@ -703,3 +703,15 @@ held), so Windows runner execution remains required. Mac package7415870 was
 verified but NOT published pending the complete consumer gate. Raw evidence
 and prepared release notes are under .build/release-7415870; that package is not
 the next corrected test source's package.
+
+11ff2e6 native36947022382: Mac/Linux pass; Windows advances through real link
+creation, Open/edit/Save and exact target contents, but fails the combined
+std::filesystem is_symlink/canonical assertion. Do not infer which half failed
+or claim a product link-preservation defect from that combined check alone.
+Windows fixture now compares native FSCTL_GET_REPARSE_POINT bytes before/after,
+requires IO_REPARSE_TAG_SYMLINK both times, and reads saved contents through the
+alias. This verifies exact target/flags preservation without relying on the
+same incomplete MinGW symlink adapter. POSIX assertions now separate link type
+and target resolution. Local editor suite1.39s/style101pass; native rerun needed.
+Mac11ff package verified, not released. Provider owner confirms keep723 pin;
+new7b260cf development text masks/CPU diagnostics are a separate candidate.

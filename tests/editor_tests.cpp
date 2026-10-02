@@ -5,6 +5,9 @@
 #include <iostream>
 #include <stdexcept>
 #include "platform.hpp"
+#ifdef _WIN32
+#include <winioctl.h>
+#endif
 
 namespace gf = gui_forms;
 gf::HostCapabilities capabilities() {
@@ -379,6 +382,29 @@ void verify_callback_revocation() {
 }
 // Explicit adoption probe: invoke with --picker-file-links after installing the
 // corrected public picker SDK. The currently pinned SDK does not support this.
+#ifdef _WIN32
+std::vector<unsigned char> file_link_data(const std::filesystem::path &path) {
+    const HANDLE handle = CreateFileW(path.c_str(), 0,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+        FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+    check(handle != INVALID_HANDLE_VALUE, "Open fixture reparse point");
+    struct Close {
+        HANDLE handle{};
+        ~Close() { CloseHandle(handle); }
+    } close{handle};
+    FILE_ATTRIBUTE_TAG_INFO tag{};
+    check(GetFileInformationByHandleEx(handle, FileAttributeTagInfo, &tag, sizeof(tag)) != 0 &&
+              tag.ReparseTag == IO_REPARSE_TAG_SYMLINK,
+          "Fixture remains a native symbolic link");
+    std::vector<unsigned char> bytes(MAXIMUM_REPARSE_DATA_BUFFER_SIZE);
+    DWORD count = 0;
+    check(DeviceIoControl(handle, FSCTL_GET_REPARSE_POINT, nullptr, 0, bytes.data(),
+                          static_cast<DWORD>(bytes.size()), &count, nullptr) != 0,
+          "Read fixture symbolic-link target data");
+    bytes.resize(count);
+    return bytes;
+}
+#endif
 void verify_picker_file_links() {
     const std::filesystem::path directory =
         std::filesystem::canonical(std::filesystem::temp_directory_path()) /
@@ -409,6 +435,7 @@ void verify_picker_file_links() {
         throw std::runtime_error("Cannot create file-link fixture: Windows error " +
                                  std::to_string(error));
     }
+    const std::vector<unsigned char> original_link = file_link_data(alias);
 #else
     std::filesystem::create_symlink(relative_target, alias);
 #endif
@@ -456,8 +483,18 @@ void verify_picker_file_links() {
     const notepad::FileSnapshot saved = notepad::read_file(target);
     check(saved.bytes == "linked revised\n" && !(*editor).document().dirty(text.text()),
           "Save updates the resolved target");
-    check(std::filesystem::is_symlink(alias) && std::filesystem::canonical(alias) == target,
-          "Save preserves original relative symlink and destination");
+#ifdef _WIN32
+    check(file_link_data(alias) == original_link,
+          "Save preserves the exact native symlink target and flags");
+    std::ifstream through_alias(alias, std::ios::binary);
+    std::string alias_line{};
+    std::getline(through_alias, alias_line);
+    check(alias_line == "linked revised" && through_alias.peek() == std::char_traits<char>::eof(),
+          "Preserved alias reads the saved target contents");
+#else
+    check(std::filesystem::is_symlink(alias), "Save preserves the symbolic link");
+    check(std::filesystem::canonical(alias) == target, "Preserved link resolves to target");
+#endif
 }
 void verify_grapheme_status() {
     const std::shared_ptr<notepad::Editor> editor =
