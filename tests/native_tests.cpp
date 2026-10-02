@@ -5,6 +5,9 @@
 #include <iostream>
 #include <stdexcept>
 #include "platform.hpp"
+#ifdef __APPLE__
+#include "mac_view_snapshot.hpp"
+#endif
 namespace gf = gui_forms;
 void require(bool good, const char *message) {
     if (!good)
@@ -234,6 +237,37 @@ public:
                         "Native reviewed overwrite publishes and restores owner");
                 break;
             case 11:
+                (*editor).execute("markdown-view");
+                break;
+            case 12: {
+                const std::shared_ptr<gf::MenuStrip> menu =
+                    std::dynamic_pointer_cast<gf::MenuStrip>(
+                        find_control(editor, "notepad.menus"));
+                require(static_cast<bool>(menu), "Native editor menu exists");
+                bool opened = false;
+                const std::vector<gf::MenuStripItemSpec> &items = (*menu).items();
+                for (std::size_t index = 0; index < items.size(); ++index) {
+                    if (items[index].stable_id == "view")
+                        opened = (*menu).open(index);
+                }
+                require(opened, "Native View menu opens above rendered Markdown");
+                break;
+            }
+            case 13: {
+#ifdef __APPLE__
+                capture_native_view("SwiftEdit", "editor-markdown-menu");
+#endif
+                const std::shared_ptr<gf::MenuStrip> menu =
+                    std::dynamic_pointer_cast<gf::MenuStrip>(
+                        find_control(editor, "notepad.menus"));
+                (*menu).close();
+                (*editor).execute("markdown-view");
+                break;
+            }
+            case 14:
+#ifdef __APPLE__
+                capture_native_view("SwiftEdit", "editor-source-status");
+#endif
                 passed = true;
                 (*timer).stop();
                 static_cast<void>(main_handle.request_close());

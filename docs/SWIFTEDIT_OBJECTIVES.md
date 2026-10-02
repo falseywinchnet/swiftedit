@@ -464,3 +464,16 @@ publish commit-named releases. A matching v0.3.0 tag builds Windows x64, macOS
 ARM64 and Linux x64, then publishes one immutable release only after every
 platform passes. Archive hashes and same-source manifests remain mandatory;
 historical releases remain intact. Expanded product implementation is unfinished.
+
+GUI polish validation follow-up: the native smoke now opens the production
+Markdown view and View menu, then returns to source view. Mac CI captures both
+the rendered menu and source/status surface using the existing owned AppKit
+view-capture helper. These are view redraws, not compositor screenshots or
+automated visual assertions. The extended native target builds on Windows;
+native execution and Mac capture inspection remain pending.
+
+Provider source inspection found that ContextMenu::Impl::show always passes
+first_focusable(0) into begin_focus_scope, including mouse opening. MenuRow paints
+focused rows with the same highlight as hover. All-disabled menus have no such
+row. This explains a source-level inconsistency and has been sent to the provider
+owner; pointer-versus-keyboard presentation still needs a provider correction.
