@@ -162,6 +162,36 @@ void settle_formulas(notepad::CsvView &grid) {
         std::this_thread::yield();
     }
 }
+struct ConvertedSource {
+    std::string *output{};
+    void operator()(const std::string &source) const { *output = source; }
+};
+void verify_cached_conversion() {
+    const std::shared_ptr<notepad::CsvView> grid =
+        gf::make_control<notepad::CsvView>(gf::StableId("conversion.csv"));
+    gf::Window window(grid, {800, 600});
+    window.perform_layout();
+    std::string output{};
+    const gf::SubscriptionToken subscription = (*grid).changed().subscribe(ConvertedSource{&output});
+    (*grid).set_source("1,=A1/8,=A1/8\r\nkeep,\"quoted,value\",tail");
+    settle_formulas(*grid);
+    (*grid).select_cell({0, 2});
+    (*grid).convert_to_value();
+    check(output == "1,=A1/8,0.125\r\nkeep,\"quoted,value\",tail",
+          "Completed duplicate formula converts its exact result and preserves unrelated source");
+    output.clear();
+    (*grid).set_source("8,=A1/8,=A1/8\r\nkeep,\"quoted,value\",tail");
+    (*grid).convert_to_value();
+    check(output == "8,=A1/8,1\r\nkeep,\"quoted,value\",tail",
+          "Source replacement cannot convert using the preceding source's cached result");
+    output.clear();
+    (*grid).set_source("=B1,=A1");
+    settle_formulas(*grid);
+    (*grid).select_cell({0, 1});
+    (*grid).convert_to_value();
+    check(output.empty() && (*grid).status().find("Circular") != std::string::npos,
+          "Erroneous formula conversion publishes no source change");
+}
 void verify_cooperative_formulas() {
     const std::shared_ptr<notepad::CsvView> grid =
         gf::make_control<notepad::CsvView>(gf::StableId("cooperative.csv"));
@@ -267,6 +297,7 @@ int main() {
         verify_text_baselines();
         verify_duplicate_formulas();
         verify_cooperative_formulas();
+        verify_cached_conversion();
         const std::shared_ptr<notepad::CsvView> grid =
             gf::make_control<notepad::CsvView>(gf::StableId("test.csv"));
         gf::Window grid_window(grid, {800, 600});

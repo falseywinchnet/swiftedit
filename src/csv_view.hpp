@@ -47,6 +47,7 @@ private:
     };
     struct CellDisplay {
         std::string text{}, detail{};
+        std::optional<std::string> exact_value{};
         std::set<std::pair<std::size_t, std::size_t>> visible_references{};
         bool formula{}, error{}, code_background{};
     };

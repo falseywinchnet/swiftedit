@@ -273,6 +273,7 @@ void CsvView::advance_view() {
                         display.detail += " ...";
                     ++shown;
                 }
+                display.exact_value = value.result;
             } catch (const std::exception &failure) {
                 display.text = "#ERROR";
                 display.detail = failure.what();
@@ -345,7 +346,17 @@ void CsvView::convert_to_value() {
     if (!table_)
         return;
     try {
-        std::string source = swiftedit::convert_to_value(*table_, caret_);
+        std::string source{};
+        const std::map<std::pair<std::size_t, std::size_t>, CellDisplay>::const_iterator found =
+            cells_.find({caret_.row, caret_.column});
+        if (!cells_dirty_ && found != cells_.end() && (*found).second.exact_value &&
+            !(*found).second.error) {
+            // This cache belongs to the current immutable table and viewport.
+            // Use the exact value, never the shortened display label.
+            source = (*table_).set(caret_, *(*found).second.exact_value);
+        } else {
+            source = swiftedit::convert_to_value(*table_, caret_);
+        }
         publish(std::move(source));
         status_ = "Converted formula to value. Undo restores the formula.";
     } catch (const std::exception &failure) {
