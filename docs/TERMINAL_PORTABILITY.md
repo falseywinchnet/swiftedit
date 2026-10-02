@@ -92,3 +92,23 @@ packaged terminal PTY smoke. Portable run 36953195651 also passed all three.
 The resulting verified archive is published as v0.2.7-dogfood.20261001. Normal
 and interrupted exits passed the exact mode comparison after the queue query;
 no production restoration change or ignored mode bits were required.
+
+## Signal wait race correction
+
+Source `927ffc57f053ad10ca003be2dd1b30e1921d2a57` closes the gap between checking
+termination/resize flags and entering an indefinite input wait. Handled signals
+are blocked during that check; pselect restores the previous mask atomically
+while waiting. A scoped owner restores the caller's mask on every exit. No
+periodic idle wakeup is introduced; Escape continuation retains its 50 ms bound.
+
+The owned PTY regression now covers SIGINT, SIGTERM, SIGHUP and SIGTSTP during
+idle input, an incomplete Escape sequence, split UTF-8 and incomplete bracketed
+paste. Every case also sends SIGWINCH, requires bounded exit, verifies the source
+is unchanged, and compares all restored terminal mode fields after the Darwin
+queue-state transition described above. These 16 cases exercise cleanup states;
+they do not claim exhaustive timing interleavings or suspend/resume support.
+
+Native run 36953856671 passed Windows, macOS and Linux; portable-core run
+36953856558 passed all three. Mac passed all 30 native tests and repeated the
+expanded PTY smoke against the packaged terminal. The change is on master and
+in that run's Mac artifact; the earlier v0.2.7 release remains unchanged.
