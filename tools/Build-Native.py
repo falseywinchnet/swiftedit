@@ -9,7 +9,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
-from typing import BinaryIO, Protocol, TypedDict
+from typing import BinaryIO, Protocol, TextIO, TypedDict
 import zipfile
 
 
@@ -98,6 +98,28 @@ def main() -> None:
          '-DCMAKE_PREFIX_PATH=' + prefix, '-DNOTEPAD_NATIVE_TESTS=ON'])
     run(['cmake', '--build', str(build), '--parallel', '2'])
     run(['ctest', '--test-dir', str(build), '--output-on-failure', '--timeout', '60'])
+    benchmark: Path = build / ('swiftedit-terminal-end-bench.exe' if os.name == 'nt'
+                               else 'swiftedit-terminal-end-bench')
+    evidence: Path = build / 'terminal-end-evidence'
+    evidence.mkdir()
+    summary: TextIO
+    with (evidence / 'summary.txt').open('w', encoding='utf-8') as summary:
+        measured: subprocess.CompletedProcess[bytes] = subprocess.run(
+            [str(benchmark), str(evidence / 'fixtures')], check=False, timeout=120,
+            stdout=summary, stderr=subprocess.STDOUT)
+    measured.check_returncode()
+    revision_output: str = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True)
+    revision: str = revision_output.strip()
+    receipt: dict[str, object] = {
+        'source_revision': revision,
+        'provider_revision': lock['provider_revision'], 'platform': arguments.platform,
+        'executable_sha256': sha256(benchmark), 'status': 'completed',
+        'scope': 'headless read-only terminal end scan; not native input-to-screen latency',
+        'fixture_bytes': 16777216, 'viewport': [80, 24], 'trials_per_fixture': 5,
+        'percentiles': 'nearest rank; per-step samples pooled across trials',
+        'clock_overhead': 'included', 'cache_state': 'not controlled; trials run sequentially',
+        'performance_threshold': 'none'}
+    (evidence / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')
     if arguments.platform == 'macos-arm64':
         run([sys.executable, '-B', 'tools/Package-Mac.py', '--build', str(build), '--sdk', str(sdk)])
 

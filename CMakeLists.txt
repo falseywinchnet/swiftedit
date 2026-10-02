@@ -88,6 +88,8 @@ target_link_libraries(swiftedit-terminal-wrap-tests PRIVATE notepad_document)
 add_test(NAME terminal-wrap COMMAND swiftedit-terminal-wrap-tests)
 add_executable(swiftedit-terminal-bench tests/terminal_bench.cpp)
 add_executable(swiftedit-terminal-wrap-bench tests/terminal_wrap_bench.cpp)
+add_executable(swiftedit-terminal-end-bench tests/terminal_end_bench.cpp)
+target_link_libraries(swiftedit-terminal-end-bench PRIVATE notepad_document)
 target_link_libraries(swiftedit-terminal-wrap-bench PRIVATE notepad_document)
 target_link_libraries(swiftedit-terminal-bench PRIVATE notepad_document)
 # Opt-in measurement; timings are evidence, not portable pass/fail thresholds.

@@ -69,4 +69,7 @@ jobs:
             .build/native-${{ matrix.platform }}/mac-package-*/startup.log
             .build/native-${{ matrix.platform }}/mac-package-*/idle-stack*.txt
             .build/native-${{ matrix.platform }}/native-visual-*/*.png
+            .build/native-${{ matrix.platform }}/terminal-end-evidence/summary.txt
+            .build/native-${{ matrix.platform }}/terminal-end-evidence/receipt.json
+            .build/native-${{ matrix.platform }}/terminal-end-evidence/fixtures/samples.csv
           if-no-files-found: ignore
