@@ -150,4 +150,6 @@ reduced the same test to 1.44 s. These are single local test durations, not a
 native latency distribution or a general performance guarantee. The final local
 suite passed all 22 tests in 6.92 s, including Shift+Ctrl+End/full-file copy,
 Escape cancellation, stale/incomplete refusal, label continuation and Page Up.
-Cross-platform native validation remains pending for this change.
+Source `ef156ec2ecbef1740c5301e3ec1dd4188b2bc4cb` passed native run 36955734691
+on Windows, macOS and Linux, and portable-core run 36955734686 on all three.
+The verified Mac package is published as v0.2.8-dogfood.20261001.
