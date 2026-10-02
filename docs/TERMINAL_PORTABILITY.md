@@ -197,3 +197,17 @@ finishes Shift+Page Up cooperatively. Native validation is pending.
 
 Local reconstruction validation: all 22 tests passed in 8.14 s; source spelling
 audit passed all 113 files. Native reconstruction validation is pending.
+
+
+## Resize invalidation
+
+Read-only viewport resizing preserves its source anchor. A width change now
+invalidates retained wrapped-row history, so subsequent backward navigation
+reconstructs rows at the new width. A height change invalidates page-jump
+history while preserving valid row positions. Reconstruction publication
+records its width, and a session reset clears all cached dimensions.
+
+Regression tests verify a height change uses the new page size, a width change
+preserves the source anchor, and Up reconstructs and retains the correct rows
+at the new width. The complete local suite passed 22/22 in 7.80 s and the
+source spelling audit passed 113 files. Native validation is pending.

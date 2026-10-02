@@ -235,6 +235,7 @@ void TerminalPager::finish_end(const Session &session, const TerminalPageEnd &ta
     }
     reset(session);
     cursor_ = target;
+    width_ = task.width_;
     history_.swap(history);
 }
 void TerminalPager::reset(const Session &session) {
@@ -243,6 +244,8 @@ void TerminalPager::reset(const Session &session) {
     history_.clear();
     page_history_.clear();
     frame_ = {};
+    width_ = 0;
+    rows_ = 0;
     ready_ = false;
 }
 const TerminalPageFrame &TerminalPager::frame(const Session &session, std::size_t width,
@@ -252,6 +255,12 @@ const TerminalPageFrame &TerminalPager::frame(const Session &session, std::size_
         throw std::runtime_error("Terminal page belongs to an older document. Reopen the view.");
     if (!ready_ || width != width_ || rows != rows_) {
         TerminalPageFrame prepared = terminal_page(session, cursor_, width, rows);
+        // Row cursors depend on wrap width; page jumps also depend on height.
+        // Keep the source anchor but reconstruct earlier rows at the new width.
+        if (width_ && width != width_)
+            history_.clear();
+        if (width != width_ || rows != rows_)
+            page_history_.clear();
         frame_ = std::move(prepared);
         width_ = width;
         rows_ = rows;

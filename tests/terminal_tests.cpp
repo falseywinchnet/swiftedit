@@ -364,6 +364,33 @@ int main() {
         while (!partial_label.step(label_rewind)) {}
         check(partial_label.result(label_rewind) == swiftedit::TerminalPageCursor{},
               "Reconstruction distinguishes label fragments sharing a source byte");
+        swiftedit::Session resized_source{};
+        resized_source.replace_ranges({{0, 0}}, std::string(200, 'x'), resized_source.stamp());
+        swiftedit::TerminalPager resized_pager{};
+        resized_pager.reset(resized_source);
+        static_cast<void>(resized_pager.frame(resized_source, 10, 2));
+        resized_pager.next();
+        static_cast<void>(resized_pager.frame(resized_source, 10, 2));
+        resized_pager.next();
+        static_cast<void>(resized_pager.frame(resized_source, 10, 3));
+        resized_pager.previous();
+        check(resized_pager.source_offset() == 10,
+              "Height change uses the new page size instead of obsolete page jumps");
+        static_cast<void>(resized_pager.frame(resized_source, 7, 3));
+        check(resized_pager.source_offset() == 10,
+              "Width change preserves the current source anchor");
+        std::unique_ptr<swiftedit::TerminalPageEnd> resized_previous =
+            resized_pager.prepare_previous(resized_source, false);
+        check(bool(resized_previous), "Width change discards stale wrapped-row history");
+        while (!(*resized_previous).step(resized_source)) {}
+        resized_pager.finish_end(resized_source, *resized_previous);
+        check(resized_pager.source_offset() == 7,
+              "Previous row is reconstructed using the new wrap width");
+        static_cast<void>(resized_pager.frame(resized_source, 7, 3));
+        check(!resized_pager.prepare_previous(resized_source, false),
+              "Publishing matching-width reconstruction retains its earlier rows");
+        resized_pager.up();
+        check(resized_pager.source_offset() == 0, "Rebuilt history reaches source start");
         const std::filesystem::path large_path = dir / "large.txt";
         {
             std::ofstream file(large_path, std::ios::binary);
