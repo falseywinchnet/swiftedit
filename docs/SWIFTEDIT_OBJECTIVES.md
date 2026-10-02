@@ -632,3 +632,12 @@ preserve the active scenario when CI terminates it. Local Windows execution
 passed; the two history-reconstruction scenarios took 9.166 and 8.231 seconds.
 No timeout or assertion was relaxed. The next native run must establish whether
 the Mac failure is aggregate runtime or a stalled scenario before remediation.
+
+Native run 36976493687 at 19d07cd passed Windows, Linux and macOS packaging;
+macOS passed all 32 tests. Its terminal-app timing was 48.95 seconds, including
+42.6562 seconds in two long rewind scenarios. The previous timeout's exact cause
+remains unknown. A measured follow-up now sizes initial terminal source context
+to the viewport instead of always segmenting 8 KiB per scroll. Existing bounded
+growth and complete-grapheme checks remain. Focused tests pass; 3780 raw before/
+after samples and limitations are recorded in performance/2026-10-02-terminal-source-window.
+Native validation of this optimization is pending.

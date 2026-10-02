@@ -302,9 +302,12 @@ std::optional<TerminalPageCaret> terminal_page_caret(const TerminalPageFrame &fr
 }
 TerminalPageFrame terminal_page(const Session &session, TerminalPageCursor cursor,
                                 std::size_t width, std::size_t rows) {
-    if (!rows || rows > 300)
+    if (!width || width > 1000 || !rows || rows > 300)
         throw std::runtime_error("Terminal page dimensions exceed their bounded range.");
-    std::size_t budget = 8192;
+    // Start near the visible ASCII extent rather than segmenting 8 KiB for
+    // every scrolled row. Extra context keeps the final scalar/CRLF intact;
+    // multibyte text and longer graphemes grow through the same checked path.
+    std::size_t budget = std::min<std::size_t>(8192, std::max<std::size_t>(256, width * rows + 4));
     BuiltPage built = build_terminal_page<true>(session, cursor, width, rows, budget, 0);
     // Most viewports fit in a small source window. Grow only when more source
     // is needed to fill the viewport or complete its first grapheme.
