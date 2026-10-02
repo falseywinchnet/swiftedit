@@ -155,4 +155,5 @@ The command-process regression covers literal case folding, one-operation
 steps, invalid budgets/modes/flags, no implicit wrap at EOF, cancellation,
 stale document identity, and wildcard search in an actual 16 MiB paged file.
 The complete local suite passed 23/23 in 9.05 s; source spelling audit passed
-116 files. Native command-interface validation is pending.
+116 files. Source c2569a3 passed native run 36960180849 and portable-core
+run 36960180791 on Windows, macOS and Linux.

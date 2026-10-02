@@ -72,4 +72,7 @@ jobs:
             .build/native-${{ matrix.platform }}/terminal-end-evidence/summary.txt
             .build/native-${{ matrix.platform }}/terminal-end-evidence/receipt.json
             .build/native-${{ matrix.platform }}/terminal-end-evidence/fixtures/samples.csv
+            .build/native-${{ matrix.platform }}/search-evidence/summary.txt
+            .build/native-${{ matrix.platform }}/search-evidence/receipt.json
+            .build/native-${{ matrix.platform }}/search-evidence/fixtures/samples.csv
           if-no-files-found: ignore

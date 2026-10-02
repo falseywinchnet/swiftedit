@@ -124,6 +124,30 @@ def main() -> None:
         'cache_state': 'not controlled; trials run sequentially',
         'performance_threshold': 'none'}
     (evidence / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')
+    search_benchmark: Path = build / ('swiftedit-search-bench.exe' if os.name == 'nt'
+                                      else 'swiftedit-search-bench')
+    search_evidence: Path = build / 'search-evidence'
+    search_evidence.mkdir()
+    with (search_evidence / 'summary.txt').open('w', encoding='utf-8') as summary:
+        measured = subprocess.run(
+            [str(search_benchmark), str(search_evidence / 'fixtures')], check=False,
+            timeout=120, stdout=summary, stderr=subprocess.STDOUT)
+    measured.check_returncode()
+    search_receipt: dict[str, object] = {
+        'source_revision': revision, 'provider_revision': lock['provider_revision'],
+        'platform': arguments.platform, 'executable_sha256': sha256(search_benchmark),
+        'status': 'completed',
+        'scope': 'headless SessionSearch steps; not native input-to-screen or idle CPU',
+        'fixture_bytes': 16777216, 'trials_per_mode': 3,
+        'modes': ['literal Z', 'one-grapheme wildcard followed by literal Z'],
+        'comparison_work_budget': 4096, 'ordinary_source_context': 8192,
+        'percentiles': 'nearest rank; per-step samples pooled across trials',
+        'clock_overhead': 'included; step wall intervals include process CPU clock calls',
+        'cpu_clock': 'GetProcessTimes on Windows, std::clock on POSIX; process-wide; resolution varies',
+        'cache_state': 'not controlled; literal then wildcard, sequential trials',
+        'performance_threshold': 'none',
+        'limits': 'three simple-pattern fixtures; not exhaustive query-complexity coverage'}
+    (search_evidence / 'receipt.json').write_text(json.dumps(search_receipt, indent=2) + '\n', encoding='utf-8')
     if arguments.platform == 'macos-arm64':
         run([sys.executable, '-B', 'tools/Package-Mac.py', '--build', str(build), '--sdk', str(sdk)])
 

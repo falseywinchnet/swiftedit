@@ -255,5 +255,5 @@ Resize source c2fb0aa passed native run 36958985720 and portable-core run
 
 Streaming terminal search source 53abb7c passed native run 36959673036 and
 portable-core run 36959673110 on all three platforms. Its verified Mac package
-is published as v0.2.9-dogfood.20261001. The CLI protocol follow-up remains
-pending native validation.
+is published as v0.2.9-dogfood.20261001. The CLI protocol follow-up (source c2569a3) passed native run 36960180849
+and portable-core run 36960180791 on all three platforms.

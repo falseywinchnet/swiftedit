@@ -161,3 +161,16 @@ public hit-test/selection geometry and installed-consumer validation. Source-onl
 models or private adapters do not satisfy the GUI requirement. Print/preview
 still needs an executable snapshot/projection backend. The separate blank GUI
 CPU investigation has not established a fix for the owner's 7% observation.
+
+
+Consumer review of the proposed retained visible-window batch requires exact
+revision/projection/config identities, real empty-row baselines and EOF anchors,
+CR/LF/CRLF source ownership, and lossless completion delivery under a full
+owner-dispatch queue. A practical initial cap is 512 visible/overscan row
+descriptors within the same aggregate budgets; this is an implementation
+checkpoint, not an owner-approved document limit. Typed unavailable for long
+paragraphs leaves long-line support explicitly open. CSV/formula and rendered
+Markdown displays need separate derived projections where display offsets are
+not raw source offsets. Mirroring is valid only for the exact same immutable
+projection; independent controls must not revoke the document's layout work.
+These conditions were sent to the provider coordinator; no new SDK is accepted.
