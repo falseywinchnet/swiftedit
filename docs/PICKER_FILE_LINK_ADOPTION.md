@@ -21,7 +21,11 @@ symlink and its target. It then:
 The probe requires actual symlink creation and never reports a skipped fixture
 as a pass. A fresh local Windows Release build against723cd7f passed all20
 ordinary suites in5.51s. This desktop's symlink privilege limitation means the
-actual alias probe must run in native CI; those integration results are pending.
+actual alias probe must run in native CI. At17025dc, native36947473385 passed
+the probe on all three platforms. Windows uses native link creation and verifies
+reparse data preservation plus reading revised contents through the alias;
+its MinGW filesystem helpers cannot reliably create/inspect this fixture.
+The verified Mac package is published as v0.2.5-dogfood.20261001.
 
 Run the registered probe on macOS and Linux and in the native Windows runner
 before publishing the picker fix. The provider's own cases

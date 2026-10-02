@@ -715,3 +715,9 @@ same incomplete MinGW symlink adapter. POSIX assertions now separate link type
 and target resolution. Local editor suite1.39s/style101pass; native rerun needed.
 Mac11ff package verified, not released. Provider owner confirms keep723 pin;
 new7b260cf development text masks/CPU diagnostics are a separate candidate.
+
+17025dc native36947473385/core36947473445 all3 passed, including Windows actual
+file-link probe. Published v0.2.5-dogfood.20261001 with exact17025dc target after
+package/SDK/source/executable/hash verification; published ZIP digest matches.
+See DOGFOOD_2026-10-01.md for complete receipt. SDK723 remains pinned. Mac file
+symlink fix now available, focused blank CPU still open. Full goal incomplete.
