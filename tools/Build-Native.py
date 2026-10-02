@@ -117,7 +117,9 @@ def main() -> None:
         'scope': 'headless read-only terminal end scan; not native input-to-screen latency',
         'fixture_bytes': 16777216, 'viewport': [80, 24], 'trials_per_fixture': 5,
         'percentiles': 'nearest rank; per-step samples pooled across trials',
-        'clock_overhead': 'included', 'cache_state': 'not controlled; trials run sequentially',
+        'clock_overhead': 'included; step wall intervals include process CPU clock calls',
+        'cpu_clock': 'GetProcessTimes on Windows, std::clock on POSIX; process-wide; resolution varies',
+        'cache_state': 'not controlled; trials run sequentially',
         'performance_threshold': 'none'}
     (evidence / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')
     if arguments.platform == 'macos-arm64':
