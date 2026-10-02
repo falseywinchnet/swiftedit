@@ -108,9 +108,10 @@ source identities/revisions and transfers the completed result without another
 whole-selection copy. Cancellation/failure preserves the previous clipboard.
 Actual 16 MiB file tests cover whole-selection copying, source-close lifetime,
 malformed/control bytes, CRLF, split Unicode and undoable byte-faithful paste.
-Terminal read-only selection controls and GUI integration remain pending.
+Terminal row/page selection and cooperative copying are implemented below;
+horizontal read-only caret movement and GUI integration remain pending.
 
-The Windows terminal now connects paged copying to Shift+row/page navigation,
+The shared Windows/macOS/Linux terminal connects paged copying to Shift+row/page navigation,
 Ctrl+A whole-document selection and Ctrl+C cooperative copying. Visible runs
 carry exact source ranges for highlighting; inert label fragments map back to
 one source control byte. The owned-console regression checks successful copying
@@ -140,3 +141,21 @@ each count as one inert unit without changing source. Undo invalidates old
 selection stamps. Generic automated range replacement retains its separate
 semantics. Construction synchronously copies/indexes editable source metadata;
 paged selection metadata, clipboard joining and GUI gestures remain pending.
+
+
+Read-only terminal navigation now includes cancellable Ctrl+End and
+Shift+Ctrl+End, with 8 KiB ordinary scan steps and adaptive context for long
+graphemes. Expired backward history is reconstructed cooperatively rather than
+forcing Ctrl+Home. Resizing invalidates row/page geometry according to its width
+and height dependencies while preserving the source anchor. Detailed tests and
+remaining performance outliers are recorded in TERMINAL_PORTABILITY.md and
+performance/2026-10-01-terminal-end/paired-8k.md. These changes do not complete
+horizontal read-only caret navigation, large-file search, or GUI virtualization.
+
+Provider coordination checkpoint: public SDK723 remains pinned. The next
+retained DocumentView depends on native transactional presentation integration,
+exact revision/source-display mapping and retained view lifecycle, followed by
+public hit-test/selection geometry and installed-consumer validation. Source-only
+models or private adapters do not satisfy the GUI requirement. Print/preview
+still needs an executable snapshot/projection backend. The separate blank GUI
+CPU investigation has not established a fix for the owner's 7% observation.
