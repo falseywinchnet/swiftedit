@@ -40,6 +40,11 @@ struct TerminalPageCaret {
     const TerminalPageFrame &, std::uint64_t caret, bool right);
 [[nodiscard]] std::optional<TerminalPageCaret> terminal_page_caret(
     const TerminalPageFrame &, std::uint64_t caret, std::size_t width, std::size_t rows);
+// Returns the nearest legal source boundary at or before the desired display
+// column, or the first legal boundary on that row. Never splits a source unit.
+[[nodiscard]] std::optional<std::uint64_t> terminal_page_target(
+    const TerminalPageFrame &, std::size_t row, std::size_t column,
+    std::size_t width, std::size_t rows);
 // Reads at most 64 KiB per frame; never treats an unfinished trailing grapheme
 // as complete. Source-independent labels may continue across rows/pages.
 [[nodiscard]] TerminalPageFrame terminal_page(const Session &, TerminalPageCursor,

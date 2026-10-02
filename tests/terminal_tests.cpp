@@ -437,6 +437,16 @@ int main() {
             swiftedit::terminal_page_caret(blank_frame, 5, 4, 4);
         check(blank_start && (*blank_start).row == 1 && (*blank_start).column == 0,
               "Blank-line caret survives a preceding wrap plus newline");
+        check(swiftedit::terminal_page_target(wide_visible, 1, 1, 4, 2) == 3,
+              "Vertical target inside a wide glyph stays at its source boundary");
+        check(swiftedit::terminal_page_target(wide_visible, 0, 3, 4, 2) == 2,
+              "Wrapped wide-glyph boundary is not owned by the preceding row");
+        check(swiftedit::terminal_page_target(blank_frame, 1, 3, 4, 4) == 5,
+              "Vertical target on a blank row clamps to its exact source anchor");
+        check(swiftedit::terminal_page_target(newline_frame, 1, 3, 4, 3) == 6,
+              "Vertical target reaches empty EOF after wrapped CRLF");
+        check(!swiftedit::terminal_page_target(wide_visible, 2, 0, 4, 2),
+              "Vertical target refuses a row outside the viewport");
         // Compare every legal caret in all six-byte CR/LF/text arrangements
         // with the editable text model's established logical-line commands.
         for (std::size_t code = 0; code < 729; ++code) {

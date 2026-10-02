@@ -337,3 +337,14 @@ profiled, 131.528282875 seconds unprofiled). They cannot support a valid compari
 The provider owner was asked to export/analyze the existing focused trace and
 investigate the cleared timing failure without weakening its acceptance gate.
 No Mac CPU fix or attribution is established by this capture.
+
+Read-only vertical navigation review found that Up/Down currently move to row
+starts rather than preserving the desired display column. A bounded frame-to-source
+target mapper now resolves shared wrap boundaries in the same order as caret
+rendering, clamps to legal grapheme boundaries, and handles blank rows and empty
+EOF after wrapped CRLF. It does not yet change interactive navigation: persistent
+desired-column state and cooperative offscreen movement still need integration.
+Five focused regressions passed, together with all six terminal test targets
+(8.50 seconds); a final rebuilt terminal target passed in 2.28 seconds. The
+123-file house-style spelling audit passed. This is navigation groundwork, not
+a claim that the reported behavior is fixed.

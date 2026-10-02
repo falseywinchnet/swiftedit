@@ -1,10 +1,57 @@
 #include "terminal_page.hpp"
 #include "terminal_cells.hpp"
 #include <algorithm>
+#include <map>
 #include <gui_forms/text.hpp>
 #include <stdexcept>
 namespace swiftedit {
 namespace gf = gui_forms;
+std::optional<std::uint64_t> terminal_page_target(
+    const TerminalPageFrame &frame, const std::size_t row, const std::size_t column,
+    const std::size_t width, const std::size_t rows) {
+    if (!width || row >= rows)
+        return std::nullopt;
+    // Resolve shared source boundaries in the same order as caret rendering.
+    // This bounded frame index avoids rescanning every run for every candidate.
+    std::map<std::uint64_t, TerminalPageCaret> positions{};
+    for (const TerminalPageRun &run : frame.runs) {
+        if (run.starts_grapheme)
+            positions[run.source_offset] = {run.row, run.column};
+        if (run.ends_grapheme) {
+            const std::size_t end = run.column + run.cells;
+            positions[run.source_offset + run.source_length] =
+                end == width ? TerminalPageCaret{run.row + 1, 0}
+                             : TerminalPageCaret{run.row, end};
+        }
+    }
+    for (std::size_t index = 0; index < frame.row_starts.size(); ++index) {
+        const TerminalPageCursor start = frame.row_starts[index];
+        if (!start.label_cell)
+            positions[start.offset] = {index, 0};
+    }
+    for (const TerminalPageNewlineCaret boundary : frame.newline_carets)
+        positions[boundary.offset] = {boundary.row, boundary.column};
+    if (!frame.more && !frame.row_starts.empty() && !positions.contains(frame.next.offset))
+        positions[frame.next.offset] = {frame.row_starts.size() - 1, 0};
+    std::optional<std::uint64_t> before{}, first{};
+    std::size_t before_column = 0;
+    std::size_t first_column = width;
+    for (const std::pair<const std::uint64_t, TerminalPageCaret> &entry : positions) {
+        const TerminalPageCaret position = entry.second;
+        if (position.row != row || position.column >= width)
+            continue;
+        if (!first || position.column < first_column) {
+            first = entry.first;
+            first_column = position.column;
+        }
+        if (position.column <= column && (!before || position.column >= before_column)) {
+            before = entry.first;
+            before_column = position.column;
+        }
+    }
+    const std::optional<std::uint64_t> result = before ? before : first;
+    return result;
+}
 TerminalLineBoundary::TerminalLineBoundary(const Session &session, const std::uint64_t caret,
                                            const bool end)
     : stamp_(session.stamp()), size_(session.size()), cursor_(caret), end_(end) {
