@@ -61,6 +61,16 @@ rows, cancellation without changing an existing completed viewport, and stale
 identity refusal. The focused test passed in 0.14 seconds and the spelling
 audit remained clean. This task is not yet wired to the host input loop.
 
+`TerminalLogicalPrevious` supplies width-independent backward navigation. It
+scans from a verified logical boundary, counts complete CR/LF/CRLF separators,
+and clamps at document start. One step reads at most 8 KiB; only scalar scan
+state is retained. CRLF pairing survives chunk boundaries. No byte-to-character
+conversion or wrapped-screen history is needed to find an earlier logical row.
+Tests compare backward results from every row of the mixed-ending/Unicode/raw
+byte fixtures at budgets 1..9 and heights 1, 2, 3 and 300. A real 16 MiB line
+rewinds in 2049 bounded steps. Unfinished/stale/foreign results and invalid
+starts/budgets are refused; dropping work cancels without changing source.
+
 Still required: connect this work to the terminal event loop, preserve caret/selection
 and backward navigation across mode/width changes, implement space wrapping,
 and exercise F2 and cancellation through the terminal host. This component does

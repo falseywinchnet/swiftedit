@@ -66,6 +66,22 @@ void check_rows(const std::string &source,
             }
             require(observed == expected.size(), "Every logical row survives pagination");
             require(session.text() == source, "Logical scanning preserves exact source bytes");
+            for (std::size_t row = 0; row < expected.size(); ++row) {
+                swiftedit::TerminalLogicalPrevious previous(session, expected[row].offset, height);
+                bool complete = false;
+                std::size_t steps = 0;
+                while (!complete) {
+                    const std::uint64_t before = previous.scanned_offset();
+                    complete = previous.step(session, budget);
+                    require(before - previous.scanned_offset() <= budget, "Bounded backward scan");
+                    ++steps;
+                    require(steps <= source.size() + 2, "Backward navigation makes progress");
+                }
+                const std::size_t target = row >= height ? row - height : 0;
+                require(previous.result(session) == expected[target].offset,
+                        "Backward navigation agrees with exact logical rows at every boundary");
+                require(previous.step(session, budget), "Completed backward scan is idempotent");
+            }
         }
     }
 }
@@ -80,6 +96,13 @@ void check_refusals() {
             refused = true;
         }
         require(refused, "Mid-line, split CRLF, unterminated EOF and out-of-range starts refused");
+        refused = false;
+        try {
+            const swiftedit::TerminalLogicalPrevious invalid(session, offset, 1);
+        } catch (const std::runtime_error &) {
+            refused = true;
+        }
+        require(refused, "Backward scan rejects unproven logical boundaries");
     }
     for (const std::size_t height : {0U, 301U}) {
         bool refused = false;
@@ -116,8 +139,24 @@ void check_refusals() {
         refused = true;
     }
     require(refused && pending.scanned_offset() == 0, "Identical foreign source is refused");
+    swiftedit::TerminalLogicalPrevious previous(session, 3, 1);
+    refused = false;
+    try {
+        static_cast<void>(previous.step(foreign));
+    } catch (const std::runtime_error &) {
+        refused = true;
+    }
+    require(refused && previous.scanned_offset() == 3, "Backward scan rejects identical foreign source");
+    require(!previous.step(session, 1), "Backward scan splits CRLF across bounded reads");
     require(!pending.step(session, 2), "CR boundary remains pending until lookahead");
     session.replace_ranges({{0, 1}}, "z", session.stamp());
+    refused = false;
+    try {
+        static_cast<void>(previous.step(session));
+    } catch (const std::runtime_error &) {
+        refused = true;
+    }
+    require(refused && previous.scanned_offset() == 2, "Backward scan rejects changed revision");
     refused = false;
     try {
         static_cast<void>(pending.step(session));
@@ -171,6 +210,44 @@ void check_large_file() {
                 rows[1].offset == 16777218 && rows[1].length == 3 &&
                 rows[1].separator_bytes == 0 && !page.more(session),
             "Huge logical line uses bounded metadata and retains exact following row");
+    {
+        swiftedit::TerminalLogicalPrevious cancelled(session, rows[1].offset, 1);
+        require(!cancelled.step(session) && cancelled.scanned_offset() == rows[1].offset - 8192,
+                "Backward long-line navigation yields and can be dropped");
+    }
+    swiftedit::TerminalLogicalPrevious previous(session, rows[1].offset, 1);
+    bool refused = false;
+    try {
+        static_cast<void>(previous.result(session));
+    } catch (const std::runtime_error &) {
+        refused = true;
+    }
+    require(refused, "Incomplete backward navigation cannot publish");
+    for (const std::size_t budget : {0U, 8193U}) {
+        refused = false;
+        try {
+            static_cast<void>(previous.step(session, budget));
+        } catch (const std::runtime_error &) {
+            refused = true;
+        }
+        require(refused && previous.scanned_offset() == rows[1].offset,
+                "Invalid backward budget preserves state");
+    }
+    steps = 0;
+    do {
+        complete = previous.step(session);
+        ++steps;
+    } while (!complete);
+    require(steps == 2049 && previous.result(session) == 0 && !session.dirty(),
+            "Actual read-only long line rewinds in bounded steps without content changes");
+    session.reset();
+    refused = false;
+    try {
+        static_cast<void>(previous.result(session));
+    } catch (const std::runtime_error &) {
+        refused = true;
+    }
+    require(refused, "Completed backward navigation refuses changed identity");
 }
 } // namespace
 int main() {

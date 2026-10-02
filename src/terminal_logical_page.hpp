@@ -3,6 +3,24 @@
 #include <vector>
 
 namespace swiftedit {
+// Reconstruct earlier logical rows independently of wrap width or retained
+// screen history. One read of at most 8 KiB per step, constant retained state.
+// Start must be a complete logical-line boundary; result clamps at source start.
+class TerminalLogicalPrevious final {
+public:
+    TerminalLogicalPrevious(const Session &, std::uint64_t start, std::size_t rows);
+    [[nodiscard]] bool step(const Session &, std::size_t budget = 8192);
+    [[nodiscard]] std::uint64_t result(const Session &) const;
+    [[nodiscard]] std::uint64_t scanned_offset() const { return scan_; }
+
+private:
+    void validate(const Session &) const;
+    DocumentStamp stamp_{};
+    std::uint64_t size_{}, start_{}, scan_{}, result_{};
+    std::size_t remaining_{};
+    char following_{};
+    bool complete_{};
+};
 struct TerminalLogicalRow {
     std::uint64_t offset{}, length{};
     std::size_t separator_bytes{};

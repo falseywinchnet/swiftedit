@@ -1,11 +1,12 @@
 #include "terminal_logical_page.hpp"
+#include <algorithm>
 #include <stdexcept>
 
 namespace swiftedit {
-TerminalLogicalPage::TerminalLogicalPage(const Session &session, const std::uint64_t start,
-                                         const std::size_t rows)
-    : stamp_(session.stamp()), size_(session.size()), scan_(start), line_start_(start), limit_(rows) {
-    if (!rows || rows > 300 || start > size_)
+namespace {
+void validate_logical_start(const Session &session, const std::uint64_t start,
+                            const std::size_t rows) {
+    if (!rows || rows > 300 || start > session.size())
         throw std::runtime_error("Logical page bounds are invalid.");
     if (start) {
         const Page boundary = session.page(start - 1, 2);
@@ -15,7 +16,60 @@ TerminalLogicalPage::TerminalLogicalPage(const Session &session, const std::uint
         if (!after_lf && !after_cr)
             throw std::runtime_error("Logical page must start at a complete line boundary.");
     }
+}
+} // namespace
+TerminalLogicalPage::TerminalLogicalPage(const Session &session, const std::uint64_t start,
+                                         const std::size_t rows)
+    : stamp_(session.stamp()), size_(session.size()), scan_(start), line_start_(start), limit_(rows) {
+    validate_logical_start(session, start, rows);
     rows_.reserve(rows);
+}
+TerminalLogicalPrevious::TerminalLogicalPrevious(const Session &session,
+                                                 const std::uint64_t start,
+                                                 const std::size_t rows)
+    : stamp_(session.stamp()), size_(session.size()), start_(start), scan_(start),
+      remaining_(rows), complete_(start == 0) {
+    validate_logical_start(session, start, rows);
+}
+void TerminalLogicalPrevious::validate(const Session &session) const {
+    const DocumentStamp current = session.stamp();
+    if (current.identity != stamp_.identity || current.revision != stamp_.revision ||
+        session.size() != size_)
+        throw std::runtime_error("Logical navigation belongs to an older document.");
+}
+bool TerminalLogicalPrevious::step(const Session &session, const std::size_t budget) {
+    validate(session);
+    if (!budget || budget > 8192)
+        throw std::runtime_error("Logical navigation step budget must be 1..8192 bytes.");
+    if (complete_)
+        return true;
+    const std::size_t count = static_cast<std::size_t>(std::min<std::uint64_t>(scan_, budget));
+    const Page source = session.page(scan_ - count, count);
+    for (std::size_t index = source.bytes.size(); index > 0;) {
+        --index;
+        --scan_;
+        const char byte = source.bytes[index];
+        const bool boundary = byte == '\n' || (byte == '\r' && following_ != '\n');
+        following_ = byte;
+        const std::uint64_t offset = scan_ + 1;
+        if (boundary && offset < start_) {
+            --remaining_;
+            if (!remaining_) {
+                result_ = offset;
+                complete_ = true;
+                break;
+            }
+        }
+    }
+    if (!scan_)
+        complete_ = true;
+    return complete_;
+}
+std::uint64_t TerminalLogicalPrevious::result(const Session &session) const {
+    validate(session);
+    if (!complete_)
+        throw std::runtime_error("Logical navigation is not complete.");
+    return result_;
 }
 void TerminalLogicalPage::validate(const Session &session) const {
     const DocumentStamp current = session.stamp();
