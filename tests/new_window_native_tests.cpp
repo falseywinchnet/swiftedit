@@ -110,7 +110,7 @@ private:
                 text.replace_selection(parent_text);
                 text.select(gf::Utf8Offset(8), gf::Utf8Offset(15));
                 const gf::TextSelection selection = text.selection();
-                (*editor_).execute("copy");
+                clipboard_key(gf::PhysicalKey::c);
                 const std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now();
                 (*editor_).execute("new-window");
                 const std::chrono::duration<double, std::milli> launch_time =
@@ -122,7 +122,7 @@ private:
             }
             require(!std::filesystem::exists("child.failed"), "Child reported native failure");
             if (!parent_ && !pasted_) {
-                (*editor_).execute("paste");
+                clipboard_key(gf::PhysicalKey::v);
                 require(text.text() == copied_text, "Native Unicode clipboard crosses independent processes");
                 pasted_ = true;
                 receipt("child.pasted");
@@ -157,6 +157,19 @@ private:
             (*timer_).stop();
             static_cast<void>(handle_.request_close());
         }
+    }
+    void clipboard_key(const std::uint32_t physical_key) {
+        require((*window_).request_focus((*editor_).text_control()),
+                "Focus the document for its clipboard shortcut");
+        gf::KeyEvent event{};
+        event.action = gf::KeyAction::down;
+        event.physical_key = physical_key;
+#ifdef __APPLE__
+        event.modifiers = gf::Modifier::meta;
+#else
+        event.modifiers = gf::Modifier::control;
+#endif
+        require((*window_).dispatch_key(event), "Native document clipboard shortcut handled");
     }
     bool parent_{}, complete_{}, pasted_{};
     unsigned ticks_{};

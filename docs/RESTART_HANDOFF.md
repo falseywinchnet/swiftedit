@@ -671,3 +671,11 @@ empty. Borrowed parser slices are copied during the callback, no file/network
 access is added, and the decoded URL still participates in retained byte limits.
 All 20 local suites passed4.99s;101-file spelling clean. Regression covers mixed
 normal/entity segments, Unicode numeric entity and empty URL.
+
+Native clipboard coverage strengthened: the two-editor lifecycle fixture now
+focuses the actual document and dispatches platform Copy/Paste key events
+(Meta+C/V on Mac, Control+C/V on Windows/Linux), rather than invoking those
+commands directly. Exact Unicode cross-process text and surviving-window
+independence assertions remain unchanged. This covers toolkit key routing,
+not physical keyboard event translation. Windows compilation and101-file style
+audit passed; native execution pending. No local desktop launched.
