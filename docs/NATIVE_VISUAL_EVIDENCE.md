@@ -82,3 +82,18 @@ The before images are retained beside the idle evidence as
 `csv-baseline-defect-1504e2b.png` and `markdown-baseline-defect-1504e2b.png`.
 The loaded-font idle result is recorded separately in that directory's README;
 it does not establish a product CPU improvement.
+
+## Corrected native capture: 38c53c4
+
+Native run36950568367 passed Mac, Windows and Linux, and core36950568341 passed.
+Both Mac captures were inspected: CSV numeric values, the complete #ERROR label,
+literal triple backticks and header/status labels are now positioned inside
+their rows. The triangle remains legible beside the error. Markdown heading,
+table labels, ruler, inline code, strike and link underline align with the text.
+The fixed fixture is accepted; this is not exhaustive scale/theme/Unicode QA or
+a physical keyboard test. The search field has the metric regression and native
+Find/Replace smoke coverage, but no separate visual capture yet.
+
+The corrected images are `csv-corrected-38c53c4.png` and
+`markdown-corrected-38c53c4.png` beside the earlier images in the Mac idle evidence
+directory. SwiftEdit0.2.6 dogfood publishes this source with unchanged SDK723cd7f.

@@ -42,6 +42,23 @@ statistical distribution, an improvement comparison with fontless results,
 a reproduction of the owner's7%, or a CPU fix. Model focus clearing still
 does not mean switching applications. Owner-reported focused idle remains open.
 
+## Second font-loaded baseline: 38c53c4
+
+Native run36950568367 passed all three platforms; core36950568341 passed.
+The Mac observation was1.39116% focused (0.069677 CPU seconds /5.00857 elapsed)
+and0.036735% after text focus clearing (0.00187 /5.09052). All18 rows retain the
+loaded-font renderer. Main focused paints/deadlines/wakes remain9/9/9, area342,
+recorded presentation wall2,553,624ns; the cleared main and all8 hidden dialogs
+are quiet. Raw rows: `baseline-38c53c4-fonts-controlled.txt`.
+
+This variation from the preceding0.467881% sample is not a controlled regression
+or improvement comparison. The product changes affect CSV/Markdown/search text
+alignment; no blank-editor CPU optimization was made. Single-run percentages
+cannot establish resolution of the owner's report. The packaged-app uncontrolled
+ten-second observation was0.897989%; its distinct scope remains unchanged.
+
+## Historical observations before native fixture font correction
+
 Owner report: SwiftEdit consumes approximately 7% CPU on an Apple silicon Mac
 running macOS 26 while showing a blank document. No claim of acceptability or
 resolved cause is made.
