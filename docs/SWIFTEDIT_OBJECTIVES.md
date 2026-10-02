@@ -641,3 +641,12 @@ to the viewport instead of always segmenting 8 KiB per scroll. Existing bounded
 growth and complete-grapheme checks remain. Focused tests pass; 3780 raw before/
 after samples and limitations are recorded in performance/2026-10-02-terminal-source-window.
 Native validation of this optimization is pending.
+
+Markdown layout audit: a quoted table could exceed the 250000-run retained
+layout limit because final table borders and quote decorations were appended
+after the text-only check. A 125000-word quoted-table regression failed against
+the previous implementation and passes with checks before text shaping, border
+append and quote append. Refusal leaves the source unchanged and a later normal
+source renders successfully. View tests pass (0.18 seconds including CTest
+execution); house-style audit passes all 129 files. This closes the decoration
+accounting bug, not the outstanding full Markdown desktop/layout/print audit.

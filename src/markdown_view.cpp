@@ -147,6 +147,8 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
                 const std::size_t text_total = retained_bytes + word.size();
                 if (span.url.size() > storage_limit - text_total)
                     throw std::runtime_error("Markdown layout exceeds display storage budget.");
+                if (next.size() >= 250000)
+                    throw std::runtime_error("Markdown layout exceeds display run budget.");
                 const gf::ResolvedTextLayout metrics = painter.resolve_text_layout_utf8(word, font);
                 const gf::Size measured = metrics.logical_size;
                 const double height = std::max(20.0, std::max(measured.height,
@@ -170,8 +172,6 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
                 run.code = span.code || block.kind == swiftedit::MarkdownKind::code;
                 next.push_back(std::move(run));
                 retained_bytes = text_total + span.url.size();
-                if (next.size() > 250000)
-                    throw std::runtime_error("Markdown layout exceeds 250000 runs.");
                 x[column] += measured.width;
                 maximum_x = std::max(maximum_x, x[column] + page_margin);
                 offset = end;
@@ -181,6 +181,8 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
         for (std::size_t column = 0; column < columns; ++column)
             bottom = std::max(bottom, row_y[column] + line_height[column]);
         if (table) {
+            if (columns > 250000 - next.size())
+                throw std::runtime_error("Markdown layout exceeds display run budget.");
             for (std::size_t column = 0; column < columns; ++column) {
                 Run border{};
                 border.bounds = {start + static_cast<double>(column) * column_width, y,
@@ -192,6 +194,8 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
                                  start + static_cast<double>(columns) * column_width + page_margin);
         }
         if (block.quoted) {
+            if (next.size() >= 250000)
+                throw std::runtime_error("Markdown layout exceeds display run budget.");
             Run quote{};
             quote.bounds = {start - 12, y, 2, bottom - y};
             quote.rule = true;

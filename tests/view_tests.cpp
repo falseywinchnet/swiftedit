@@ -519,6 +519,20 @@ int main() {
         (*view).on_paint(painter, {0, 0, 600, 480});
         check(painter.drawn.find("Recovered") != std::string::npos,
               "Layout storage refusal permits a later valid source");
+        std::string decorated_limit = "> | ";
+        for (std::size_t index = 0; index < 125000; ++index)
+            decorated_limit += "x ";
+        decorated_limit += "|\n> | --- |\n";
+        (*view).set_source(decorated_limit);
+        painter.drawn.clear();
+        (*view).on_paint(painter, {0, 0, 600, 480});
+        check(painter.drawn.find("Markdown layout exceeds display run budget.") != std::string::npos,
+              "Final table borders and quote decorations count against the run budget");
+        (*view).set_source("Recovered after decoration limit");
+        painter.drawn.clear();
+        (*view).on_paint(painter, {0, 0, 600, 480});
+        check(painter.drawn.find("Recovered") != std::string::npos,
+              "Decoration budget refusal permits a later valid source");
         std::cout << "Native Markdown paint/cache tests passed.\n";
         return 0;
     } catch (const std::exception &failure) {
