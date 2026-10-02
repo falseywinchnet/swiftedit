@@ -9,6 +9,7 @@ class SearchPattern;
 class SessionReplacement;
 class SessionCopy;
 constexpr std::size_t editable_limit = 16 * 1024 * 1024;
+constexpr std::size_t paste_confirmation_bytes = 500000;
 // Session-local identities are deliberately distinct from byte offsets and
 // from one another. Transport conversion occurs only at the CLI boundary.
 struct EditToken {

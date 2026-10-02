@@ -112,3 +112,18 @@ Native run 36953856671 passed Windows, macOS and Linux; portable-core run
 36953856558 passed all three. Mac passed all 30 native tests and repeated the
 expanded PTY smoke against the packaged terminal. The change is on master and
 in that run's Mac artifact; the earlier v0.2.7 release remains unchanged.
+
+## Large paste confirmation
+
+Terminal-emulator paste and Ctrl+U now use the same threshold as the GUI:
+more than 500,000 bytes requires an explicit typed Y before insertion. Exactly
+500,000 bytes does not prompt. Read-only and oversized resulting documents are
+rejected before staging. The pending choice owns the original pasted bytes and
+records the document identity, revision and selection. Confirmation rechecks
+those values before one insertion. N/Escape discard the pending bytes, and
+pasted Y, Ctrl+Y or other commands cannot approve or bypass the choice.
+
+The editable terminal now binds Ctrl+A to its existing Select All operation;
+the read-only path already had that binding. Shared-loop regression scenarios
+exercise both clipboard paths, exact threshold, cancellation, one undo returning
+to a clean document, redo and exact saved bytes. Native validation is pending.

@@ -568,7 +568,7 @@ void Editor::execute(const std::string &id) {
                 (*(*window()).host_services()).read_clipboard_text();
             if (!clip.status.accepted())
                 throw std::runtime_error("Cannot read plain-text clipboard.");
-            if (clip.text_utf8.size() > 500000) {
+            if (clip.text_utf8.size() > swiftedit::paste_confirmation_bytes) {
                 const gf::HostDialogChoice choice = message(
                     "Large paste",
                     "Paste " + std::to_string(clip.text_utf8.size()) + " bytes of plain text?",

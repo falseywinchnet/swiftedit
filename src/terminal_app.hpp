@@ -27,7 +27,7 @@ inline void status_line(std::string &output, std::size_t row, std::string_view s
     const std::string safe = swiftedit::escape_field(source);
     output.append(safe, 0, std::min(width, safe.size()));
 }
-enum class Prompt { none, save_path, text_copy_path, open_path, exit_choice, find, replacement };
+enum class Prompt { none, save_path, text_copy_path, open_path, exit_choice, paste_choice, find, replacement };
 class Terminal {
 public:
     // The caller owns the OS console and must keep it alive through this
@@ -297,6 +297,9 @@ private:
             message = "Replace ALL with: " + input_ + "  [Enter applies / Esc cancels]";
         if (prompt_ == Prompt::exit_choice)
             message = "Save changes before exit? Y=Save N=Discard Esc=Cancel";
+        if (prompt_ == Prompt::paste_choice)
+            message = "Paste " + std::to_string((*pending_paste_).text.size()) +
+                      " bytes? Y=Paste N=Cancel Esc=Cancel";
         status_line(screen, height - 3, message, width_);
         if (prompt_ != Prompt::none && !status_.empty())
             status_line(screen, height - 2, status_, width_);
@@ -380,6 +383,34 @@ private:
         else
             buffer_.move(motion, extend, count);
     }
+    void paste(const std::string_view text) {
+        if (buffer_.session().read_only())
+            throw std::runtime_error("Large-file pages are read-only.");
+        const swiftedit::SourceRange selection = buffer_.selected_range();
+        const std::uint64_t retained = buffer_.session().size() - selection.length;
+        if (text.size() >= swiftedit::editable_limit - retained)
+            throw std::runtime_error("Paste exceeds the editable document limit. Document unchanged.");
+        if (text.size() <= swiftedit::paste_confirmation_bytes) {
+            buffer_.insert(text);
+            return;
+        }
+        PendingPaste prepared{std::string(text), buffer_.session().stamp(), buffer_.selection()};
+        pending_paste_ = std::move(prepared);
+        prompt_ = Prompt::paste_choice;
+        status_ = "Large paste requires confirmation; document unchanged.";
+    }
+    void confirm_paste() {
+        PendingPaste prepared = std::move(*pending_paste_);
+        pending_paste_.reset();
+        prompt_ = Prompt::none;
+        const swiftedit::DocumentStamp stamp = buffer_.session().stamp();
+        const swiftedit::TerminalSelection selection = buffer_.selection();
+        if (stamp.identity != prepared.stamp.identity || stamp.revision != prepared.stamp.revision ||
+            selection.anchor != prepared.selection.anchor || selection.caret != prepared.selection.caret)
+            throw std::runtime_error("Paste cancelled because the document or selection changed.");
+        buffer_.insert(prepared.text);
+        status_ = "Pasted as one edit";
+    }
     void key(const TerminalInput &event) {
         const bool ctrl = event.control;
         const bool alt = event.alt;
@@ -426,11 +457,11 @@ private:
         if (event.pasted) {
             high_surrogate_ = 0;
             if (prompt_ == Prompt::none)
-                buffer_.insert(event.paste);
+                paste(event.paste);
             else if (prompt_ == Prompt::find)
                 query_.insert(event.paste);
-            else if (prompt_ == Prompt::exit_choice)
-                status_ = "Type Y or N for the exit choice; pasted text is not a command.";
+            else if (prompt_ == Prompt::exit_choice || prompt_ == Prompt::paste_choice)
+                status_ = "Type Y or N for this choice; pasted text is not a command.";
             else {
                 if (event.paste.size() > 32768 - input_.size())
                     throw std::runtime_error("Prompt input exceeds its UTF-8 byte limit.");
@@ -440,10 +471,19 @@ private:
         }
         if (prompt_ != Prompt::none) {
             if (key == terminal_key::escape) {
+                pending_paste_.reset();
                 prompt_ = Prompt::none;
                 exit_after_save_ = false;
                 high_surrogate_ = 0;
                 status_ = "Cancelled";
+            } else if (prompt_ == Prompt::paste_choice) {
+                if (!ctrl && !alt && key == 'Y')
+                    confirm_paste();
+                else if (!ctrl && !alt && key == 'N') {
+                    pending_paste_.reset();
+                    prompt_ = Prompt::none;
+                    status_ = "Paste cancelled; document unchanged";
+                }
             } else if (prompt_ == Prompt::exit_choice) {
                 if (key == 'N')
                     done_ = true;
@@ -551,6 +591,9 @@ private:
         }
         if (ctrl && !alt) {
             switch (key) {
+            case 'A':
+                buffer_.select_all();
+                return;
             case 'T':
                 text_copy();
                 return;
@@ -598,7 +641,7 @@ private:
                 status_ = "Cut to terminal clipboard";
                 return;
             case 'U':
-                buffer_.paste(clipboard_);
+                paste(clipboard_.bytes());
                 return;
             }
         }
@@ -695,6 +738,12 @@ private:
     bool replace_query_{};
     swiftedit::TerminalQuery query_{};
     Prompt prompt_{Prompt::none};
+    struct PendingPaste {
+        std::string text{};
+        swiftedit::DocumentStamp stamp{};
+        swiftedit::TerminalSelection selection{};
+    };
+    std::optional<PendingPaste> pending_paste_{};
     std::string input_{}, status_{"F1 Help"};
     swiftedit::SourceClipboard clipboard_{};
     std::size_t top_{}, left_{}, width_{80}, rows_{20};
