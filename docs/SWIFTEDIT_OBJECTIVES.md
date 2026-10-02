@@ -390,3 +390,16 @@ test at the unchanged 60-second timeout; the other 30 Mac tests passed. That
 checkpoint predates adaptive visible-page decoding. Linux passed, while Windows
 was still running when this result was inspected. The adaptive change must pass
 a fresh Mac run before the timeout regression can be considered resolved.
+
+Read-only navigation key repeats now run in slices of at most 16 movements,
+with redraw and Escape cancellation between slices. Unexecuted repetitions stay
+owned by the main loop and wait for cooperative row/line reconstruction; they
+no longer enter key dispatch and cancel their own outstanding task. A genuine
+new event that cancels reconstruction also supersedes its queued repetitions.
+No idle timer or thread was introduced. Tests verify all 23 requested movements,
+the unchanged source selection, Escape stopping a 1000-repeat event after the
+first 16 movements, and reconstruction inside a repeated Up event. The expanded
+terminal-app test passed in 17.49 seconds. The other 22 tests passed in the
+preceding full-suite run; final test-only edits split the two distinct history
+reconstruction cases. House-style audit passed across 123 files. Native validation
+is pending; these event-count bounds do not establish a wall-time latency bound.

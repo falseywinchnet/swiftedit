@@ -23,6 +23,8 @@ public:
     mutable bool cursor_checked{};
     std::string expected_copy{};
     mutable bool expected_copy_seen{};
+    bool cancel_repeats{};
+    mutable bool repeats_cancelled{};
     void start() override { started = true; }
     swiftedit::TerminalSize size() const override { return {80, 24}; }
     void write(std::string_view text) const override {
@@ -92,7 +94,13 @@ public:
         ++cursor;
         return result;
     }
-    bool cancel_requested() override { return false; }
+    bool cancel_requested() override {
+        if (cancel_repeats && cursor == 1 && !repeats_cancelled) {
+            repeats_cancelled = true;
+            return true;
+        }
+        return false;
+    }
     void allow_wrap_cancel(bool) override {}
     void press(std::uint32_t key, char16_t text = 0, bool control = false, bool shift = false) {
         swiftedit::TerminalInput input{};
@@ -237,6 +245,25 @@ int main() {
             output.seekp(swiftedit::editable_limit - 1);
             output.put('z');
         }
+        ScriptConsole repeated_rows{};
+        repeated_rows.press(swiftedit::terminal_key::down, 0, false, true);
+        repeated_rows.inputs.back().repeats = 23;
+        repeated_rows.expected_copy = "Copied 156 bytes";
+        repeated_rows.press('C', 0, true);
+        repeated_rows.press('X', 0, true);
+        swiftedit::Terminal repeated_terminal(repeated_rows);
+        if (repeated_terminal.run(vertical_path) != 0 || !repeated_rows.expected_copy_seen)
+            throw std::runtime_error("Navigation slicing lost repetitions or changed the selection anchor.");
+        ScriptConsole cancelled_repeats{};
+        cancelled_repeats.cancel_repeats = true;
+        cancelled_repeats.press(swiftedit::terminal_key::down);
+        cancelled_repeats.inputs.back().repeats = 1000;
+        cancelled_repeats.inspect_after = 1;
+        cancelled_repeats.expected_cursor = "\x1b[18;1H";
+        cancelled_repeats.press('X', 0, true);
+        swiftedit::Terminal cancelled_repeat_terminal(cancelled_repeats);
+        if (cancelled_repeat_terminal.run(vertical_path) != 0 || !cancelled_repeats.repeats_cancelled || !cancelled_repeats.cursor_checked)
+            throw std::runtime_error("Escape did not cancel repeated navigation after a bounded slice.");
         for (const std::size_t moves : {std::size_t{2}, std::size_t{23}}) {
             ScriptConsole vertical{};
             for (std::size_t column = 0; column < 3; ++column)
@@ -341,6 +368,18 @@ int main() {
         if (rewind_terminal.run(large_path) != 0 || !rewind_navigation.previous_seen ||
             rewind_navigation.cursor != rewind_navigation.inputs.size())
             throw std::runtime_error("Read-only Page Up did not rebuild exhausted history cooperatively.");
+        ScriptConsole repeated_rewind{};
+        repeated_rewind.wait_for_end = true;
+        repeated_rewind.wait_for_previous = true;
+        repeated_rewind.inputs = rewind_navigation.inputs;
+        // Cross history exhaustion within the last repeated Up event. Its
+        // reconstruction replenishes history, so the following Page Up need
+        // not reconstruct again; observe the Up completion instead.
+        repeated_rewind.inputs[repeated_rewind.inputs.size() - 3].repeats = 900;
+        swiftedit::Terminal repeated_rewind_terminal(repeated_rewind);
+        if (repeated_rewind_terminal.run(large_path) != 0 || !repeated_rewind.caret_completed ||
+            repeated_rewind.cursor != repeated_rewind.inputs.size())
+            throw std::runtime_error("Repeated Up cancelled its own pending reconstruction.");
         ScriptConsole paged_find{};
         paged_find.wait_for_search = true;
         paged_find.press('W', 0, true);

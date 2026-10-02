@@ -76,6 +76,7 @@ public:
             open(path);
         console_.start();
         bool redraw = true;
+        std::optional<TerminalInput> repeated_navigation{};
         while (!done_) {
             if (redraw) {
                 try {
@@ -267,7 +268,22 @@ public:
                 redraw = true;
                 continue;
             }
-            const TerminalInput input = console_.read();
+            TerminalInput input{};
+            if (repeated_navigation && !ending_ && !line_boundary_) {
+                if (console_.cancel_requested()) {
+                    repeated_navigation.reset();
+                    input.key = terminal_key::escape;
+                    input.pressed = true;
+                } else {
+                    input = std::move(*repeated_navigation);
+                    repeated_navigation.reset();
+                }
+            } else {
+                // A real queued event may cancel active reconstruction. It also
+                // supersedes the unexecuted repetitions of that navigation.
+                repeated_navigation.reset();
+                input = console_.read();
+            }
             if (!input.error.empty()) {
                 high_surrogate_ = 0;
                 status_ = input.error;
@@ -291,7 +307,12 @@ public:
             redraw = true;
             const TerminalInput &event = input;
             const std::size_t repeats = std::min<std::size_t>(event.repeats, 1000);
-            for (std::size_t i = 0; i < repeats && !done_; ++i) {
+            const bool navigation = buffer_.session().read_only() && prompt_ == Prompt::none &&
+                event.key >= terminal_key::left && event.key <= terminal_key::page_down;
+            const std::size_t slice = navigation ? std::min<std::size_t>(repeats, 16) : repeats;
+            std::size_t executed = 0;
+            for (; executed < slice && !done_;) {
+                ++executed;
                 try {
                     key(event);
                 } catch (const swiftedit::TerminalWrapInterrupt &cancelled) {
@@ -303,6 +324,12 @@ public:
                 } catch (const std::exception &failure) {
                     status_ = failure.what();
                 }
+                if (navigation && (ending_ || line_boundary_))
+                    break;
+            }
+            if (navigation && executed < repeats && !done_) {
+                repeated_navigation = event;
+                (*repeated_navigation).repeats = repeats - executed;
             }
         }
         return 0;
