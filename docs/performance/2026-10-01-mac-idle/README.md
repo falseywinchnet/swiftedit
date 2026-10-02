@@ -237,3 +237,15 @@ The focus association persists. It does not establish which rendering or native
 presentation stage consumes the remaining CPU, and clearing model text focus
 is not an operating-system application switch. The owner confirmed the report
 is for a blank document; the focused-idle defect remains open.
+
+## SDK723cd7f consumer baseline
+
+Source7415870 with SDK723cd7f completed the Mac idle probe in native run
+36946592395. Focused CPU was1.02075% (.051213 CPU seconds /5.01719 elapsed),
+and cleared text focus was.0162498% (.000819 /5.04006). Parsed all18 window rows:
+all8 hidden dialogs remained occluded with zero paints/deadlines/scheduler wakes.
+Main focused counts were9/9/9, painted area342, total presentation wall1,881,374ns;
+cleared focus had zero activity. Raw rows: baseline-7415870-controlled.txt.
+This individual CI observation is not a statistical improvement claim or a fix
+for the owner's approximately7% focused blank-editor report. The new SDK includes
+picker and diagnostic changes; the focused-idle defect remains open.
