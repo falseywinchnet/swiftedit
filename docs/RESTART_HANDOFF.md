@@ -645,3 +645,21 @@ configuration: GUI_FORMS_BUILD_TEXT_MASKS requires GUI_FORMS_ENABLE_HARFBUZZ_TEX
 Ordinary Windows picker model/view suites passed with no SKIP. Exact evidence
 was sent to the provider owner; SDK032 remains pinned while corrected complete
 archives and native validation are pending.
+
+Markdown retained storage correction: parsed spans now account for copied URL
+bytes as well as text in the existing 32 MiB budget. Layout also bounds retained
+text plus URL bytes to 32 MiB; splitting a long linked span into words cannot
+multiply URL storage without limit. Checks precede retained copies, arithmetic
+uses subtraction from the established bound, and replacement layout remains
+local until successful publication. Tests cover styled-span URL duplication,
+per-word URL duplication and recovery with later valid source. All 20 local
+suites passed3.57s; after ordering paragraph-prefix accounting before budget
+calculation, focused markdown/views rerun passed0.16s. Spelling101files clean.
+These are separate parser/layout string-payload bounds, not a total process-RSS
+limit or a claim that Markdown parsing/layout is fully interruptible.
+
+Markdown hover fca91ed native36891773024 all3 and core36891773211 passed.
+Provider4d24f43 native run is terminal failure (Mac/Linux passed). Coordinator
+pushed CI-only723cd7f9f8016d854f667f41e0c5dbcbe4cc0adf; native36945290227 is live.
+The corrected development step explicitly enables pinned FT/HB after ordinary
+SDK export. SDK032 remains pinned until complete verified replacement evidence.

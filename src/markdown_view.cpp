@@ -83,6 +83,8 @@ void MarkdownView::arrange(gf::Rect bounds) {
 void MarkdownView::layout(gf::Painter &painter, double width) {
     std::vector<Run> next{};
     next.reserve(std::min<std::size_t>(source_.size() / 4 + 1, 250000));
+    std::size_t retained_bytes = 0;
+    constexpr std::size_t storage_limit = 32 * 1024 * 1024;
     double y = page_margin, maximum_x = width - 18, maximum_height = 32;
     for (const swiftedit::MarkdownBlock &block : blocks_) {
         if (next.size() >= 250000 || block.columns > 250000 - next.size())
@@ -139,6 +141,11 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
                 }
                 const std::string word =
                     safe[offset] == '\t' ? "    " : safe.substr(offset, end - offset);
+                if (word.size() > storage_limit - retained_bytes)
+                    throw std::runtime_error("Markdown layout exceeds display storage budget.");
+                const std::size_t text_total = retained_bytes + word.size();
+                if (span.url.size() > storage_limit - text_total)
+                    throw std::runtime_error("Markdown layout exceeds display storage budget.");
                 const gf::Size measured = painter.measure_text_utf8(word, font);
                 const double height = std::max(20.0, measured.height + 4);
                 if (block.kind != swiftedit::MarkdownKind::code && x[column] > left &&
@@ -156,6 +163,7 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
                 run.strike = span.strike;
                 run.code = span.code || block.kind == swiftedit::MarkdownKind::code;
                 next.push_back(std::move(run));
+                retained_bytes = text_total + span.url.size();
                 if (next.size() > 250000)
                     throw std::runtime_error("Markdown layout exceeds 250000 runs.");
                 x[column] += measured.width;

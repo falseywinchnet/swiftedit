@@ -38,6 +38,20 @@ int main() {
         const std::vector<swiftedit::MarkdownBlock> image =
             swiftedit::parse_markdown("![alt](file:///private/image.svg)");
         check(!image.empty(), "Image is represented by inert alternate text");
+        std::string repeated_links = "[";
+        for (std::size_t index = 0; index < 600; ++index)
+            repeated_links += "*label* ";
+        repeated_links += "](https://example.com/";
+        repeated_links.append(60000, 'a');
+        repeated_links += ')';
+        bool refused_link_storage = false;
+        try {
+            static_cast<void>(swiftedit::parse_markdown(repeated_links));
+        } catch (const std::runtime_error &failure) {
+            refused_link_storage =
+                std::string_view(failure.what()) == "Markdown exceeds display storage budget.";
+        }
+        check(refused_link_storage, "URL copies across styled spans count against retained storage");
         std::cout << "Markdown inert presentation tests passed.\n";
         return 0;
     } catch (const std::exception &failure) {

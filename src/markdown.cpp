@@ -92,10 +92,15 @@ struct MarkdownParser {
     void append(std::string_view text) {
         if (text.empty())
             return;
-        if (span_count >= 250000 || text.size() > 32 * 1024 * 1024 - output_bytes)
-            throw std::runtime_error("Markdown exceeds display storage budget.");
         if (!current)
             begin(MarkdownKind::paragraph);
+        constexpr std::size_t storage_limit = 32 * 1024 * 1024;
+        const std::size_t url_bytes = links.empty() ? 0 : links.back().size();
+        if (span_count >= 250000 || text.size() > storage_limit - output_bytes)
+            throw std::runtime_error("Markdown exceeds display storage budget.");
+        const std::size_t text_total = output_bytes + text.size();
+        if (url_bytes > storage_limit - text_total)
+            throw std::runtime_error("Markdown exceeds display storage budget.");
         MarkdownSpan span{};
         span.text = text;
         span.bold = strong != 0;
@@ -107,7 +112,7 @@ struct MarkdownParser {
             span.url = links.back();
         blocks[*current].spans.push_back(std::move(span));
         ++span_count;
-        output_bytes += text.size();
+        output_bytes = text_total + url_bytes;
     }
     void enter_block(MD_BLOCKTYPE type, void *detail) {
         switch (type) {

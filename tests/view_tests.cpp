@@ -344,6 +344,23 @@ int main() {
         check(painter.drawn.find("Recovery") != std::string::npos &&
                   painter.drawn.find("Injected measurement failure") == std::string::npos,
               "Successful layout retry clears the previous error");
+        std::string word_links = "[";
+        for (std::size_t index = 0; index < 300; ++index)
+            word_links += "word ";
+        word_links += "](https://example.com/";
+        word_links.append(60000, 'a');
+        word_links += ')';
+        (*view).set_source(word_links);
+        painter.drawn.clear();
+        (*view).on_paint(painter, {0, 0, 600, 480});
+        check(painter.drawn.find("Markdown layout exceeds display storage budget.") !=
+                  std::string::npos,
+              "Per-word URL copies are bounded during layout");
+        (*view).set_source("Recovered after link storage limit");
+        painter.drawn.clear();
+        (*view).on_paint(painter, {0, 0, 600, 480});
+        check(painter.drawn.find("Recovered") != std::string::npos,
+              "Layout storage refusal permits a later valid source");
         std::cout << "Native Markdown paint/cache tests passed.\n";
         return 0;
     } catch (const std::exception &failure) {
