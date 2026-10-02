@@ -519,3 +519,11 @@ project version rather than the stale hardcoded 0.2 label. Build and editor/view
 tests passed (2.05 seconds); house-style audit passed (124 files). Native validation
 of this checkpoint is pending. The preceding Markdown native run 36970454027 has
 passed Linux; Windows/macOS were still running at this inspection.
+
+Native run 36970454027 for Markdown navigation commit 4112c6d subsequently passed
+all three platforms. The earlier ea3a73c navigation receipts and all 5,670 raw
+samples are preserved under performance/2026-10-02-cross-platform-navigation.
+Observed p99 repeated-movement slices were below 8.6 ms on Mac, 7.2 ms on Windows
+and 3.5 ms on Linux. Mac worst case was 41.014 ms; no outlier was removed and no
+hard deadline is inferred. This headless-loop evidence excludes native input and
+physical presentation and does not close the final GUI responsiveness audit.
