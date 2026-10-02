@@ -53,7 +53,7 @@ def main() -> None:
         '- **macOS:** Apple silicon, macOS 26. Ad-hoc signed; not notarized.\n'
         '- **Windows:** x64 portable ZIP, with runtime DLLs and fonts. Unsigned.\n'
         '- **Linux:** x64 portable tarball, Ubuntu 24.04-compatible runtime and X11 session. Run `SwiftEdit`.\n\n'
-        'Each archive includes the GUI and terminal editor; Windows/Linux also include the CLI. '
+        'Each archive includes the GUI, terminal editor and command-session CLI. '
         'SHA-256 sidecars and source/SDK manifests accompany the downloads.\n\n'
         'The expanded feature set is still in development. The GUI currently uses its older '
         '1 MiB UTF-8 / 4096-byte line path; large-file operations are available in the terminal. '

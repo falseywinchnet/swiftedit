@@ -163,7 +163,10 @@ def main() -> None:
     shutil.copytree(build / 'SwiftEdit.app', app, symlinks=True)
     terminal: Path = app / 'Contents/MacOS/SwiftEdit-terminal'
     shutil.copy2(build / 'swiftedit-terminal', terminal)
+    cli: Path = app / 'Contents/MacOS/swiftedit-cli'
+    shutil.copy2(build / 'swiftedit-cli', cli)
     resources: Path = app / 'Contents/Resources'
+    shutil.copy2('docs/COMMAND_PROTOCOL.md', resources / 'COMMAND_PROTOCOL.md')
     notices: Path = resources / 'licenses'
     shutil.copytree(sdk / 'gui-forms-sdk/share/licenses', notices, dirs_exist_ok=True)
     shutil.copytree(sdk / 'picker-sdk/share/licenses', notices, dirs_exist_ok=True)
@@ -171,12 +174,13 @@ def main() -> None:
     shutil.copy2('third_party/unicode/LICENSE.txt', notices / 'Unicode.txt')
     fixup: Path = stage / 'fixup.cmake'
     fixup.write_text('include(BundleUtilities)\nfixup_bundle("' + app.as_posix() +
-                     '" "' + terminal.as_posix() + '" "' +
+                     '" "' + terminal.as_posix() + ';' + cli.as_posix() + '" "' +
                      (sdk / 'gui-forms-sdk/lib').as_posix() + '")\n', encoding='utf-8')
     run(['cmake', '-P', str(fixup)])
     executable: Path = app / 'Contents/MacOS/SwiftEdit'
     verify_load_paths(executable, executable, app)
     verify_load_paths(terminal, terminal, app)
+    verify_load_paths(cli, cli, app)
     frameworks: Path = app / 'Contents/Frameworks'
     library: Path
     for library in frameworks.iterdir():
@@ -184,6 +188,7 @@ def main() -> None:
             verify_load_paths(library, executable, app)
             run(['codesign', '--force', '--sign', '-', str(library)])
     run(['codesign', '--force', '--sign', '-', str(terminal)])
+    run(['codesign', '--force', '--sign', '-', str(cli)])
     run(['codesign', '--force', '--deep', '--sign', '-', str(app)])
     run(['codesign', '--verify', '--deep', '--strict', str(app)])
     idle_cpu: dict[str, object] = verify_startup(executable, stage)
@@ -193,6 +198,11 @@ def main() -> None:
         terminal_environment.pop(variable, None)
     subprocess.run([sys.executable, '-B', 'tests/terminal_posix_smoke.py',
                     '--executable', str(terminal)], env=terminal_environment, check=True, timeout=45)
+    response: subprocess.CompletedProcess[str] = subprocess.run(
+        [str(cli)], input='info\nquit\n', cwd=stage, env=terminal_environment, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True, timeout=15)
+    if 'ready\tSwiftEdit\t1' not in response.stdout or 'ok\tquit' not in response.stdout:
+        raise RuntimeError('Packaged CLI smoke failed: ' + response.stdout)
     manifest: dict[str, object] = {
         'product': 'SwiftEdit', 'source_revision': revision,
         'platform': platform.platform(), 'architecture': platform.machine(),
@@ -202,6 +212,8 @@ def main() -> None:
         'sdk': json.loads((sdk / 'manifest.json').read_text(encoding='utf-8')),
         'executable_sha256': sha256(executable),
         'terminal_sha256': sha256(terminal),
+        'cli_sha256': sha256(cli),
+        'cli_validation': 'packaged command session passed info/quit smoke without SDK library overrides',
         'terminal_validation': 'packaged executable passed owned PTY paste/save and mode restoration smoke'}
     (output / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
     (output / 'README.txt').write_text(
@@ -212,6 +224,9 @@ def main() -> None:
         'Interactive terminal: run ./SwiftEdit.app/Contents/MacOS/SwiftEdit-terminal [file] '
         'from Terminal. Use --help for shortcuts. The terminal clipboard is private; '
         'ordinary terminal-emulator paste is supported through bracketed paste.\n\n'
+        'Command session: run ./SwiftEdit.app/Contents/MacOS/swiftedit-cli from Terminal '
+        'or a client process. Protocol documentation is in '
+        'SwiftEdit.app/Contents/Resources/COMMAND_PROTOCOL.md.\n\n'
         'This is an early dogfood build. The expanded feature set is still in development. '
         'The GUI currently uses its older editor path, limited to 1 MiB of UTF-8 text '
         'and 4096 UTF-8 bytes per logical line; '

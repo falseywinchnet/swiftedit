@@ -527,3 +527,12 @@ Observed p99 repeated-movement slices were below 8.6 ms on Mac, 7.2 ms on Window
 and 3.5 ms on Linux. Mac worst case was 41.014 ms; no outlier was removed and no
 hard deadline is inferred. This headless-loop evidence excludes native input and
 physical presentation and does not close the final GUI responsiveness audit.
+
+Mac packaging parity: the v0.3.1 candidate bundles swiftedit-cli alongside the
+GUI and terminal, includes COMMAND_PROTOCOL.md in application resources, resolves
+its runtime dependencies, signs it, and requires packaged info/quit smoke success
+without SDK library overrides. The manifest records its executable hash and
+validation scope. v0.3.0 remains immutable and has no bundled Mac CLI. Packaging
+tool syntax checks passed locally; actual Mach-O fixup/signing and packaged launch
+require the v0.3.1 native tag build. This checkpoint also includes the Markdown/CSV
+navigation improvements and project-version About text.

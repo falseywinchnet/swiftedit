@@ -16,7 +16,9 @@ platform. These are public downloads; GitHub sign-in is not required.
 
 Mac builds are ad-hoc signed and not notarized; Windows builds are unsigned.
 Each release includes SHA-256 checksums and source/SDK manifests. The terminal
-editor is included on all three platforms; Windows and Linux also include the CLI.
+editor is included on all three platforms. Builds after v0.3.0 also include the
+command-session CLI on Mac at `SwiftEdit.app/Contents/MacOS/swiftedit-cli`;
+v0.3.0 includes the CLI on Windows and Linux only.
 
 Native CI builds and tests Windows x64, macOS ARM64 and Linux x64 on every push.
 It consumes the matching installed SDK archives pinned in
