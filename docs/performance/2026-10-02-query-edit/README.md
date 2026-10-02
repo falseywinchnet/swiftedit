@@ -44,3 +44,28 @@ cmake --build .build/swiftedit-sdk-723cd7f --target swiftedit-query-edit-bench -
 
 The executable requires the same compiler and SDK runtime DLL search paths as
 the other SwiftEdit headless test executables.
+
+## Paint preparation follow-through
+
+The accompanying `--paint` mode includes QueryField.on_paint immediately after
+each edit and undo, using public fallback text metrics and a counting painter.
+It submits visible text but performs no native rasterization or presentation.
+The same fixtures, 20 warmup pairs and 200 recorded pairs apply. `paint-before.csv`
+and `paint-after.csv` each preserve 1200 samples. The baseline uses the query
+implementation from 166b912; the after run adds per-rebuild label-width reuse and
+avoids constructing unused literal display text for wildcard bullets.
+
+| Fixture | Operation | Before p99 ms | After p99 ms | Before maximum ms | After maximum ms |
+|---|---|---:|---:|---:|---:|
+| ASCII | Insert + paint | 4.2066 | 1.3909 | 4.6180 | 1.4885 |
+| ASCII | Undo + paint | 3.9868 | 0.8767 | 4.7633 | 0.9907 |
+| Unicode | Insert + paint | 1.4664 | 0.7131 | 1.5338 | 0.7891 |
+| Unicode | Undo + paint | 1.1522 | 0.4801 | 1.2268 | 0.5500 |
+| Combining | Insert + paint | 1.2473 | 0.8212 | 1.2740 | 0.9137 |
+| Combining | Undo + paint | 1.1348 | 0.4950 | 1.1509 | 0.6745 |
+
+These sequential single-machine runs have uncontrolled scheduling/cache state;
+they do not establish a guaranteed speedup. Tests independently verify one
+wildcard-label measurement per rebuild, viewport-only text submissions, and
+reuse on caret scrolling. Baseline metrics are still resolved each paint.
+Use `swiftedit-query-edit-bench samples.csv --paint` to reproduce this mode.

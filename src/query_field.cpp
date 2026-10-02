@@ -1,6 +1,7 @@
 #include "query_field.hpp"
 #include "display.hpp"
 #include <algorithm>
+#include <map>
 
 namespace notepad {
 QueryField::QueryField(gf::StableId id) : Control(std::move(id)) {
@@ -176,11 +177,25 @@ void QueryField::on_paint(gf::Painter &painter, gf::Rect) {
         std::vector<std::string> labels{};
         next.reserve(slots_.size() + 1);
         labels.reserve(slots_.size());
+        // Metrics belong to this painter/font and this rebuild only. Repeated
+        // bullets or literals share measurement without retaining stale metrics.
+        std::map<std::string, double> widths{};
         for (const swiftedit::SearchSlot &slot : slots_) {
-            const swiftedit::DisplayPage display(slot.literal);
-            std::string label = slot.wildcard ? "\xe2\x80\xa2" : display.text();
-            const gf::Size size = painter.measure_text_utf8(label, font);
-            next.push_back(next.back() + std::max(12.0, size.width + 4));
+            std::string label = "\xe2\x80\xa2";
+            if (!slot.wildcard) {
+                const swiftedit::DisplayPage display(slot.literal);
+                label = display.text();
+            }
+            const std::map<std::string, double>::const_iterator found = widths.find(label);
+            double width = 0;
+            if (found != widths.end())
+                width = (*found).second;
+            else {
+                const gf::Size size = painter.measure_text_utf8(label, font);
+                width = std::max(12.0, size.width + 4);
+                widths.emplace(label, width);
+            }
+            next.push_back(next.back() + width);
             labels.push_back(std::move(label));
         }
         edges_ = std::move(next);

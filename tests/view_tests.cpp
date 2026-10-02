@@ -363,6 +363,19 @@ int main() {
         check(inserted.handled && (*query).text() == "a\xc3\xa9?c",
               "Query field routes standard Unicode text input");
         (*query).on_focus_changed(false);
+        (*query).set_text(std::string(256, 'a'));
+        for (std::size_t slot = 0; slot < 256; ++slot)
+            (*query).toggle_slot(slot);
+        query_painter.measurements = 0;
+        query_painter.texts = 0;
+        (*query).on_paint(query_painter, {0, 0, 300, 32});
+        check(query_painter.measurements == 2, "Query measures baseline and one repeated wildcard label");
+        check(query_painter.texts < 30, "Query submits only visible cells");
+        const std::size_t measured_query_labels = query_painter.measurements;
+        (*query).select(gf::Utf8Offset(256), gf::Utf8Offset(256));
+        (*query).on_paint(query_painter, {0, 0, 300, 32});
+        check(query_painter.measurements == measured_query_labels + 1,
+              "Query caret scrolling reuses prepared label geometry");
         const std::shared_ptr<notepad::MarkdownView> view =
             gf::make_control<notepad::MarkdownView>(gf::StableId("test.markdown"));
         gf::Window window(view, {640, 480});

@@ -592,3 +592,12 @@ and worst undo 1.7033 ms; details and all percentiles are preserved under
 performance/2026-10-02-query-edit. Timing includes the query operation and history,
 but excludes painting, native input and physical presentation. No hard latency
 guarantee or final GUI performance signoff follows from this component run.
+
+Query paint follow-through removes repeated measurement of identical displayed
+labels within a rebuild and unused literal display preparation for flagged slots.
+The metrics cache is local to the current painter/font/rebuild. Focused editor
+and view checks passed; repeated bullets measure once, visible submissions stay
+bounded by the viewport, and caret scrolling reuses prepared geometry. Before/
+after paint-preparation samples are recorded beside the query-edit measurements.
+Native CI run 36973356334 for 166b912 passed all three platforms; the paint change
+still requires its own native build validation.
