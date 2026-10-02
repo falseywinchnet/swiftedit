@@ -140,8 +140,9 @@ task. The released v0.2.8 scan reads at most 64 KiB per step, checks document id
 and size, and retains at most 32768 preceding row cursors plus the final viewport.
 Any key cancels between steps, and resize cancels the old-width scan. Incomplete
 or stale work cannot publish a destination. Source bytes are never modified.
-Up/Page Up work after completion within the retained history; unbounded backward
-navigation, horizontal read-only caret motion and large-file search remain work.
+Up/Page Up work after completion within the retained history in v0.2.8; the
+reconstruction below removes that history limit. Horizontal read-only caret
+motion and large-file search remain work.
 
 The scan shares page geometry but skips off-screen paint strings and processes
 more rows per source chunk than the visible viewport. The initial control-heavy
@@ -171,5 +172,28 @@ ABBAABBA order, four trials per budget. Both variants must produce the same
 final cursor and preserve the document. Raw wall and process CPU samples are
 retained separately. Local measurements are recorded in
 [the paired scan evidence](performance/2026-10-01-terminal-end/paired-8k.md).
-Native platform validation for this change is pending. This active terminal
+Source 40197b7 passed native run 36958176696 and portable-core run 36958176790
+on Windows, macOS and Linux. This active terminal
 work does not resolve the owner's reported blank GUI idle CPU usage.
+
+
+## Rebuilding expired backward history
+
+Up and Page Up now prepare a cooperative reconstruction when the preceding
+rows are no longer in bounded history. The scan starts at the document's first
+row and keeps only the preceding 32768 row cursors plus the requested rows.
+It stops after reaching the original viewport, publishes the earlier row/page
+only on completion, and replenishes history. Shift preserves the selection
+anchor. Any key cancels between steps; resize cancels the old-width task.
+There is no fixed distance beyond which the user must return to Ctrl+Home.
+Reconstruction is linear in the source distance and may take time on very large
+files; an index for faster repeated distant navigation remains future work.
+
+Regression coverage exhausts all 32768 retained rows, rebuilds exactly one
+page or row, verifies inert-label fragments sharing a source byte, and checks
+cancellation leaves the viewport unchanged. The shared input-loop test opens
+an actual 16 MiB read-only file, reaches EOF, exhausts the row history and
+finishes Shift+Page Up cooperatively. Native validation is pending.
+
+Local reconstruction validation: all 22 tests passed in 8.14 s; source spelling
+audit passed all 113 files. Native reconstruction validation is pending.

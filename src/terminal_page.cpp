@@ -143,6 +143,18 @@ TerminalPageEnd::TerminalPageEnd(const Session &session, const std::size_t width
     if (!source_budget_ || source_budget_ > maximum_page)
         throw std::runtime_error("End scan source budget must be 1..65536 bytes.");
 }
+TerminalPageEnd::TerminalPageEnd(const Session &session, const std::size_t width,
+                               const std::size_t rows, const TerminalPageCursor before)
+    : TerminalPageEnd(session, width, rows) {
+    if (before.offset > size_)
+        throw std::runtime_error("Previous page cursor exceeds source size.");
+    before_ = before;
+}
+static bool cursor_precedes(const TerminalPageCursor left, const TerminalPageCursor right) {
+    const bool result = left.offset < right.offset ||
+                        (left.offset == right.offset && left.label_cell < right.label_cell);
+    return result;
+}
 void TerminalPageEnd::validate(const Session &session) const {
     const DocumentStamp current = session.stamp();
     if (current.identity != stamp_.identity || current.revision != stamp_.revision ||
@@ -167,6 +179,8 @@ bool TerminalPageEnd::step(const Session &session) {
     if (frame.more && frame.next == cursor_)
         throw std::runtime_error("End navigation made no source progress.");
     for (const TerminalPageCursor start : frame.row_starts) {
+        if (before_ && !cursor_precedes(start, *before_))
+            break;
         if (start.offset == size_ && size_ != 0)
             continue;
         if (!tail_.empty() && tail_.back() == start)
@@ -177,7 +191,7 @@ bool TerminalPageEnd::step(const Session &session) {
     }
     cursor_ = frame.next;
     column_ = built.next_column;
-    complete_ = !frame.more;
+    complete_ = !frame.more || (before_ && !cursor_precedes(cursor_, *before_));
     return complete_;
 }
 TerminalPageCursor TerminalPageEnd::result(const Session &session) const {
@@ -186,6 +200,29 @@ TerminalPageCursor TerminalPageEnd::result(const Session &session) const {
         throw std::runtime_error("End navigation is not complete.");
     const std::size_t first = tail_.size() > rows_ ? tail_.size() - rows_ : 0;
     const TerminalPageCursor result = tail_.empty() ? TerminalPageCursor{} : tail_[first];
+    return result;
+}
+std::unique_ptr<TerminalPageEnd> TerminalPager::prepare_previous(const Session &session,
+                                                               const bool page) const {
+    std::unique_ptr<TerminalPageEnd> result{};
+    const DocumentStamp current = session.stamp();
+    if (current.identity != stamp_.identity || current.revision != stamp_.revision)
+        throw std::runtime_error("Previous navigation belongs to an older document.");
+    if (!width_ || !rows_ || (!cursor_.offset && !cursor_.label_cell))
+        return result;
+    const std::size_t requested = page ? rows_ : 1;
+    bool retained = history_.size() >= requested;
+    if (page && !page_history_.empty()) {
+        retained = false;
+        for (const TerminalPageCursor entry : history_) {
+            if (entry == page_history_.back()) {
+                retained = true;
+                break;
+            }
+        }
+    }
+    if (!retained)
+        result = std::make_unique<TerminalPageEnd>(session, width_, requested, cursor_);
     return result;
 }
 void TerminalPager::finish_end(const Session &session, const TerminalPageEnd &task) {

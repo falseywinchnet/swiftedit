@@ -8,7 +8,8 @@ public:
     std::vector<swiftedit::TerminalInput> inputs{};
     mutable std::size_t cursor{}, writes{};
     mutable bool end_seen{}, copy_seen{};
-    bool wait_for_end{}, wait_for_copy{};
+    bool wait_for_end{}, wait_for_copy{}, wait_for_previous{};
+    mutable bool previous_pending{}, previous_seen{};
     bool started{};
     void start() override { started = true; }
     swiftedit::TerminalSize size() const override { return {80, 24}; }
@@ -16,6 +17,12 @@ public:
         if (text.empty() || !started)
             throw std::runtime_error("Unexpected empty or premature terminal frame.");
         ++writes;
+        if (text.find("Finding earlier page...") != std::string_view::npos)
+            previous_pending = true;
+        if (text.find("Earlier read-only page") != std::string_view::npos) {
+            previous_seen = true;
+            previous_pending = false;
+        }
         if (text.find("End of read-only document") != std::string_view::npos)
             end_seen = true;
         if (text.find("Copied 16777216 bytes") != std::string_view::npos)
@@ -23,7 +30,7 @@ public:
     }
     bool input_ready() const override {
         const bool ready = cursor < inputs.size() && (!wait_for_end || end_seen) &&
-                           (!wait_for_copy || copy_seen);
+                           (!wait_for_copy || copy_seen) && (!wait_for_previous || !previous_pending);
         return ready;
     }
     swiftedit::TerminalInput read() const override {
@@ -178,6 +185,22 @@ int main() {
         if (end_terminal.run(large_path) != 0 || !end_navigation.end_seen || !end_navigation.copy_seen ||
             end_navigation.cursor != end_navigation.inputs.size())
             throw std::runtime_error("Read-only Ctrl+End failed to finish cooperatively.");
+        ScriptConsole rewind_navigation{};
+        rewind_navigation.wait_for_end = true;
+        rewind_navigation.wait_for_previous = true;
+        rewind_navigation.press(swiftedit::terminal_key::end, 0, true);
+        for (std::size_t batch = 0; batch < 32; ++batch) {
+            rewind_navigation.press(swiftedit::terminal_key::up);
+            rewind_navigation.inputs.back().repeats = 1000;
+        }
+        rewind_navigation.press(swiftedit::terminal_key::up);
+        rewind_navigation.inputs.back().repeats = 768;
+        rewind_navigation.press(swiftedit::terminal_key::page_up, 0, false, true);
+        rewind_navigation.press('X', 0, true);
+        swiftedit::Terminal rewind_terminal(rewind_navigation);
+        if (rewind_terminal.run(large_path) != 0 || !rewind_navigation.previous_seen ||
+            rewind_navigation.cursor != rewind_navigation.inputs.size())
+            throw std::runtime_error("Read-only Page Up did not rebuild exhausted history cooperatively.");
         ScriptConsole cancelled_end{};
         cancelled_end.press(swiftedit::terminal_key::end, 0, true);
         cancelled_end.press(swiftedit::terminal_key::escape);

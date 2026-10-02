@@ -321,6 +321,49 @@ int main() {
             check(scan.result(streamed) == expected_cursor,
                   "Adaptive context preserves long graphemes, CRLF and control-label geometry");
         }
+        swiftedit::Session rewind_source{};
+        rewind_source.replace_ranges({{0, 0}}, std::string(100000, 'x'), rewind_source.stamp());
+        const swiftedit::DocumentStamp rewind_stamp = rewind_source.stamp();
+        swiftedit::TerminalPager rewind_pager{};
+        rewind_pager.reset(rewind_source);
+        swiftedit::TerminalPageEnd rewind_end(rewind_source, 1, 3);
+        while (!rewind_end.step(rewind_source)) {}
+        rewind_pager.finish_end(rewind_source, rewind_end);
+        for (std::size_t row = 0; row < 32768; ++row)
+            rewind_pager.up();
+        static_cast<void>(rewind_pager.frame(rewind_source, 1, 3));
+        const std::uint64_t before_rewind = rewind_pager.source_offset();
+        check(before_rewind > 3, "Rewind fixture exhausts bounded history away from source start");
+        std::unique_ptr<swiftedit::TerminalPageEnd> rewind =
+            rewind_pager.prepare_previous(rewind_source, true);
+        check(bool(rewind), "Page Up reconstructs rows after retained history expires");
+        check(!(*rewind).step(rewind_source) && rewind_pager.source_offset() == before_rewind,
+              "Pending reconstruction preserves the visible page");
+        rewind.reset();
+        check(rewind_pager.source_offset() == before_rewind,
+              "Cancelling reconstruction does not publish intermediate rows");
+        rewind = rewind_pager.prepare_previous(rewind_source, true);
+        while (!(*rewind).step(rewind_source)) {}
+        rewind_pager.finish_end(rewind_source, *rewind);
+        check(rewind_pager.source_offset() == before_rewind - 3 &&
+                  rewind_source.stamp().revision == rewind_stamp.revision &&
+                  rewind_source.text() == std::string(100000, 'x'),
+              "Reconstruction returns exactly one earlier viewport without changing source");
+        static_cast<void>(rewind_pager.frame(rewind_source, 1, 3));
+        check(!rewind_pager.prepare_previous(rewind_source, false),
+              "Reconstruction replenishes bounded preceding history for immediate Up");
+        swiftedit::TerminalPageEnd one_row(rewind_source, 1, 1,
+                                          swiftedit::TerminalPageCursor{before_rewind, 0, true});
+        while (!one_row.step(rewind_source)) {}
+        check(one_row.result(rewind_source).offset == before_rewind - 1,
+              "Row reconstruction returns the immediately preceding visual row");
+        swiftedit::Session label_rewind{};
+        label_rewind.replace_ranges({{0, 0}}, "\x1bZ", label_rewind.stamp());
+        swiftedit::TerminalPageEnd partial_label(label_rewind, 4, 1,
+                                                swiftedit::TerminalPageCursor{0, 4, true});
+        while (!partial_label.step(label_rewind)) {}
+        check(partial_label.result(label_rewind) == swiftedit::TerminalPageCursor{},
+              "Reconstruction distinguishes label fragments sharing a source byte");
         const std::filesystem::path large_path = dir / "large.txt";
         {
             std::ofstream file(large_path, std::ios::binary);

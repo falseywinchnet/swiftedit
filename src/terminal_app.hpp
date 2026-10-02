@@ -97,10 +97,10 @@ public:
                 if (ending_) {
                     if ((*ending_).step(buffer_.session())) {
                         pager_.finish_end(buffer_.session(), *ending_);
-                        page_caret_ = buffer_.session().size();
+                        page_caret_ = end_previous_ ? pager_.source_offset() : buffer_.session().size();
                         page_anchor_ = end_extend_ ? end_anchor_ : page_caret_;
                         ending_.reset();
-                        status_ = "End of read-only document";
+                        status_ = end_previous_ ? "Earlier read-only page" : "End of read-only document";
                         redraw = true;
                         continue;
                     }
@@ -190,7 +190,7 @@ public:
             if (input.resized) {
                 if (ending_) {
                     ending_.reset();
-                    status_ = "End navigation cancelled because the terminal resized";
+                    status_ = "Navigation cancelled because the terminal resized";
                 }
                 redraw = true;
                 continue;
@@ -437,7 +437,7 @@ private:
         const std::uint32_t key = event.key;
         if (ending_) {
             ending_.reset();
-            status_ = "End navigation cancelled";
+            status_ = "Read-only navigation cancelled";
             if (key == terminal_key::escape)
                 return;
         }
@@ -577,6 +577,7 @@ private:
         if (buffer_.session().read_only()) {
             if (ctrl && !alt && key == terminal_key::end) {
                 ending_ = std::make_unique<swiftedit::TerminalPageEnd>(buffer_.session(), width_, rows_);
+                end_previous_ = false;
                 end_extend_ = shift;
                 end_anchor_ = page_anchor_;
                 status_ = "Finding final page... Any key cancels";
@@ -601,6 +602,16 @@ private:
             if (key == terminal_key::down || key == terminal_key::up || key == terminal_key::page_down || key == terminal_key::page_up ||
                 (key == terminal_key::home && ctrl)) {
                 const std::uint64_t before = page_caret_;
+                if (key == terminal_key::up || key == terminal_key::page_up) {
+                    ending_ = pager_.prepare_previous(buffer_.session(), key == terminal_key::page_up);
+                    if (ending_) {
+                        end_previous_ = true;
+                        end_extend_ = shift;
+                        end_anchor_ = page_anchor_ == page_caret_ ? before : page_anchor_;
+                        status_ = "Finding earlier page... Any key cancels";
+                        return;
+                    }
+                }
                 if (key == terminal_key::down)
                     pager_.down();
                 else if (key == terminal_key::up)
@@ -767,7 +778,7 @@ private:
     std::unique_ptr<swiftedit::SessionWordCount> counting_{};
     std::unique_ptr<swiftedit::SessionCopy> copying_{};
     std::unique_ptr<swiftedit::TerminalPageEnd> ending_{};
-    bool end_extend_{};
+    bool end_extend_{}, end_previous_{};
     std::uint64_t end_anchor_{};
     std::uint64_t page_anchor_{}, page_caret_{};
     bool replace_query_{};

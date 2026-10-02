@@ -1,6 +1,8 @@
 #pragma once
 #include "session.hpp"
 #include <deque>
+#include <optional>
+#include <memory>
 namespace swiftedit {
 struct TerminalPageCursor {
     std::uint64_t offset{};
@@ -35,6 +37,9 @@ class TerminalPageEnd final {
 public:
     TerminalPageEnd(const Session &, std::size_t width, std::size_t rows,
                     std::size_t source_budget = 8192);
+    // Reconstruct the rows immediately before an existing visual row cursor.
+    TerminalPageEnd(const Session &, std::size_t width, std::size_t rows,
+                    TerminalPageCursor before);
     [[nodiscard]] bool step(const Session &);
     [[nodiscard]] TerminalPageCursor result(const Session &) const;
 private:
@@ -45,6 +50,7 @@ private:
     std::size_t width_{}, rows_{};
     std::size_t source_budget_{}, column_{};
     TerminalPageCursor cursor_{};
+    std::optional<TerminalPageCursor> before_{};
     std::deque<TerminalPageCursor> tail_{};
     bool complete_{};
 };
@@ -57,6 +63,9 @@ public:
     void down();
     void up();
     void first();
+    // Returns work only when retained history cannot satisfy Up/Page Up.
+    // The caller must retain the viewport until successful finish_end publication.
+    [[nodiscard]] std::unique_ptr<TerminalPageEnd> prepare_previous(const Session &, bool page) const;
     void finish_end(const Session &, const TerminalPageEnd &);
     [[nodiscard]] std::uint64_t source_offset() const { return cursor_.offset; }
 
