@@ -1,4 +1,5 @@
 #include "terminal_horizontal.hpp"
+#include "terminal_reveal.hpp"
 #include "terminal_row.hpp"
 #include "platform.hpp"
 #include <fstream>
@@ -227,6 +228,15 @@ void check_large_file(const Fixture &fixture) {
     require(caret_probe.step(session) && caret_probe.result(session).source_caret_column == 8193 &&
                 caret_probe.result(session).runs.size() == 1 && caret_probe.read_offset() == 16384,
             "Actual read-only caret lookup stops at its target without retaining the long prefix");
+    swiftedit::TerminalNoWrapReveal reveal(session, 8193, 0, 12, 2);
+    std::size_t reveal_steps = 0;
+    while (!reveal.step(session)) {
+        ++reveal_steps;
+        require(reveal_steps < 5000, "Read-only reveal phases make bounded progress");
+    }
+    require(reveal.left(session) == 8182 && reveal.caret(session).column == 11 &&
+                reveal.viewport(session).result(session).size() == 2 && !session.dirty(),
+            "Actual read-only reveal preserves source and exposes requested caret");
     session.reset();
     bool refused = false;
     try {
@@ -325,6 +335,74 @@ void check_source_caret(const Fixture &fixture) {
     require(line.step(session) && line.result(session).source_caret_column == 0,
             "Empty logical row retains its source caret");
 }
+void finish_reveal(swiftedit::TerminalNoWrapReveal &task, const swiftedit::Session &session) {
+    std::size_t steps = 0;
+    while (!task.step(session)) {
+        ++steps;
+        require(steps < 10000, "Reveal advances through bounded preparation phases");
+    }
+}
+void check_reveal(const Fixture &fixture) {
+    const std::string source = "first\r\na\t\xe6\xbc\xa2" "e\xcc\x81z\nlast\n";
+    swiftedit::Session session{};
+    session.open(fixture.write("reveal.txt", source));
+    swiftedit::TerminalNoWrapReveal task(session, 15, 0, 4, 3, 0);
+    bool refused = false;
+    try {
+        static_cast<void>(task.viewport(session));
+    } catch (const std::runtime_error &) {
+        refused = true;
+    }
+    require(refused, "Reveal does not expose an incomplete replacement");
+    finish_reveal(task, session);
+    const swiftedit::TerminalPageCaret caret = task.caret(session);
+    require(caret.row == 1 && caret.column == 3 && task.left(session) == 4 && task.top(session) == 0,
+            "Reveal retains old vertical top and scrolls horizontally by display cells");
+    const swiftedit::TerminalHorizontalPage &page = task.viewport(session);
+    require(page.rows(session)[1].offset == 7 && page.result(session)[1].runs[0].source_offset == 9,
+            "Revealed viewport maps the wide glyph to exact source bytes");
+    swiftedit::TerminalNoWrapReveal resized(session, 15, task.left(session), 2, 1, task.top(session));
+    finish_reveal(resized, session);
+    require(resized.top(session) == 7 && resized.left(session) == 6 &&
+                resized.caret(session).row == 0 && resized.caret(session).column == 1,
+            "Narrower shorter viewport reveals the same source caret");
+    {
+        swiftedit::TerminalNoWrapReveal cancelled(session, 0, 0, 4, 3);
+        require(!cancelled.step(session), "Reveal can be cancelled between phases");
+    }
+    require(task.caret(session).row == 1 && session.text() == source,
+            "Cancelled replacement preserves previous viewport and source");
+    for (const std::uint64_t offset : {6U, 10U, 13U}) {
+        swiftedit::TerminalNoWrapReveal invalid(session, offset, 0, 4, 3);
+        refused = false;
+        try {
+            finish_reveal(invalid, session);
+        } catch (const std::runtime_error &) {
+            refused = true;
+        }
+        require(refused, "Reveal refuses split CRLF, UTF-8 and combining boundaries");
+        refused = false;
+        try {
+            static_cast<void>(invalid.step(session));
+        } catch (const std::runtime_error &) {
+            refused = true;
+        }
+        require(refused, "Failed reveal cannot resume private partial work");
+    }
+    swiftedit::TerminalNoWrapReveal eof(session, source.size(), 0, 4, 3);
+    finish_reveal(eof, session);
+    require(eof.caret(session).row == 0 && eof.caret(session).column == 0 &&
+                eof.viewport(session).result(session).size() == 1,
+            "Trailing empty EOF line is a valid revealed caret");
+    session.reset();
+    refused = false;
+    try {
+        static_cast<void>(task.viewport(session));
+    } catch (const std::runtime_error &) {
+        refused = true;
+    }
+    require(refused, "Completed reveal refuses a changed source identity");
+}
 } // namespace
 int main() {
     try {
@@ -339,6 +417,7 @@ int main() {
         check_large_file(fixture);
         check_viewport(fixture);
         check_source_caret(fixture);
+        check_reveal(fixture);
         std::cout << "Bounded horizontal rendering matches source, width and inert-control policies.\n";
         return 0;
     } catch (const std::exception &failure) {

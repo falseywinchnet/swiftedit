@@ -84,6 +84,20 @@ Native run 36987563029 at 2949e5c passed tests and packaging on all three
 platforms. This establishes the composed viewport checkpoint; subsequent
 backward navigation and caret lookup have focused local test evidence only.
 
+`TerminalNoWrapReveal` now owns the replacement operation: find the caret's
+logical line, locate its display column, choose a horizontal origin, and
+prepare the complete viewport. It retains the old top when that still includes
+the caret, otherwise starts at the caret line. Each step advances one bounded
+phase; the small boundary-validation read occupies a separate step. Source
+identity/revision/size remain authoritative through every phase. Completed
+output borrows the task, and a failed task cannot resume or expose partial work.
+The caller can keep its prior completed task alive until replacement succeeds.
+
+Tests cover shrinking width/height with caret preservation, retained vertical
+top, horizontal scrolling across tabs/wide/combining characters, invalid split
+boundaries, empty EOF, cancellation, stale output and an actual 16 MiB read-only
+line. This is the cancellable reveal operation; host commands are not yet wired.
+
 Still required: connect this work to the terminal event loop, preserve caret/selection
 and backward navigation across mode/width changes, implement space wrapping,
 and exercise F2 and cancellation through the terminal host. This component does
