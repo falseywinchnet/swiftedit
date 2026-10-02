@@ -437,6 +437,41 @@ int main() {
             swiftedit::terminal_page_caret(blank_frame, 5, 4, 4);
         check(blank_start && (*blank_start).row == 1 && (*blank_start).column == 0,
               "Blank-line caret survives a preceding wrap plus newline");
+        // Compare every legal caret in all six-byte CR/LF/text arrangements
+        // with the editable text model's established logical-line commands.
+        for (std::size_t code = 0; code < 729; ++code) {
+            std::size_t digits = code;
+            std::string arrangement{};
+            const char alphabet[] = {'x', '\r', '\n'};
+            for (std::size_t index = 0; index < 6; ++index) {
+                arrangement += alphabet[digits % 3];
+                digits /= 3;
+            }
+            const std::filesystem::path arrangement_path = dir / "line-arrangement.txt";
+            {
+                std::ofstream output(arrangement_path, std::ios::binary);
+                output << arrangement;
+            }
+            swiftedit::TerminalBuffer reference{};
+            reference.open(arrangement_path);
+            for (std::size_t caret = 0; caret <= arrangement.size(); ++caret) {
+                if (caret > 0 && caret < arrangement.size() &&
+                    arrangement[caret - 1] == '\r' && arrangement[caret] == '\n')
+                    continue;
+                reference.move_to(caret, reference.session().stamp(), false);
+                reference.move(swiftedit::TerminalMotion::home, false);
+                swiftedit::TerminalLineBoundary home(reference.session(), caret, false);
+                check(home.step(reference.session()) &&
+                      home.result(reference.session()) == reference.selection().caret,
+                      "Paged Home agrees with editable logical-line boundaries");
+                reference.move_to(caret, reference.session().stamp(), false);
+                reference.move(swiftedit::TerminalMotion::end, false);
+                swiftedit::TerminalLineBoundary end(reference.session(), caret, true);
+                check(end.step(reference.session()) &&
+                      end.result(reference.session()) == reference.selection().caret,
+                      "Paged End agrees with editable logical-line boundaries");
+            }
+        }
         swiftedit::Session lines{};
         const std::string long_lines = "a\r\n" + std::string(20000, 'x') + "\rZ\n";
         lines.replace_ranges({{0, 0}}, long_lines, lines.stamp());

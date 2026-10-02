@@ -99,7 +99,10 @@ public:
                 if (line_boundary_) {
                     if ((*line_boundary_).step(buffer_.session())) {
                         const std::uint64_t target = (*line_boundary_).result(buffer_.session());
-                        pager_.reveal(buffer_.session(), target);
+                        const swiftedit::TerminalPageFrame &frame =
+                            pager_.frame(buffer_.session(), width_, rows_);
+                        if (!swiftedit::terminal_page_caret(frame, target, width_, rows_))
+                            pager_.reveal(buffer_.session(), target);
                         page_caret_ = target;
                         if (!line_extend_)
                             page_anchor_ = target;

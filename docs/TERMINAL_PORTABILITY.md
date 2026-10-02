@@ -309,3 +309,13 @@ CRLF, trailing empty lines, stale source rejection, actual read-only terminal
 Home/End with Shift/copy, and cancelling a backward scan on a 16 MiB file.
 All 23 local headless tests passed in 10.03 seconds, with zero spelling findings
 across 117 source files. Native validation of this checkpoint is pending.
+
+Follow-up review: Home/End retain the current viewport when the destination is
+already visible. Differential tests compare both commands at every legal caret
+in all 729 six-byte text/CR/LF arrangements against TerminalBuffer's established
+logical-line navigation, using opened byte-faithful files so consecutive CRs are
+not submitted through the separate replacement-payload marker policy. All cases
+passed (terminal test 4.22 seconds); the terminal application test passed in
+4.55 seconds, and the 117-file spelling audit remained clean. The preceding
+c36b0ba caret correction passed native run 36962090425 on all three platforms
+and portable run 36962090399. Home/End native validation follows this push.
