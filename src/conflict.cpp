@@ -19,6 +19,7 @@ swiftedit::DocumentStamp Editor::save_stamp() const {
 void Editor::build_conflict() {
     conflict_.root = gf::make_control<DialogLayout>(gf::StableId("swiftedit.conflict"));
     conflict_status_ = gf::make_control<gf::Label>(gf::StableId("conflict.status"));
+    (*conflict_status_).set_use_mnemonic(false);
     (*conflict_status_).set_text_wrapping(gf::TextWrapping::word);
     (*conflict_.root).place(conflict_status_, {16, 16, 648, 96});
     conflict_over_ = gf::make_control<gf::Button>(gf::StableId("conflict.over"), "Save Over");

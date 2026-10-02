@@ -650,3 +650,15 @@ append and quote append. Refusal leaves the source unchanged and a later normal
 source renders successfully. View tests pass (0.18 seconds including CTest
 execution); house-style audit passes all 129 files. This closes the decoration
 accounting bug, not the outstanding full Markdown desktop/layout/print audit.
+
+Native run 36977196104 at eeb0a77 passed all three platforms and packaging.
+Mac terminal-app completed in 26.60 seconds versus 48.95 seconds in the preceding
+run; this supports reduced repeated work but is not a controlled speed ratio.
+The packaged Mac idle probe measured 1.297% of one core over ten quiet seconds;
+focus/occlusion were uncontrolled and there is no performance pass threshold.
+
+Dynamic GUI labels (filename, status, Find diagnostics and conflict warnings)
+now disable toolkit mnemonic parsing so literal ampersands are not consumed as
+keyboard markers. Menus retain their intentional mnemonic behavior. Editor tests
+pass (2.04 seconds including CTest); house-style audit remains clean at 129 files.
+Native validation of these label settings and the Markdown bounds fix is pending.

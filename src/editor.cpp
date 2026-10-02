@@ -224,6 +224,7 @@ void Editor::initialize_control_tree() {
          {"help", "&Help", {item("help", "View &Help", "F1"), item("about", "&About SwiftEdit")}}});
     add_child(menu_);
     name_ = gf::make_control<gf::Label>(gf::StableId("notepad.document-name"));
+    (*name_).set_use_mnemonic(false);
     add_child(name_);
     text_ = gf::make_control<gf::TextBox>(gf::StableId("notepad.document"));
     (*text_).set_multiline(true);
@@ -243,6 +244,7 @@ void Editor::initialize_control_tree() {
     (*markdown_).set_visible(false);
     add_child(markdown_);
     status_ = gf::make_control<gf::Label>(gf::StableId("notepad.status"));
+    (*status_).set_use_mnemonic(false);
     add_child(status_);
     subscriptions_.push_back((*text_).text_changed().subscribe(*this, TextListener{observe()}));
     subscriptions_.push_back(
@@ -805,6 +807,7 @@ void Editor::build_find() {
     find_status_ = gf::make_control<gf::Label>(
         gf::StableId("find.status"),
         "Right-click a character or press Ctrl+? to toggle one-character wildcard. Search wraps.");
+    (*find_status_).set_use_mnemonic(false);
     (*find_.root).place(find_status_, {16, 190, 470, 50});
 }
 void Editor::show_find() {

@@ -34,3 +34,8 @@ large read-only navigation, history exhaustion, source selection and cancellatio
 The terminal-app test alone took 10.75 seconds versus 18.48 seconds in the prior
 local full-suite run; this is an uncontrolled observation, not a guaranteed ratio.
 Native validation of the source-window change remains pending.
+
+Native follow-up: run 36977196104 at eeb0a77 passed Windows, Linux and macOS,
+including all 32 Mac tests and packaging. Mac terminal-app completed in 26.60
+seconds, compared with 48.95 seconds at 19d07cd. This is a cross-run observation,
+not a controlled benchmark or a proof of the previous timeout's cause.
