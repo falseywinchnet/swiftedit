@@ -601,3 +601,14 @@ bounded by the viewport, and caret scrolling reuses prepared geometry. Before/
 after paint-preparation samples are recorded beside the query-edit measurements.
 Native CI run 36973356334 for 166b912 passed all three platforms; the paint change
 still requires its own native build validation.
+
+Shared-session GUI migration producer checkpoint: consumer-owned DocumentProjection
+now prepares stamped Session source for the installed public D1 DocumentPage API,
+with bounded read steps, complete line-boundary checks, exact identity/atomic
+source mappings, cancellation and stale/single-use publication checks. The new
+headless test publishes a real payload into the installed DocumentViewState and
+checks malformed/control bytes, CRLF, read-boundary Unicode, cancellation and
+16 MiB read-only paging. It passes (0.22 seconds); house-style audit passes 128
+files. This is producer integration only; no private provider API or current GUI
+content authority was substituted. See DOCUMENT_VIEW_FIXTURES.md for remaining
+rendering, timing and long-context limitations. Native validation is pending.
