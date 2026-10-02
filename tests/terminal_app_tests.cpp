@@ -1,5 +1,6 @@
 #include "terminal_app.hpp"
 #include "platform.hpp"
+#include <chrono>
 #include <fstream>
 #include <iostream>
 
@@ -112,6 +113,18 @@ public:
         inputs.push_back(input);
     }
 };
+// Flush each boundary so a CI timeout identifies the active scenario rather
+// than discarding every observation with the killed test process.
+int run_case(swiftedit::Terminal &terminal, const std::filesystem::path &path,
+             const std::string_view name) {
+    std::cerr << "Starting terminal scenario: " << name << std::endl;
+    const std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now();
+    const int result = terminal.run(path);
+    const std::chrono::steady_clock::time_point finished = std::chrono::steady_clock::now();
+    const double elapsed = std::chrono::duration<double>(finished - started).count();
+    std::cerr << "Finished terminal scenario: " << name << " (" << elapsed << " s)" << std::endl;
+    return result;
+}
 int main() {
     try {
         const std::filesystem::path directory = std::filesystem::temp_directory_path() /
@@ -145,7 +158,7 @@ int main() {
         console.press('S', 0, true);
         console.press('X', 0, true);
         swiftedit::Terminal terminal(console);
-        const int result = terminal.run(path);
+        const int result = run_case(terminal, path, "terminal");
         if (result != 0 || console.cursor != console.inputs.size() || console.writes == 0 ||
             notepad::read_file(path).bytes != "Abase\r\n")
             throw std::runtime_error("Shared terminal Unicode/navigation/save behavior failed.");
@@ -155,7 +168,7 @@ int main() {
         invalid.press('S', 0, true);
         invalid.press('X', 0, true);
         swiftedit::Terminal recovered(invalid);
-        if (recovered.run(path) != 0 || notepad::read_file(path).bytes != "QAbase\r\n")
+        if (run_case(recovered, path, "recovered") != 0 || notepad::read_file(path).bytes != "QAbase\r\n")
             throw std::runtime_error("Invalid input recovery changed source incorrectly.");
         ScriptConsole pasted{};
         swiftedit::TerminalInput paste{};
@@ -167,7 +180,7 @@ int main() {
         pasted.press('S', 0, true);
         pasted.press('X', 0, true);
         swiftedit::Terminal paste_terminal(pasted);
-        if (paste_terminal.run(path) != 0 || pasted.cursor != pasted.inputs.size() ||
+        if (run_case(paste_terminal, path, "paste_terminal") != 0 || pasted.cursor != pasted.inputs.size() ||
             notepad::read_file(path).bytes != paste.paste + "QAbase\r\n")
             throw std::runtime_error("Paste executed commands or failed atomic undo/redo.");
         const std::string original = notepad::read_file(path).bytes;
@@ -185,7 +198,7 @@ int main() {
         cancelled.press(swiftedit::terminal_key::escape);
         cancelled.press('X', 0, true);
         swiftedit::Terminal cancel_terminal(cancelled);
-        if (cancel_terminal.run(path) != 0 || cancelled.cursor != cancelled.inputs.size() ||
+        if (run_case(cancel_terminal, path, "cancel_terminal") != 0 || cancelled.cursor != cancelled.inputs.size() ||
             notepad::read_file(path).bytes != original)
             throw std::runtime_error("Large paste cancellation or explicit confirmation failed.");
         ScriptConsole undone{};
@@ -194,7 +207,7 @@ int main() {
         undone.press('Z', 0, true);
         undone.press('X', 0, true); // Must exit cleanly without an unsaved-changes choice.
         swiftedit::Terminal undone_terminal(undone);
-        if (undone_terminal.run(path) != 0 || undone.cursor != undone.inputs.size() ||
+        if (run_case(undone_terminal, path, "undone_terminal") != 0 || undone.cursor != undone.inputs.size() ||
             notepad::read_file(path).bytes != original)
             throw std::runtime_error("One undo did not remove the entire confirmed paste.");
         ScriptConsole approved{};
@@ -205,7 +218,7 @@ int main() {
         approved.press('S', 0, true);
         approved.press('X', 0, true);
         swiftedit::Terminal approved_terminal(approved);
-        if (approved_terminal.run(path) != 0 || approved.cursor != approved.inputs.size() ||
+        if (run_case(approved_terminal, path, "approved_terminal") != 0 || approved.cursor != approved.inputs.size() ||
             notepad::read_file(path).bytes != large.paste + original)
             throw std::runtime_error("Confirmed large paste did not remain one undoable edit.");
         ScriptConsole private_clipboard{};
@@ -217,7 +230,7 @@ int main() {
         private_clipboard.press('S', 0, true);
         private_clipboard.press('X', 0, true);
         swiftedit::Terminal private_terminal(private_clipboard);
-        if (private_terminal.run(path) != 0 || private_clipboard.cursor != private_clipboard.inputs.size() ||
+        if (run_case(private_terminal, path, "private_terminal") != 0 || private_clipboard.cursor != private_clipboard.inputs.size() ||
             notepad::read_file(path).bytes != large.paste + original)
             throw std::runtime_error("Private clipboard bypassed large paste confirmation.");
         ScriptConsole threshold{};
@@ -226,7 +239,7 @@ int main() {
         threshold.press('S', 0, true);
         threshold.press('X', 0, true);
         swiftedit::Terminal threshold_terminal(threshold);
-        if (threshold_terminal.run(path) != 0 || threshold.cursor != threshold.inputs.size() ||
+        if (run_case(threshold_terminal, path, "threshold_terminal") != 0 || threshold.cursor != threshold.inputs.size() ||
             notepad::read_file(path).bytes != large.paste + std::string(500001, 'x') + original)
             throw std::runtime_error("Exactly 500000 paste bytes incorrectly required confirmation.");
         const std::filesystem::path large_path = directory / "large-read-only.txt";
@@ -252,7 +265,7 @@ int main() {
         repeated_rows.press('C', 0, true);
         repeated_rows.press('X', 0, true);
         swiftedit::Terminal repeated_terminal(repeated_rows);
-        if (repeated_terminal.run(vertical_path) != 0 || !repeated_rows.expected_copy_seen)
+        if (run_case(repeated_terminal, vertical_path, "repeated_terminal") != 0 || !repeated_rows.expected_copy_seen)
             throw std::runtime_error("Navigation slicing lost repetitions or changed the selection anchor.");
         ScriptConsole cancelled_repeats{};
         cancelled_repeats.cancel_repeats = true;
@@ -262,7 +275,7 @@ int main() {
         cancelled_repeats.expected_cursor = "\x1b[18;1H";
         cancelled_repeats.press('X', 0, true);
         swiftedit::Terminal cancelled_repeat_terminal(cancelled_repeats);
-        if (cancelled_repeat_terminal.run(vertical_path) != 0 || !cancelled_repeats.repeats_cancelled || !cancelled_repeats.cursor_checked)
+        if (run_case(cancelled_repeat_terminal, vertical_path, "cancelled_repeat_terminal") != 0 || !cancelled_repeats.repeats_cancelled || !cancelled_repeats.cursor_checked)
             throw std::runtime_error("Escape did not cancel repeated navigation after a bounded slice.");
         for (const std::size_t moves : {std::size_t{2}, std::size_t{23}}) {
             ScriptConsole vertical{};
@@ -274,7 +287,7 @@ int main() {
             vertical.expected_cursor = moves == 2 ? "\x1b[4;4H" : "\x1b[21;4H";
             vertical.press('X', 0, true);
             swiftedit::Terminal vertical_terminal(vertical);
-            if (vertical_terminal.run(vertical_path) != 0 || !vertical.cursor_checked)
+            if (run_case(vertical_terminal, vertical_path, "vertical_terminal") != 0 || !vertical.cursor_checked)
                 throw std::runtime_error("Read-only desired column was not restored after short lines or scrolling.");
         }
         ScriptConsole vertical_return{};
@@ -290,7 +303,7 @@ int main() {
         vertical_return.press('C', 0, true);
         vertical_return.press('X', 0, true);
         swiftedit::Terminal return_terminal(vertical_return);
-        if (return_terminal.run(vertical_path) != 0 || !vertical_return.cursor_checked || !vertical_return.expected_copy_seen)
+        if (run_case(return_terminal, vertical_path, "return_terminal") != 0 || !vertical_return.cursor_checked || !vertical_return.expected_copy_seen)
             throw std::runtime_error("Upward scrolling lost the desired column or selection caret.");
         ScriptConsole page_return{};
         for (std::size_t column = 0; column < 3; ++column)
@@ -305,7 +318,7 @@ int main() {
         page_return.press('C', 0, true);
         page_return.press('X', 0, true);
         swiftedit::Terminal page_return_terminal(page_return);
-        if (page_return_terminal.run(vertical_path) != 0 || !page_return.cursor_checked || !page_return.expected_copy_seen)
+        if (run_case(page_return_terminal, vertical_path, "page_return_terminal") != 0 || !page_return.cursor_checked || !page_return.expected_copy_seen)
             throw std::runtime_error("Page navigation lost its screen row, desired column or selection anchor.");
         ScriptConsole copy_navigation{};
         copy_navigation.wait_for_text_copy = true;
@@ -313,7 +326,7 @@ int main() {
         copy_navigation.press(swiftedit::terminal_key::enter);
         copy_navigation.press('X', 0, true);
         swiftedit::Terminal copy_terminal(copy_navigation);
-        if (copy_terminal.run(large_path) != 0 || !copy_navigation.text_copy_saved)
+        if (run_case(copy_terminal, large_path, "copy_terminal") != 0 || !copy_navigation.text_copy_saved)
             throw std::runtime_error("Read-only Save Text Copy did not complete cooperatively.");
         {
             swiftedit::PagedFile copied(saved_copy);
@@ -329,7 +342,7 @@ int main() {
         cancelled_copy.press(swiftedit::terminal_key::escape);
         cancelled_copy.press('X', 0, true);
         swiftedit::Terminal cancelled_copy_terminal(cancelled_copy);
-        if (cancelled_copy_terminal.run(large_path) != 0 || cancelled_copy.text_copy_saved ||
+        if (run_case(cancelled_copy_terminal, large_path, "cancelled_copy_terminal") != 0 || cancelled_copy.text_copy_saved ||
             std::filesystem::exists(cancelled_copy_path))
             throw std::runtime_error("Read-only text copy cancellation published output.");
         ScriptConsole exit_during_copy{};
@@ -338,7 +351,7 @@ int main() {
         exit_during_copy.press(swiftedit::terminal_key::enter);
         exit_during_copy.press('X', 0, true);
         swiftedit::Terminal exit_copy_terminal(exit_during_copy);
-        if (exit_copy_terminal.run(large_path) != 0 || !exit_during_copy.publication_seen ||
+        if (run_case(exit_copy_terminal, large_path, "exit_copy_terminal") != 0 || !exit_during_copy.publication_seen ||
             !std::filesystem::exists(cancelled_copy_path) ||
             exit_during_copy.cursor != exit_during_copy.inputs.size())
             throw std::runtime_error("Exit during publication did not retain the worker to completion.");
@@ -349,7 +362,7 @@ int main() {
         end_navigation.press('C', 0, true);
         end_navigation.press('X', 0, true);
         swiftedit::Terminal end_terminal(end_navigation);
-        if (end_terminal.run(large_path) != 0 || !end_navigation.end_seen || !end_navigation.copy_seen ||
+        if (run_case(end_terminal, large_path, "end_terminal") != 0 || !end_navigation.end_seen || !end_navigation.copy_seen ||
             end_navigation.cursor != end_navigation.inputs.size())
             throw std::runtime_error("Read-only Ctrl+End failed to finish cooperatively.");
         ScriptConsole rewind_navigation{};
@@ -365,7 +378,7 @@ int main() {
         rewind_navigation.press(swiftedit::terminal_key::page_up, 0, false, true);
         rewind_navigation.press('X', 0, true);
         swiftedit::Terminal rewind_terminal(rewind_navigation);
-        if (rewind_terminal.run(large_path) != 0 || !rewind_navigation.previous_seen ||
+        if (run_case(rewind_terminal, large_path, "rewind_terminal") != 0 || !rewind_navigation.previous_seen ||
             rewind_navigation.cursor != rewind_navigation.inputs.size())
             throw std::runtime_error("Read-only Page Up did not rebuild exhausted history cooperatively.");
         ScriptConsole repeated_rewind{};
@@ -377,7 +390,7 @@ int main() {
         // not reconstruct again; observe the Up completion instead.
         repeated_rewind.inputs[repeated_rewind.inputs.size() - 3].repeats = 900;
         swiftedit::Terminal repeated_rewind_terminal(repeated_rewind);
-        if (repeated_rewind_terminal.run(large_path) != 0 || !repeated_rewind.caret_completed ||
+        if (run_case(repeated_rewind_terminal, large_path, "repeated_rewind_terminal") != 0 || !repeated_rewind.caret_completed ||
             repeated_rewind.cursor != repeated_rewind.inputs.size())
             throw std::runtime_error("Repeated Up cancelled its own pending reconstruction.");
         ScriptConsole paged_find{};
@@ -389,7 +402,7 @@ int main() {
         paged_find.press('C', 0, true);
         paged_find.press('X', 0, true);
         swiftedit::Terminal find_terminal(paged_find);
-        if (find_terminal.run(large_path) != 0 || paged_find.found_count != 2 || !paged_find.single_copy_seen)
+        if (run_case(find_terminal, large_path, "find_terminal") != 0 || paged_find.found_count != 2 || !paged_find.single_copy_seen)
             throw std::runtime_error("Paged Find/F3 did not select, wrap and copy the exact final match.");
         ScriptConsole cancelled_find{};
         cancelled_find.press('W', 0, true);
@@ -398,7 +411,7 @@ int main() {
         cancelled_find.press(swiftedit::terminal_key::escape);
         cancelled_find.press('X', 0, true);
         swiftedit::Terminal cancelled_find_terminal(cancelled_find);
-        if (cancelled_find_terminal.run(large_path) != 0 || cancelled_find.found_count)
+        if (run_case(cancelled_find_terminal, large_path, "cancelled_find_terminal") != 0 || cancelled_find.found_count)
             throw std::runtime_error("Paged Find did not cancel before publishing a match.");
         const std::filesystem::path horizontal_path = directory / "horizontal-read-only.txt";
         {
@@ -418,7 +431,7 @@ int main() {
         horizontal.press('C', 0, true);
         horizontal.press('X', 0, true);
         swiftedit::Terminal horizontal_terminal(horizontal);
-        if (horizontal_terminal.run(horizontal_path) != 0 || !horizontal.three_copy_seen ||
+        if (run_case(horizontal_terminal, horizontal_path, "horizontal_terminal") != 0 || !horizontal.three_copy_seen ||
             !horizontal.two_copy_seen || !horizontal.single_copy_seen)
             throw std::runtime_error("Shift+Right did not select atomic Unicode, CRLF and control source bytes.");
         ScriptConsole line_selection{};
@@ -430,7 +443,7 @@ int main() {
         line_selection.press('C', 0, true);
         line_selection.press('X', 0, true);
         swiftedit::Terminal line_terminal(line_selection);
-        if (line_terminal.run(horizontal_path) != 0 || !line_selection.line_completed ||
+        if (run_case(line_terminal, horizontal_path, "line_terminal") != 0 || !line_selection.line_completed ||
             !line_selection.three_copy_seen)
             throw std::runtime_error("Read-only Home/End failed to select the logical line.");
         ScriptConsole cancelled_line{};
@@ -440,7 +453,7 @@ int main() {
         cancelled_line.press(swiftedit::terminal_key::escape);
         cancelled_line.press('X', 0, true);
         swiftedit::Terminal cancelled_line_terminal(cancelled_line);
-        if (cancelled_line_terminal.run(horizontal_path) != 0 || cancelled_line.line_completed)
+        if (run_case(cancelled_line_terminal, horizontal_path, "cancelled_line_terminal") != 0 || cancelled_line.line_completed)
             throw std::runtime_error("Read-only Home did not cancel before publishing its result.");
         ScriptConsole distant_left{};
         distant_left.wait_for_previous = true;
@@ -450,7 +463,7 @@ int main() {
         distant_left.press('C', 0, true);
         distant_left.press('X', 0, true);
         swiftedit::Terminal left_terminal(distant_left);
-        if (left_terminal.run(horizontal_path) != 0 || !distant_left.caret_completed ||
+        if (run_case(left_terminal, horizontal_path, "left_terminal") != 0 || !distant_left.caret_completed ||
             !distant_left.single_copy_seen)
             throw std::runtime_error("Shift+Left from an off-screen EOF did not reconstruct and copy the final grapheme.");
         ScriptConsole cancelled_left{};
@@ -460,14 +473,14 @@ int main() {
         cancelled_left.press(swiftedit::terminal_key::escape);
         cancelled_left.press('X', 0, true);
         swiftedit::Terminal cancelled_left_terminal(cancelled_left);
-        if (cancelled_left_terminal.run(horizontal_path) != 0 || cancelled_left.caret_completed)
+        if (run_case(cancelled_left_terminal, horizontal_path, "cancelled_left_terminal") != 0 || cancelled_left.caret_completed)
             throw std::runtime_error("Previous-grapheme scan did not cancel before publication.");
         ScriptConsole cancelled_end{};
         cancelled_end.press(swiftedit::terminal_key::end, 0, true);
         cancelled_end.press(swiftedit::terminal_key::escape);
         cancelled_end.press('X', 0, true);
         swiftedit::Terminal cancelled_end_terminal(cancelled_end);
-        if (cancelled_end_terminal.run(large_path) != 0 || cancelled_end.end_seen ||
+        if (run_case(cancelled_end_terminal, large_path, "cancelled_end_terminal") != 0 || cancelled_end.end_seen ||
             cancelled_end.cursor != cancelled_end.inputs.size())
             throw std::runtime_error("Read-only Ctrl+End did not cancel on the next key.");
         std::cout << "Shared terminal loop: Unicode, undo/redo, navigation, save, recovery and large paste passed.\n";

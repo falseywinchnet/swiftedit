@@ -622,3 +622,13 @@ native shaping or presentation. The component result is not a completed GUI
 latency audit, and D1 admission does not establish the private renderer's tighter
 display/metadata admission. The coordinator confirmed controller reconciliation
 remains queued; shared worker/controller/API expansion is not yet assigned.
+
+Native validation follow-up: run 36975543860 at 452e0b0 passed Windows and
+Linux. macOS compiled and passed 31 of 32 tests, including document-projection,
+the native GUI checks and idle probe, but terminal-app exceeded its 60-second
+limit. This is an unresolved failure, not a successful native validation.
+The terminal integration test now flushes scenario names and elapsed times to
+preserve the active scenario when CI terminates it. Local Windows execution
+passed; the two history-reconstruction scenarios took 9.166 and 8.231 seconds.
+No timeout or assertion was relaxed. The next native run must establish whether
+the Mac failure is aggregate runtime or a stalled scenario before remediation.
