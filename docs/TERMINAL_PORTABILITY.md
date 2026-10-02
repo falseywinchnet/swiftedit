@@ -246,8 +246,9 @@ adaptive long graphemes, context refusal and stale source rejection. An actual
 16 MiB file is searched through its final bytes. The shared terminal loop finds,
 wraps, copies exactly the final one-byte match, and cancels a separate search.
 The full local suite passed 23/23 in 9.46 s; spelling audit passed 116 files.
-Native validation is pending. CLI start/next/cancel exposure and large GUI
-integration remain to be connected to this shared task.
+Native validation is pending. CLI search-start/next/cancel now expose this same task with explicit case
+and wildcard flags (see COMMAND_PROTOCOL.md); large GUI integration remains
+pending.
 
 Resize source c2fb0aa passed native run 36958985720 and portable-core run
 36958985706 on Windows, macOS and Linux.

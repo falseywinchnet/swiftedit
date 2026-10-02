@@ -3,6 +3,7 @@
 #include "session.hpp"
 #include "session_word_count.hpp"
 #include "session_copy.hpp"
+#include "session_search.hpp"
 #include <charconv>
 #include <iostream>
 #include <stdexcept>
@@ -98,6 +99,7 @@ int main(int argc, char **argv) {
     swiftedit::ContextCursor context{};
     std::unique_ptr<swiftedit::SessionWordCount> counting{};
     std::unique_ptr<swiftedit::SessionCopy> copying{};
+    std::unique_ptr<swiftedit::SessionSearch> searching{};
     swiftedit::SourceClipboard clipboard{};
     std::string line{};
     std::cout << "ready\tSwiftEdit\t1\n" << std::flush;
@@ -135,6 +137,45 @@ int main(int argc, char **argv) {
                 const std::u8string p = session.path().u8string();
                 field(std::string(reinterpret_cast<const char *>(p.data()), p.size()));
                 std::cout << '\n';
+            } else if (cmd == "search-start") {
+                require_field_count(f, 5);
+                swiftedit::SearchPattern pattern(f[1]);
+                const std::uint64_t start = number(f[2]);
+                const std::uint64_t match_case = number(f[3]);
+                if (match_case > 1)
+                    throw std::runtime_error("Search match-case must be 0 or 1.");
+                const std::string &flags = f[4];
+                if (!flags.empty() && flags.size() != pattern.slots().size())
+                    throw std::runtime_error("Search flags must be empty or one 0/1 per query grapheme.");
+                for (std::size_t index = 0; index < flags.size(); ++index) {
+                    if (flags[index] == '1')
+                        pattern.toggle(index);
+                    else if (flags[index] != '0')
+                        throw std::runtime_error("Search flags must contain only 0 or 1.");
+                }
+                searching = std::make_unique<swiftedit::SessionSearch>(session, std::move(pattern),
+                                                                     start, match_case != 0);
+                std::cout << "search-progress\t0\t" << session.size() << '\n';
+            } else if (cmd == "search-next") {
+                require_field_count(f, 2);
+                const std::uint64_t budget = number(f[1]);
+                if (!budget || budget > 65536)
+                    throw std::runtime_error("Search work budget must be 1..65536 operations.");
+                if (!searching)
+                    throw std::runtime_error("Start a search first.");
+                if ((*searching).step(session, static_cast<std::size_t>(budget))) {
+                    const std::optional<swiftedit::PagedSearchMatch> match = (*searching).result(session);
+                    if (match)
+                        std::cout << "search-match\t" << (*match).offset << '\t' << (*match).length << '\n';
+                    else
+                        std::cout << "search-not-found\n";
+                } else {
+                    std::cout << "search-progress\t" << (*searching).offset() << '\t'
+                              << (*searching).size() << '\n';
+                }
+            } else if (cmd == "search-cancel") {
+                require_field_count(f, 1);
+                searching.reset();
             } else if (cmd == "copy-start") {
                 require_field_count(f, 3);
                 const std::uint64_t offset = number(f[1]);

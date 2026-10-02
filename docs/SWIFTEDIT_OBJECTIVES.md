@@ -151,8 +151,8 @@ and height dependencies while preserving the source anchor. Detailed tests and
 remaining performance outliers are recorded in TERMINAL_PORTABILITY.md and
 performance/2026-10-01-terminal-end/paired-8k.md. These changes do not complete
 horizontal read-only caret navigation or GUI virtualization. Streaming terminal
-large-file Find/F3 is now implemented through SessionSearch; CLI exposure and
-large GUI integration remain pending (see TERMINAL_PORTABILITY.md).
+large-file Find/F3 is now implemented through SessionSearch; CLI search-start/next/cancel expose the same task;
+large GUI integration remains pending (see TERMINAL_PORTABILITY.md).
 
 Provider coordination checkpoint: public SDK723 remains pinned. The next
 retained DocumentView depends on native transactional presentation integration,

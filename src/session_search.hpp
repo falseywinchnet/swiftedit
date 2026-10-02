@@ -14,6 +14,8 @@ public:
                   bool match_case = false);
     [[nodiscard]] bool step(const Session &, std::size_t work_budget = 4096);
     [[nodiscard]] std::optional<PagedSearchMatch> result(const Session &) const;
+    std::uint64_t offset() const { return next_; }
+    std::uint64_t size() const { return size_; }
 private:
     void validate(const Session &) const;
     void load(const Session &);

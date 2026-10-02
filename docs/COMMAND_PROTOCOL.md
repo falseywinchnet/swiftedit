@@ -26,6 +26,9 @@ returns `ok<TAB>quit`. Requests exceeding 32 MiB of transport text are rejected.
 | `page`, offset, byte-budget | 1–65536 bytes; emits `page, offset, next, total, bytes` |
 | `context`, byte-budget | Restarts sequential stamped context at byte zero; 1–65536 source bytes |
 | `context-next`, byte-budget | Continues that bounded read; edits, save, open or discard require a fresh context read |
+| `search-start`, query, start-byte, match-case, flags | Starts the shared streaming search without reading source. Query is 1..4096 UTF-8 bytes; case is 0 (ASCII fold) or 1 (exact); flags are empty for literals or one 0/1 per query grapheme, where 1 marks a one-grapheme wildcard. Emits `search-progress, 0, size` |
+| `search-next`, work-budget | 1..65536 comparison operations, or one source acquisition. Emits `search-progress, offset, size`, `search-match, byte-offset, byte-length`, or `search-not-found`. No implicit wrap. Rejects stale identity/revision/size; restart a failed task |
+| `search-cancel` | Drops the task between steps without changing source or revision; harmless without a task |
 | `find`, exact-text | Up to 100 matches in editable document, each with bounded context; no automatic wrap or mutation |
 | `preview`, before, old, after, replacement | Matches exact concatenated context; emits all bounded candidate previews |
 | `commit`, token, revision | Applies one explicitly chosen current preview; subsequent attempts with stale/used tokens fail |
@@ -52,8 +55,9 @@ CRCR is reserved for line-marker metadata and prohibited in replacement payloads
 existing source CRCR can still be read and saved unchanged.
 
 Files >=16 MiB are read-only via a retained file handle and bounded reads.
-Search/edit/sanitize are currently restricted to smaller files. There is no
-background thread for counting; start/next/cancel provide cooperative counting.
+The older `find` command, edits and sanitize remain restricted to smaller files.
+The streaming `search-start/next/cancel` commands support paged files. There is
+no background thread for these tasks; callers advance them cooperatively.
 Read-only paging follows the opened file
 handle if its directory entry is replaced. It does not silently follow a new file.
 
@@ -129,3 +133,26 @@ process, survives document close, and is not the operating-system clipboard.
 Capacity reservation may fail before reading; no clipboard is replaced on that
 failure. Each read is synchronous and can inherit storage latency, but later
 steps and cancellation remain under the caller's control.
+
+
+Streaming search keeps the document unchanged and returns the first complete
+match whose start is at or after `start-byte`. It parses from the beginning to
+preserve grapheme boundaries, so progress may initially be below that byte.
+Progress is the end of the last fully compared source grapheme; source
+acquisition or a partially compared grapheme may leave it unchanged. Starting
+at EOF yields not-found on the next step. A client can explicitly restart at
+zero to wrap; the protocol never wraps silently.
+
+A search step either reads/parses one source context (normally 8 KiB) or charges
+comparison work. Incomplete first graphemes grow context on later requests to
+64 KiB; exceeding that ceiling is an explicit error. Wildcards match one source
+grapheme, with an invalid UTF-8 byte treated atomically. Literal comparisons use
+original bytes. Work limits are not wall-time guarantees. Cancellation,
+failure, and a new successful start do not publish a partial match. Completed
+results may be requested again while the document stamp remains current.
+
+The command-process regression covers literal case folding, one-operation
+steps, invalid budgets/modes/flags, no implicit wrap at EOF, cancellation,
+stale document identity, and wildcard search in an actual 16 MiB paged file.
+The complete local suite passed 23/23 in 9.05 s; source spelling audit passed
+116 files. Native command-interface validation is pending.

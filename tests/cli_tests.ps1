@@ -55,6 +55,26 @@ try {
     Assert ($response[-1].StartsWith("ok`tword-count-cancel`t")) 'Explicit count cancellation'
     $response = Send-Request -Process $process -Fields @('word-count-next','1')
     Assert ($response[-1].StartsWith("error`tStart a word count")) 'Cancelled count cannot continue'
+    $response = Send-Request -Process $process -Fields @('search-start','WORLD','0','0','')
+    Assert ($response[0] -eq "search-progress`t0`t11") 'Search start performs no source scan'
+    $response = Send-Request -Process $process -Fields @('search-next','0')
+    Assert ($response[-1].StartsWith("error`tSearch work budget")) 'Zero search work budget refused'
+    $response = Send-Request -Process $process -Fields @('search-start','world','0','2','')
+    Assert ($response[-1].StartsWith("error`tSearch match-case")) 'Invalid search mode refused'
+    for ($searchStep = 0; $searchStep -lt 100; ++$searchStep) {
+        $response = Send-Request -Process $process -Fields @('search-next','1')
+        Assert ($response[-1].StartsWith("ok`tsearch-next`t")) 'Search advances with one-operation budget'
+        if ($response[0].StartsWith("search-match`t")) { break }
+    }
+    Assert ($response[0] -eq "search-match`t6`t5") 'Case-folded search publishes exact byte range'
+    $response = Send-Request -Process $process -Fields @('search-start','world','11','1','')
+    $response = Send-Request -Process $process -Fields @('search-next','1')
+    Assert ($response[0] -eq 'search-not-found') 'Protocol search at EOF does not implicitly wrap'
+    $response = Send-Request -Process $process -Fields @('search-start','?','0','0','x')
+    Assert ($response[-1].StartsWith("error`tSearch flags")) 'Invalid wildcard flag refused'
+    $response = Send-Request -Process $process -Fields @('search-cancel')
+    $response = Send-Request -Process $process -Fields @('search-next','1')
+    Assert ($response[-1].StartsWith("error`tStart a search")) 'Cancelled search cannot continue'
     $target = (Join-Path $fixture 'new.txt').Replace('\','\\')
     $response = Send-Request -Process $process -Fields @('save-as',$target)
     Assert ($response[-1].StartsWith("ok`tsave-as")) 'Save creates new file'
@@ -130,6 +150,14 @@ try {
         Assert ($response[-1].StartsWith("ok`tword-count-next`t")) 'Paged count step succeeds'
     }
     Assert ($response[0] -eq "word-count`t8388608") 'Paged whole-document count through CLI'
+    $response = Send-Request -Process $process -Fields @('search-start',' ? X','65535','0','0100')
+    Assert ($response[0] -eq "search-progress`t0`t16777216") 'Paged search starts without whole-file allocation'
+    for ($searchStep = 0; $searchStep -lt 100; ++$searchStep) {
+        $response = Send-Request -Process $process -Fields @('search-next','65536')
+        Assert ($response[-1].StartsWith("ok`tsearch-next`t")) 'Paged search step succeeds'
+        if ($response[0].StartsWith("search-match`t")) { break }
+    }
+    Assert ($response[0] -eq "search-match`t65535`t4") 'Paged wildcard search respects requested byte start'
     $response = Send-Request -Process $process -Fields @('copy-start','65535','4')
     Assert ($response[0] -eq "copy-progress`t0`t4") 'Paged copy starts without reading'
     $response = Send-Request -Process $process -Fields @('copy-next','2')
@@ -146,7 +174,10 @@ try {
     $response = Send-Request -Process $process -Fields @('clipboard-page','0','4')
     Assert ($response[0] -eq "clipboard`t0`t4`t4`t x x") 'Cancelled copy preserves previous clipboard'
     $response = Send-Request -Process $process -Fields @('copy-start','0','100')
+    $response = Send-Request -Process $process -Fields @('search-start','absent','0','0','')
     $response = Send-Request -Process $process -Fields @('discard')
+    $response = Send-Request -Process $process -Fields @('search-next','1')
+    Assert ($response[-1].StartsWith("error`tSearch belongs to an older document")) 'Search refuses changed document identity'
     $response = Send-Request -Process $process -Fields @('copy-next','1')
     Assert ($response[-1].StartsWith("error`tCopy document changed")) 'Copy rejects changed document identity'
     $response = Send-Request -Process $process -Fields @('clipboard-page','0','4')
