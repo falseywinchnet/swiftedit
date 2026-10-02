@@ -477,3 +477,22 @@ first_focusable(0) into begin_focus_scope, including mouse opening. MenuRow pain
 focused rows with the same highlight as hover. All-disabled menus have no such
 row. This explains a source-level inconsistency and has been sent to the provider
 owner; pointer-versus-keyboard presentation still needs a provider correction.
+
+Validation update: versioned release v0.3.0 (e33262a498fc) passed all three native
+jobs and publication in run 36969276926. Its public, non-draft, non-prerelease
+download set contains Windows/macOS/Linux archives plus three checksums and three
+manifests. Follow-up ea3a73c passed all three native jobs in run 36969494053 and
+correctly skipped publication on master. The downloaded Mac AppKit captures
+visually confirm Markdown/Status Bar checkmarks and the status-strip edge. They
+also show the passive focused row and duplicate filename row still present.
+
+The assigned private provider prototype is now implemented in the three announced
+new files and handed back for independent review. It validates aggregate inputs,
+paragraph/separator coverage, explicit source/display identity and ownership,
+using the existing input reservation ledger. Standalone GCC builds with
+-Wall -Wextra -Werror and focused tests pass. Mixed endings, empty EOF, 512 empty
+rows, budgets, UTF-8 boundaries, projected separator labels versus literal
+lookalikes, late refusal, busy/closing, copying and charge retirement are covered.
+Provider integration, allocation-failure injection, broader identity permutations,
+controller/worker/rendering/host behavior and native latency remain unverified.
+No provider commit, public SDK change, DocumentView or print availability is claimed.
