@@ -41,6 +41,24 @@ int main() {
     try {
         verify_dependency_depth();
         using namespace swiftedit;
+        const Csv cancellable("2,=A1*3,=SUM(A1:B1)");
+        std::stop_source stopped{};
+        stopped.request_stop();
+        for (const CellAddress address : {CellAddress{0, 0}, {0, 1}, {0, 2}}) {
+            bool cancelled = false;
+            try {
+                static_cast<void>(calculate_cell(cancellable, address, stopped.get_token()));
+            } catch (const CalculationCancelled &) { cancelled = true; }
+            check(cancelled, "Cancellation is distinct from a literal or formula result");
+        }
+        bool expression_cancelled = false;
+        try {
+            static_cast<void>(calculate(cancellable, "SUM(A1:B1)", stopped.get_token()));
+        } catch (const CalculationCancelled &) { expression_cancelled = true; }
+        check(expression_cancelled && cancellable.cell({0, 2}).value == "=SUM(A1:B1)",
+              "Cancelled evaluation preserves stored formula source");
+        const Calculation after_cancel = calculate_cell(cancellable, {0, 2});
+        check(after_cancel.result == "8", "Independent evaluation remains usable after cancellation");
         for (const std::size_t zeros : {0U, 31U, 32U, 10000U}) {
             const Csv literals(std::string(zeros, '0') + "2,=A1+A1");
             const Calculation value = calculate_cell(literals, {0, 1});

@@ -159,6 +159,10 @@ std::string Csv::clear_all() const {
     return result;
 }
 namespace {
+void check_cancelled(const std::stop_token &cancellation) {
+    if (cancellation.stop_requested())
+        throw CalculationCancelled();
+}
 using Integer = std::int64_t;
 constexpr Integer limit = std::numeric_limits<Integer>::max() / 10;
 Integer magnitude(Integer n) {
@@ -220,7 +224,16 @@ bool less(Number a, Number b) {
     const bool result = difference.n < 0;
     return result;
 }
-Number numeric(std::string_view s) {
+struct CancellableLess {
+    const std::stop_token &cancellation;
+    bool operator()(Number first, Number second) const {
+        check_cancelled(cancellation);
+        const bool result = less(first, second);
+        return result;
+    }
+};
+Number numeric(std::string_view s, const std::stop_token &cancellation) {
+    check_cancelled(cancellation);
     if (s.empty())
         throw std::runtime_error("Blank is not numeric.");
     bool negative = false;
@@ -232,6 +245,8 @@ Number numeric(std::string_view s) {
     Integer n = 0, d = 1;
     bool point = false, digit = false;
     for (; i < s.size(); ++i) {
+        if (i % 256 == 0)
+            check_cancelled(cancellation);
         const char c = s[i];
         if (c == '.' && !point) {
             point = true;
@@ -279,6 +294,7 @@ struct CachedNumber {
 };
 struct Evaluation {
     const Csv &table;
+    std::stop_token cancellation{};
     std::vector<ActiveEvaluation> active{};
     std::map<std::pair<std::size_t, std::size_t>, CachedNumber> values{};
     std::size_t references{};
@@ -301,10 +317,12 @@ public:
         return result;
     }
     Number run_number() {
+        check_cancelled(evaluation_.cancellation);
         const Number n = expression();
         space();
         if (at_ != s_.size())
             throw std::runtime_error("Unexpected formula text.");
+        check_cancelled(evaluation_.cancellation);
         return n;
     }
 
@@ -366,6 +384,7 @@ private:
         }
     }
     Number reference(CellAddress p) {
+        check_cancelled(evaluation_.cancellation);
         if (evaluation_.references >= 100000)
             throw std::runtime_error("Too many referenced cells.");
         ++evaluation_.references;
@@ -373,6 +392,8 @@ private:
         try {
             const Number result = evaluate_cell(evaluation_, p);
             return result;
+        } catch (const CalculationCancelled &) {
+            throw;
         } catch (const std::exception &e) {
             throw std::runtime_error(cell_name(p) + ": " + e.what());
         }
@@ -499,8 +520,10 @@ private:
         }
         if (name == "SUM" || name == "AVERAGE") {
             Number n{};
-            for (const Number a : v)
+            for (const Number a : v) {
+                check_cancelled(evaluation_.cancellation);
                 n = plus(n, a);
+            }
             if (name == "AVERAGE") {
                 const Number count{static_cast<Integer>(v.size())};
                 n = divide(n, count);
@@ -509,12 +532,12 @@ private:
         }
         if (name == "MIN") {
             const std::vector<Number>::const_iterator minimum =
-                std::min_element(v.begin(), v.end(), less);
+                std::min_element(v.begin(), v.end(), CancellableLess{evaluation_.cancellation});
             return *minimum;
         }
         if (name == "MAX") {
             const std::vector<Number>::const_iterator maximum =
-                std::max_element(v.begin(), v.end(), less);
+                std::max_element(v.begin(), v.end(), CancellableLess{evaluation_.cancellation});
             return *maximum;
         }
         throw std::runtime_error("Unsupported function: " + name);
@@ -562,11 +585,12 @@ private:
         while (at_ < s_.size() && ((s_[at_] >= '0' && s_[at_] <= '9') || s_[at_] == '.'))
             ++at_;
         const std::string_view digits = s_.substr(start, at_ - start);
-        const Number result = numeric(digits);
+        const Number result = numeric(digits, evaluation_.cancellation);
         return result;
     }
 };
 Number evaluate_cell(Evaluation &evaluation, CellAddress address) {
+    check_cancelled(evaluation.cancellation);
     const Cell &cell = evaluation.table.cell(address);
     // Short literals have no expensive subtree to memoize. Avoid one map node
     // per common range operand, but keep caching long numeric strings so many
@@ -575,7 +599,7 @@ Number evaluate_cell(Evaluation &evaluation, CellAddress address) {
     if (!cell.value.starts_with('=') && cell.value.size() <= 32) {
         if (evaluation.active.size() >= 64)
             throw std::runtime_error("Formula dependency depth exceeds 64 cells.");
-        const Number literal = numeric(cell.value);
+        const Number literal = numeric(cell.value, evaluation.cancellation);
         if (!evaluation.active.empty()) {
             ActiveEvaluation &parent = evaluation.active.back();
             parent.depth = std::max(parent.depth, std::size_t(2));
@@ -615,7 +639,7 @@ Number evaluate_cell(Evaluation &evaluation, CellAddress address) {
         static_cast<void>(validated_decimal);
         depth = evaluation.active.back().depth;
     } else
-        result = numeric(cell.value);
+        result = numeric(cell.value, evaluation.cancellation);
     evaluation.values.emplace(key, CachedNumber{result, depth});
     if (!evaluation.active.empty()) {
         ActiveEvaluation &parent = evaluation.active.back();
@@ -624,22 +648,27 @@ Number evaluate_cell(Evaluation &evaluation, CellAddress address) {
     return result;
 }
 } // namespace
-Calculation calculate(const Csv &table, std::string_view expression) {
-    Evaluation evaluation{table};
+Calculation calculate(const Csv &table, std::string_view expression, std::stop_token cancellation) {
+    check_cancelled(cancellation);
+    Evaluation evaluation{table, cancellation};
     Parser parser(evaluation, expression);
     Calculation result = parser.run();
+    check_cancelled(cancellation);
     return result;
 }
-Calculation calculate_cell(const Csv &table, CellAddress address) {
+Calculation calculate_cell(const Csv &table, CellAddress address, std::stop_token cancellation) {
+    check_cancelled(cancellation);
     const Cell &cell = table.cell(address);
     if (!cell.value.starts_with('=')) {
         const Calculation literal{cell.value, {}};
+        check_cancelled(cancellation);
         return literal;
     }
-    Evaluation evaluation{table};
+    Evaluation evaluation{table, cancellation};
     evaluation.active.push_back({address, 1});
     Parser parser(evaluation, cell.value);
     Calculation result = parser.run();
+    check_cancelled(cancellation);
     return result;
 }
 std::string convert_to_value(const Csv &table, CellAddress address) {
