@@ -107,8 +107,8 @@ public:
                     (*editor).execute("find");
                     require(handles[3].active(), "Owned find window active");
                     find_open_requested = true;
-                    // Native visibility follows the queued show request. Let
-                    // the event loop apply it before sending AppKit input.
+                    // Give queued native presentation an event-loop turn.
+                    // The AppKit helper separately verifies actual visibility.
                     --stage;
                     return;
                 }

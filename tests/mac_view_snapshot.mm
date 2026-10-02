@@ -22,8 +22,22 @@ void send_native_query_wildcard(const char *const title) {
                 selected = candidate;
             }
         }
-        if (selected == nil || ![selected isVisible])
-            throw std::runtime_error("Native query window is not visible.");
+        if (selected == nil || ![selected isVisible]) {
+            std::cerr << "Native query target: " << title << "; owned AppKit windows="
+                      << [windows count] << '\n';
+            for (NSUInteger index = 0; index < [windows count]; ++index) {
+                NSWindow *const candidate = [windows objectAtIndex:index];
+                const char *const candidate_title = [[candidate title] UTF8String];
+                std::cerr << "  title=" << (candidate_title == nullptr ? "<nil>" : candidate_title)
+                          << " visible=" << [candidate isVisible]
+                          << " miniaturized=" << [candidate isMiniaturized]
+                          << " key=" << [candidate isKeyWindow]
+                          << " number=" << [candidate windowNumber] << '\n';
+            }
+            if (selected == nil)
+                throw std::runtime_error("Native query window title was not found.");
+            throw std::runtime_error("Native query window exists but is hidden.");
+        }
         NSView *const content = [selected contentView];
         if (content == nil || ![selected makeFirstResponder:content])
             throw std::runtime_error("Native query view could not receive keyboard input.");

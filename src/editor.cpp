@@ -816,7 +816,10 @@ void Editor::show_find() {
         if (selected.find_first_of("\r\n") == std::string::npos)
             (*query_).set_text(selected);
     }
-    static_cast<void>(find_.handle.show());
+    const gf::HostServiceStatus shown = find_.handle.show();
+    if (!shown.accepted())
+        throw std::runtime_error("Cannot show the Find window (host error " +
+                                 std::to_string(static_cast<unsigned>(shown.error)) + ").");
     if (find_.window)
         (*find_.window).request_focus(query_);
 }
