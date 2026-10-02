@@ -420,6 +420,23 @@ int main() {
             swiftedit::terminal_page_caret(newline_frame, 6, 4, 3);
         check(eof_caret && (*eof_caret).row == 1 && (*eof_caret).column == 0,
               "Caret at EOF after wrap plus CRLF occupies the next empty row");
+        swiftedit::Session wide_caret{};
+        wide_caret.replace_ranges({{0, 0}}, "ABC\xe7\x95\x8c", wide_caret.stamp());
+        const swiftedit::TerminalPageFrame wide_clipped = swiftedit::terminal_page(wide_caret, {}, 4, 1);
+        check(!swiftedit::terminal_page_caret(wide_clipped, 3, 4, 1),
+              "Caret before a wide grapheme wrapped below the viewport is not on the preceding row");
+        const swiftedit::TerminalPageFrame wide_visible = swiftedit::terminal_page(wide_caret, {}, 4, 2);
+        const std::optional<swiftedit::TerminalPageCaret> wide_start =
+            swiftedit::terminal_page_caret(wide_visible, 3, 4, 2);
+        check(wide_start && (*wide_start).row == 1 && (*wide_start).column == 0,
+              "Caret before a wrapped wide grapheme follows its actual row");
+        swiftedit::Session blank_caret{};
+        blank_caret.replace_ranges({{0, 0}}, "ABCD\n\nZ", blank_caret.stamp());
+        const swiftedit::TerminalPageFrame blank_frame = swiftedit::terminal_page(blank_caret, {}, 4, 4);
+        const std::optional<swiftedit::TerminalPageCaret> blank_start =
+            swiftedit::terminal_page_caret(blank_frame, 5, 4, 4);
+        check(blank_start && (*blank_start).row == 1 && (*blank_start).column == 0,
+              "Blank-line caret survives a preceding wrap plus newline");
         const std::filesystem::path large_path = dir / "large.txt";
         {
             std::ofstream file(large_path, std::ios::binary);

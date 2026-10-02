@@ -284,3 +284,13 @@ validation for this feature is pending.
 
 Horizontal-navigation local validation: 23/23 tests passed in 9.30 s; source
 spelling audit passed all 117 files. Native validation remains pending.
+
+Read-only caret boundary correction (2026-10-01): a wide grapheme that wraps
+below the viewport no longer leaves a false caret at the preceding row's end.
+Explicit newline boundary positions preserve the caret on empty lines following
+a full-width row and its suppressed newline. Painted frames own this bounded
+metadata; off-screen scans do not allocate it. Regression fixtures cover clipped
+and visible wide glyphs and consecutive newlines after wrapping. All 23 local
+headless tests passed in 9.86 seconds; spelling audit passed across 117 source
+files. The preceding df74c8b checkpoint passed native run 36961373954 and portable
+run 36961373917. Native validation of this correction is pending.

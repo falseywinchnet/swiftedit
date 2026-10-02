@@ -21,10 +21,15 @@ struct TerminalPageRun {
     std::size_t cells{};
     bool starts_grapheme{}, ends_grapheme{};
 };
+struct TerminalPageNewlineCaret {
+    std::uint64_t offset{};
+    std::size_t row{}, column{};
+};
 struct TerminalPageFrame {
     std::vector<TerminalPageRun> runs{};
     std::vector<TerminalPageCursor> row_starts{};
     std::vector<SourceRange> graphemes{};
+    std::vector<TerminalPageNewlineCaret> newline_carets{};
     TerminalPageCursor next{};
     bool more{};
 };

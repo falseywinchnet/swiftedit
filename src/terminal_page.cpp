@@ -69,12 +69,16 @@ static BuiltPage build_terminal_page(const Session &session, const TerminalPageC
         if (bytes == "\r" || bytes == "\n" || bytes == "\r\n") {
             if (index == 0 && cursor.label_cell)
                 throw std::runtime_error("Invalid terminal label continuation.");
+            if constexpr (PaintRuns)
+                result.newline_carets.push_back({cursor.offset + offset, row, column});
             const bool advance_row = !after_wrap;
             if (advance_row)
                 ++row;
             after_wrap = false;
             column = 0;
             result.next = {cursor.offset + offset + length, 0, false};
+            if constexpr (PaintRuns)
+                result.newline_carets.push_back({result.next.offset, row, column});
             if (advance_row)
                 result.row_starts.push_back(result.next);
             continue;
@@ -168,14 +172,18 @@ std::optional<TerminalPageCaret> terminal_page_caret(const TerminalPageFrame &fr
                                      : TerminalPageCaret{run.row, column};
         }
     }
-    if (!result) {
-        for (std::size_t row = 0; row < frame.row_starts.size(); ++row) {
-            if (!frame.row_starts[row].label_cell && frame.row_starts[row].offset == caret) {
-                result = TerminalPageCaret{row, 0};
-                break;
-            }
+    // A row-start boundary wins over the preceding run's end when a wide
+    // grapheme wrapped before painting. Newlines also have source boundaries
+    // on otherwise empty rows, including a suppressed newline after wrapping.
+    for (std::size_t row = 0; row < frame.row_starts.size(); ++row) {
+        if (!frame.row_starts[row].label_cell && frame.row_starts[row].offset == caret) {
+            result = TerminalPageCaret{row, 0};
+            break;
         }
     }
+    for (const TerminalPageNewlineCaret boundary : frame.newline_carets)
+        if (boundary.offset == caret)
+            result = TerminalPageCaret{boundary.row, boundary.column};
     if (!result && !frame.more && frame.next.offset == caret && !frame.row_starts.empty())
         result = TerminalPageCaret{frame.row_starts.size() - 1, 0};
     if (result && ((*result).row >= rows || (*result).column >= width))
