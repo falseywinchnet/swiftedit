@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
         std::ofstream output(argv[1]);
         if (!output)
             throw std::runtime_error("Cannot write benchmark samples.");
-        output << "sample,milliseconds,initial_milliseconds,worst_slice_milliseconds,slices\n"
+        output << "sample,milliseconds,initial_milliseconds,worst_slice_milliseconds,slices,paint_milliseconds\n"
                << std::fixed << std::setprecision(6);
         std::string source{};
         const bool distinct = argc == 3 && std::string_view(argv[2]) == "--distinct";
@@ -53,10 +53,21 @@ int main(int argc, char **argv) {
         const std::shared_ptr<notepad::CsvView> view =
             gf::make_control<notepad::CsvView>(gf::StableId("bench.csv"));
         gf::Window window(view, {800, 600});
+        const std::chrono::steady_clock::time_point setup_start = std::chrono::steady_clock::now();
         (*view).set_source(source);
+        const std::chrono::steady_clock::time_point source_ready = std::chrono::steady_clock::now();
         window.perform_layout();
-        while ((*view).calculations_pending())
+        const std::chrono::steady_clock::time_point layout_ready = std::chrono::steady_clock::now();
+        std::size_t setup_slices = 0;
+        while ((*view).calculations_pending()) {
             (*view).on_frame(gf::FrameClock::now());
+            if (++setup_slices > 4097)
+                throw std::runtime_error("Initial viewport calculation failed to complete.");
+        }
+        const std::chrono::duration<double, std::milli> setup_source = source_ready - setup_start;
+        const std::chrono::duration<double, std::milli> setup_layout = layout_ready - source_ready;
+        const std::chrono::duration<double, std::milli> setup_total =
+            std::chrono::steady_clock::now() - setup_start;
         std::vector<double> samples{};
         samples.reserve(31);
         for (std::size_t sample = 0; sample < 36; ++sample) {
@@ -83,18 +94,24 @@ int main(int argc, char **argv) {
                 std::chrono::steady_clock::now() - start;
             ResultPainter painter{};
             painter.expected = std::to_string(rows * 2);
+            const std::chrono::steady_clock::time_point paint_start = std::chrono::steady_clock::now();
             (*view).on_paint(painter, {0, 0, 800, 600});
+            const std::chrono::duration<double, std::milli> paint_time =
+                std::chrono::steady_clock::now() - paint_start;
             if (!wheel.handled || painter.error || painter.results != 85)
                 throw std::runtime_error(
                     "CSV viewport did not display all 85 exact formula results.");
             if (sample >= 5) {
                 samples.push_back(elapsed.count());
                 output << sample - 5 << ',' << elapsed.count() << ',' << initial.count()
-                       << ',' << worst_slice << ',' << slices << '\n';
+                       << ',' << worst_slice << ',' << slices << ',' << paint_time.count() << '\n';
             }
         }
         std::sort(samples.begin(), samples.end());
         std::cout << "source_bytes=" << source.size() << " samples=" << samples.size()
+                  << " setup_source_ms=" << setup_source.count()
+                  << " setup_layout_ms=" << setup_layout.count()
+                  << " setup_total_ms=" << setup_total.count()
                   << " p50_ms=" << samples[15] << " p95_ms=" << samples[29]
                   << " p99_ms=" << samples[30] << " worst_ms=" << samples.back() << '\n';
         return 0;
