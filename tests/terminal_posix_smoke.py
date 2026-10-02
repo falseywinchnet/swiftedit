@@ -67,7 +67,11 @@ def exercise(executable: Path, path: Path, interrupt: bool) -> None:
         result: int = finish(master, child)
         if (interrupt and result == 0) or (not interrupt and result != 0):
             raise RuntimeError('Unexpected terminal exit status: ' + str(result))
-        if termios.tcgetattr(slave) != original:
+        restored: list[object] = termios.tcgetattr(slave)
+        if restored != original:
+            print('Terminal original mode:', repr(original), flush=True)
+            print('Terminal restored mode:', repr(restored), flush=True)
+            print('Interrupted case:', interrupt, flush=True)
             raise RuntimeError('Terminal mode was not restored')
         expected: bytes = b'base\n'
         if not interrupt:
