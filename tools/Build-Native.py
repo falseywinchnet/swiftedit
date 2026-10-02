@@ -182,6 +182,9 @@ def main() -> None:
         (copy_evidence / 'receipt.json').write_text(json.dumps(copy_receipt, indent=2) + '\n', encoding='utf-8')
     if arguments.platform == 'macos-arm64':
         run([sys.executable, '-B', 'tools/Package-Mac.py', '--build', str(build), '--sdk', str(sdk)])
+    else:
+        run([sys.executable, '-B', 'tools/Package-Desktop.py', '--build', str(build),
+             '--sdk', str(sdk), '--platform', arguments.platform])
 
 
 if __name__ == '__main__':

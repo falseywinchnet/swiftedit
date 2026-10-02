@@ -34,7 +34,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libatk1.0-dev libatk-bridge2.0-dev xvfb xauth
+          sudo apt-get install -y cmake ninja-build libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libatk1.0-dev libatk-bridge2.0-dev xvfb xauth patchelf
       - uses: msys2/setup-msys2@v2
         if: runner.os == 'Windows'
         with:
@@ -52,12 +52,11 @@ jobs:
       - name: Build and test Linux with owned virtual display
         if: runner.os == 'Linux'
         run: xvfb-run -a python3 -B tools/Build-Native.py --platform linux-x64
-      - name: Upload Mac dogfood download
-        if: runner.os == 'macOS'
+      - name: Upload platform dogfood download
         uses: actions/upload-artifact@v4
         with:
-          name: SwiftEdit-macos-arm64
-          path: .build/native-macos-arm64/dist/*
+          name: SwiftEdit-${{ matrix.platform }}
+          path: .build/native-${{ matrix.platform }}/dist/*
           if-no-files-found: error
       - name: Preserve native test and package diagnostics
         if: always()
@@ -79,3 +78,21 @@ jobs:
             .build/native-${{ matrix.platform }}/text-copy-evidence/receipt.json
             .build/native-${{ matrix.platform }}/text-copy-evidence/fixtures/samples.csv
           if-no-files-found: ignore
+
+  release:
+    name: Publish validated cross-platform prerelease
+    needs: native
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: SwiftEdit-*
+          path: release-assets
+      - name: Publish immutable commit download set
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -B tools/Publish-Release.py --artifacts release-assets
