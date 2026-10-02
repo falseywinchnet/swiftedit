@@ -24,6 +24,7 @@ class PinnedArchive(TypedDict):
 
 
 class SdkLock(TypedDict):
+    repository: str
     release: str
     provider_revision: str
     archives: dict[str, PinnedArchive]
@@ -72,7 +73,7 @@ def main() -> None:
     build.mkdir(parents=True, exist_ok=True)
     download: Path = build / 'download'
     download.mkdir(exist_ok=True)
-    download_sdk(['gh', 'release', 'download', str(lock['release']), '--repo', 'falseywinchnet/swiftedit',
+    download_sdk(['gh', 'release', 'download', str(lock['release']), '--repo', lock['repository'],
          '--pattern', pinned['name'], '--dir', str(download), '--clobber'])
     archive: Path = download / pinned['name']
     if sha256(archive) != pinned['sha256']:

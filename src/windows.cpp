@@ -111,7 +111,7 @@ Editor::application_windows(const std::filesystem::path &initial) {
     gf::ApplicationWindow main{};
     main.stable_id = "notepad.main";
     main.model = std::make_unique<gf::Window>(self, gf::Size{940, 660});
-    main.options.title = "SwiftEdit";
+    main.options.title = "Untitled - SwiftEdit";
     main.options.initial_size = {940, 660};
     main.options.minimum_size = {540, 320};
     main.options.ready = WindowReady{observe(), WindowKind::main, initial};

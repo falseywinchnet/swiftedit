@@ -223,9 +223,6 @@ void Editor::initialize_control_tree() {
           {item("csv-convert-value", "Convert to &Value"), item("csv-clear", "&Clear Cells")}},
          {"help", "&Help", {item("help", "View &Help", "F1"), item("about", "&About SwiftEdit")}}});
     add_child(menu_);
-    name_ = gf::make_control<gf::Label>(gf::StableId("notepad.document-name"));
-    (*name_).set_use_mnemonic(false);
-    add_child(name_);
     text_ = gf::make_control<gf::TextBox>(gf::StableId("notepad.document"));
     (*text_).set_multiline(true);
     (*text_).set_word_wrap(false);
@@ -269,19 +266,18 @@ void Editor::initialize_control_tree() {
 void Editor::arrange(gf::Rect bounds) {
     arrange_self(bounds);
     set_child_layout(menu_, {0, 0, bounds.width, 28});
-    set_child_layout(name_, {8, 28, std::max(0.0, bounds.width - 16), 24});
     const double bottom = show_status_ ? 26 : 0;
-    set_child_layout(text_, {0, 52, bounds.width, std::max(0.0, bounds.height - 52 - bottom)});
-    set_child_layout(csv_, {0, 52, bounds.width, std::max(0.0, bounds.height - 52 - bottom)});
-    set_child_layout(markdown_, {0, 52, bounds.width, std::max(0.0, bounds.height - 52 - bottom)});
-    set_child_layout(status_, {8, std::max(52.0, bounds.height - bottom) + 4,
+    set_child_layout(text_, {0, 28, bounds.width, std::max(0.0, bounds.height - 28 - bottom)});
+    set_child_layout(csv_, {0, 28, bounds.width, std::max(0.0, bounds.height - 28 - bottom)});
+    set_child_layout(markdown_, {0, 28, bounds.width, std::max(0.0, bounds.height - 28 - bottom)});
+    set_child_layout(status_, {8, std::max(28.0, bounds.height - bottom) + 4,
                                std::max(0.0, bounds.width - 16), std::max(0.0, bottom - 8)});
 }
 void Editor::on_paint(gf::Painter &painter, gf::Rect) {
     if (!show_status_)
         return;
     const gf::Rect bounds = committed_arranged_bounds();
-    const double top = std::max(52.0, bounds.height - 26.0);
+    const double top = std::max(28.0, bounds.height - 26.0);
     const gf::BasicControlStyle &style = effective_theme().basic_style();
     painter.fill_rect({0, top, bounds.width, 26}, style.face);
     painter.draw_line({0, top + 0.5}, {bounds.width, top + 0.5}, style.border, 1);
@@ -309,8 +305,6 @@ void Editor::refresh() {
     (*commands_.at("csv-clear")).set_enabled(csv_visible_);
     (*commands_.at("csv-view")).set_checked(csv_visible_);
     (*commands_.at("markdown-view")).set_checked(markdown_visible_);
-    (*name_).set_text((document_.dirty(content) ? "* " : "") +
-                      (document_.path.empty() ? "Untitled" : path_utf8(document_.path)));
     if (content != counted_text_.utf8()) {
         counted_text_.set_text(content);
         character_count_ = counted_text_.grapheme_count().value();
@@ -322,6 +316,22 @@ void Editor::refresh() {
     (*commands_.at("redo")).set_enabled((*text_).can_redo());
     (*commands_.at("wrap")).set_checked((*text_).word_wrap());
     (*commands_.at("status")).set_checked(show_status_);
+    refresh_title(content);
+}
+void Editor::refresh_title(const std::string_view content) {
+    if (!handle_.active())
+        return;
+    std::string title = document_.dirty(content) ? "* " : "";
+    title += document_.path.empty() ? "Untitled" : path_utf8(document_.path.filename());
+    title += " - SwiftEdit";
+    if (title == native_title_)
+        return;
+    const gf::HostServiceStatus changed = handle_.set_title(title);
+    if (changed.accepted())
+        native_title_ = std::move(title);
+    else
+        (*status_).set_text(title + " | Native title update unavailable (host error " +
+                            std::to_string(static_cast<unsigned>(changed.error)) + ").");
 }
 void Editor::refresh_selection() {
     // The pinned TextBox publishes text changes before selection changes. A
@@ -737,6 +747,8 @@ void Editor::shortcut(gf::Window &w, std::uint32_t key, gf::Modifier mods, const
 void Editor::ready(gf::Window &w, gf::ApplicationWindowHandle handle,
                    const std::filesystem::path &initial) {
     handle_ = handle;
+    native_title_.clear();
+    refresh();
     using K = gf::PhysicalKey;
     using M = gf::Modifier;
     struct Shortcut {

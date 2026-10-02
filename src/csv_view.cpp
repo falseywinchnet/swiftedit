@@ -422,7 +422,7 @@ void CsvView::on_pointer(gf::PointerEvent &event) {
         if (window())
             (*window()).request_focus(shared_from_this());
         if (event.button == gf::PointerButton::secondary)
-            (*context_).show(shared_from_this(), event.position);
+            (*context_).show(shared_from_this(), event.position, gf::MenuOpenMode::pointer);
         else if (event.button == gf::PointerButton::primary) {
             dragging_ = true;
             set_pointer_capture(true);

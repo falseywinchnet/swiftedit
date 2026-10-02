@@ -735,6 +735,8 @@ int main(const int argc, char **const argv) {
         check(attached.accepted(), "Headless host attachment");
         const std::shared_ptr<gf::TextBox> text = (*editor).text_control();
         check((*text).multiline() && (*text).accepts_tab(), "Multiline editor setup");
+        check(!find_control(editor, "notepad.document-name"), "No duplicate filename row");
+        check((*text).absolute_bounds().y == 28, "Editor starts directly beneath the menu bar");
         window.request_focus(text);
         const bool input_routed = window.dispatch_text({"first"});
         check(input_routed, "Text input routed");

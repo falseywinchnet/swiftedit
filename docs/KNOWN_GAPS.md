@@ -54,9 +54,10 @@ import and column resizing are not implemented.
   recovery and the final name-replacement race are not eliminated.
 - File Manager picker enumeration remains synchronous. Very large or slow
   directories may block that owned dialog; this is provider-owned work.
-- The stable native title is `SwiftEdit`; a document-name strip carries the full
-  path and unsaved marker. Dynamic native title support is not exposed by this
-  SDK snapshot.
+- Development source now uses the reviewed aaca5d0 SDK for dynamic document
+  titles and pointer/keyboard menu opening. The filename row is removed and its
+  space returned to the document. Consumer native validation and inclusion in a
+  new application release remain pending; v0.3.2 retains the old row/menu focus.
 
 The owner interview now provides direction. These gaps remain implementation
 work, not claims of a finished Malkuth release.

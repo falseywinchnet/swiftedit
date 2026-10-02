@@ -66,6 +66,25 @@ public:
     std::exception_ptr test_failure{};
     std::unique_ptr<gf::Timer> timer{};
     gf::SubscriptionToken tick{};
+    std::string expected_title(const bool dirty, const bool untitled = false) const {
+        std::string title = dirty ? "* " : "";
+        title += untitled ? "Untitled" : notepad::path_utf8(path.filename());
+        title += " - SwiftEdit";
+        return title;
+    }
+    void verify_title(const bool dirty, const bool untitled = false) const {
+        const std::shared_ptr<gf::Label> status =
+            std::dynamic_pointer_cast<gf::Label>(find_control(editor, "notepad.status"));
+        require(status && (*status).text().find("Native title update unavailable") == std::string::npos,
+                "Native title request accepted");
+#ifdef __APPLE__
+        const std::string title = expected_title(dirty, untitled);
+        require(native_window_visible(title.c_str()), "Exact document title belongs to visible native window");
+#else
+        static_cast<void>(dirty);
+        static_cast<void>(untitled);
+#endif
+    }
     ~NativeSmoke() {
         // Application::run has already shut down its windows. Stop is performed
         // by the completion/failure callback before close, never after teardown.
@@ -101,11 +120,16 @@ public:
                 if (!find_open_requested) {
                     require((*(*editor).text_control()).text() == "native\r\nfixture",
                             "Native initial file");
+                    verify_title(false);
+                    require(!find_control(editor, "notepad.document-name"),
+                            "Filename no longer consumes a client-area row");
                     (*(*editor).text_control()).select_all();
                     (*(*editor).text_control()).replace_selection("native saved\r\n");
+                    verify_title(true);
                     (*editor).execute("save");
                     const notepad::FileSnapshot observed_1 = notepad::read_file(path);
                     require(observed_1.bytes == "native saved\r\n", "Native save");
+                    verify_title(false);
                     // Public lifecycle only: no global input, cursor or desktop automation.
                     (*(*editor).text_control()).select(gf::Utf8Offset(0), gf::Utf8Offset(6));
                     find_requested_at = std::chrono::steady_clock::now();
@@ -297,14 +321,15 @@ public:
                 const std::vector<gf::MenuStripItemSpec> &items = (*menu).items();
                 for (std::size_t index = 0; index < items.size(); ++index) {
                     if (items[index].stable_id == "view")
-                        opened = (*menu).open(index);
+                        opened = (*menu).open(index, gf::MenuOpenMode::pointer);
                 }
                 require(opened, "Native View menu opens above rendered Markdown");
                 break;
             }
             case 13: {
 #ifdef __APPLE__
-                capture_native_view("SwiftEdit", "editor-markdown-menu");
+                const std::string title = expected_title(false);
+                capture_native_view(title.c_str(), "editor-markdown-menu");
 #endif
                 const std::shared_ptr<gf::MenuStrip> menu =
                     std::dynamic_pointer_cast<gf::MenuStrip>(
@@ -315,7 +340,8 @@ public:
             }
             case 14: {
 #ifdef __APPLE__
-                capture_native_view("SwiftEdit", "editor-source-status");
+                const std::string title = expected_title(false);
+                capture_native_view(title.c_str(), "editor-source-status");
 #endif
                 (*(*editor).text_control()).set_text("2,3\r\n4,5");
                 (*editor).execute("csv-view");
@@ -345,7 +371,8 @@ public:
                     return;
                 }
 #ifdef __APPLE__
-                capture_native_view("SwiftEdit", "editor-csv-formula");
+                const std::string title = expected_title(true);
+                capture_native_view(title.c_str(), "editor-csv-formula");
 #endif
                 const std::shared_ptr<gf::MenuStrip> menu =
                     std::dynamic_pointer_cast<gf::MenuStrip>(find_control(editor, "notepad.menus"));
@@ -384,6 +411,14 @@ public:
                 (*editor).execute("save");
                 require(notepad::read_file(path).bytes == "2,=A1*4\r\n4,5",
                         "Native CSV save preserves formula source");
+                verify_title(false);
+                (*editor).execute("new");
+                verify_title(false, true);
+                (*(*editor).text_control()).replace_selection("new draft");
+                verify_title(true, true);
+                (*editor).execute("undo");
+                require((*(*editor).text_control()).text().empty(), "New draft undo restores blank document");
+                verify_title(false, true);
                 passed = true;
                 (*timer).stop();
                 static_cast<void>(main_handle.request_close());
@@ -423,9 +458,10 @@ public:
 };
 int main() {
     try {
-        const std::filesystem::path path =
-            std::filesystem::temp_directory_path() /
-            ("notepad-native-" + std::to_string(test_process_id()) + ".csv");
+        std::filesystem::path filename(u8"notepad-native-&-\u03b1-");
+        filename += std::to_string(test_process_id());
+        filename += ".csv";
+        const std::filesystem::path path = std::filesystem::temp_directory_path() / filename;
         const bool observed_2 = std::filesystem::exists(path);
         require(!observed_2, "Unique native fixture");
         struct Cleanup {

@@ -182,6 +182,7 @@ private:
     void ready(gf::Window &, gf::ApplicationWindowHandle, const std::filesystem::path &);
     void closing(gf::HostCloseRequest &);
     void refresh();
+    void refresh_title(std::string_view content);
     void refresh_selection();
     void apply_csv_change(const std::string &);
     void show_csv(bool);
@@ -222,7 +223,8 @@ private:
     std::shared_ptr<MarkdownView> markdown_{};
     bool markdown_visible_{};
     std::shared_ptr<gf::MenuStrip> menu_{};
-    std::shared_ptr<gf::Label> name_{}, status_{};
+    std::shared_ptr<gf::Label> status_{};
+    std::string native_title_{};
     std::map<std::string, std::shared_ptr<gf::Command>> commands_{};
     std::vector<gf::SubscriptionToken> subscriptions_{};
     std::vector<gf::AcceleratorToken> accelerators_{};
