@@ -315,3 +315,25 @@ contents, exit and terminal restoration. These POSIX-only edits passed source
 review, the 123-file spelling audit and Python syntax validation. Native build
 and runtime verification are pending; no Windows test is claimed as proof of the
 POSIX behavior. The preceding native signal/benchmark run is still active.
+
+2026-10-02 validation update: native run 36965181568 and portable run
+36965181557 passed at 9474eacb6bda1fb0c0aadf3b491324e2cb34f388. This validates
+the POSIX partial-input completion regressions on macOS and Linux and supersedes
+the pending-native statements above. All three packaged startup checks passed.
+The public dogfood-9474eacb6bda release contains Windows x64, macOS ARM64 and
+Linux x64 archives with checksums and source/SDK manifests. Anonymous downloads
+of all three archives were independently checked against their SHA-256 sidecars
+and matching source revisions. Master pushes now publish an immutable prerelease
+only after the complete native matrix succeeds. This is release infrastructure
+completion, not completion of the product or its lag audit.
+
+Mac CPU investigation update: provider Time Profiler run 36963650387 completed,
+but attempt 076b0fda4a7943d1b97fffc20b12c0d8 still reports incomplete and
+comparison_accepted=false. Both recorder processes exited successfully and the
+traces contain time-profile and os-signpost table schemas. Focused profiled work
+completed its 120.084828291-second span; symbolized sample analysis is pending.
+Both cleared-focus workloads failed hold_duration_invalid (131.926753125 seconds
+profiled, 131.528282875 seconds unprofiled). They cannot support a valid comparison.
+The provider owner was asked to export/analyze the existing focused trace and
+investigate the cleared timing failure without weakening its acceptance gate.
+No Mac CPU fix or attribution is established by this capture.
