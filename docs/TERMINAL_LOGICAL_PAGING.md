@@ -35,8 +35,23 @@ source refusal. The initial test fixture used the mutation API for raw CRCR
 input and hit its intentional metadata-marker refusal; the fixture now opens
 exact bytes from a unique disposable file, matching the requested open behavior.
 
-Still required: connect this work to the terminal event loop, render bounded
-horizontal windows with exact grapheme/control mapping, preserve caret/selection
+`TerminalHorizontalLine` now prepares a bounded horizontal window from a
+completed logical page. Each step reads at most 8 KiB; retained source context
+is capped at 64 KiB. It stops after reaching the visible right edge, retains
+only intersecting runs and legal caret boundaries, and preserves absolute
+source offsets. Partially visible wide glyphs become spaces; tabs and inert
+control labels may be clipped. Oversized graphemes refuse intact. Failed tasks
+cannot publish or resume, and stale identity/revision/size refuses publication.
+
+Tests compare the editable row renderer across small read budgets, widths and
+horizontal positions, including malformed bytes, tabs, combining marks, ZWJ
+emoji and regional indicators. A real 16 MiB read-only line reaches columns
+8190..8201 in two 8 KiB reads without retaining that entire line. Cancellation,
+oversized context and stale results are covered. The complete Windows Release
+build and all 26 headless tests passed in 23.07 seconds; the 135-file spelling
+audit passed. These are bounded-work checks, not physical latency measurements.
+
+Still required: connect this work to the terminal event loop, preserve caret/selection
 and backward navigation across mode/width changes, implement space wrapping,
 and exercise F2 and cancellation through the terminal host. This component does
 not yet change the visible read-only terminal or close the wrap requirement.
