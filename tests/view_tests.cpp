@@ -217,8 +217,51 @@ void verify_cooperative_formulas() {
     check(idle.dirty_marks == 0 && idle.scheduled_frame_requests == 0,
           "A late frame after completion does not repaint or schedule more work");
 }
+void verify_csv_page_navigation() {
+    const std::shared_ptr<notepad::CsvView> grid =
+        gf::make_control<notepad::CsvView>(gf::StableId("navigation.csv"));
+    gf::Window window(grid, {800, 200});
+    (*grid).set_source("a,b,c\nd,e,f\ng,h,i\nj,k,l\nm,n,o\np\nq,r,s\nt,u,v\nw,x,y");
+    window.perform_layout();
+    (*grid).select_cell({0, 1});
+    gf::KeyEvent key{};
+    key.action = gf::KeyAction::down;
+    key.physical_key = gf::PhysicalKey::page_down;
+    key.modifiers = gf::Modifier::shift;
+    (*grid).on_key(key);
+    check(key.handled && (*grid).selected().row == 3 && (*grid).selected().column == 1,
+          "CSV Page Down moves by the visible row count");
+    check((*grid).copy_cells() == "b\r\ne\r\nh\r\nk", "Shift Page Down retains the rectangle anchor");
+    key.physical_key = gf::PhysicalKey::page_up;
+    key.modifiers = gf::Modifier::none;
+    (*grid).on_key(key);
+    check((*grid).selected().row == 0 && (*grid).copy_cells() == "b", "Page Up returns and collapses selection");
+    key.physical_key = gf::PhysicalKey::end;
+    (*grid).on_key(key);
+    check((*grid).selected().column == 2, "End reaches the last cell in this row");
+    key.modifiers = gf::Modifier::meta;
+    (*grid).on_key(key);
+    check((*grid).selected().row == 8 && (*grid).selected().column == 2, "Cmd End reaches final existing cell");
+    const std::shared_ptr<gf::VScrollBar> vertical =
+        std::dynamic_pointer_cast<gf::VScrollBar>(window.find("csv.vertical"));
+    const double before = (*vertical).value();
+    gf::PointerEvent wheel{};
+    wheel.action = gf::PointerAction::wheel;
+    wheel.wheel_delta.x = 1;
+    (*grid).on_pointer(wheel);
+    check((*vertical).value() == before, "Horizontal-only wheel never scrolls CSV upward");
+    key.physical_key = gf::PhysicalKey::page_up;
+    key.modifiers = gf::Modifier::none;
+    (*grid).on_key(key);
+    check((*grid).selected().row == 5 && (*grid).selected().column == 0, "Page navigation clamps to a ragged row's real cells");
+    key.physical_key = gf::PhysicalKey::home;
+    key.modifiers = gf::Modifier::control;
+    (*grid).on_key(key);
+    check((*grid).selected().row == 0 && (*grid).selected().column == 0, "Ctrl Home reaches the first cell");
+}
 int main() {
     try {
+        verify_csv_page_navigation();
         verify_text_baselines();
         verify_duplicate_formulas();
         verify_cooperative_formulas();

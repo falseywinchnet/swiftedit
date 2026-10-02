@@ -508,3 +508,14 @@ ruler alignment and unchanged text-measurement count on warm navigation. Build
 and house-style spelling audit passed (124 files). These checks prove layout
 reuse, not an end-to-end physical keyboard latency bound; native validation is
 pending for this checkpoint.
+
+CSV navigation scan: Page Up/Down now move by the visible row count, Home/End
+select the first/last existing cell in a row, and Ctrl/Cmd Home/End reach the
+table endpoints. Shift preserves the rectangle anchor and ragged target rows
+clamp to real cells. Zero vertical wheel movement no longer spuriously scrolls
+upward. Focused tests verify these cases, including exact copied selection bytes.
+The F1 help describes both Markdown and CSV navigation. About now uses the CMake
+project version rather than the stale hardcoded 0.2 label. Build and editor/views
+tests passed (2.05 seconds); house-style audit passed (124 files). Native validation
+of this checkpoint is pending. The preceding Markdown native run 36970454027 has
+passed Linux; Windows/macOS were still running at this inspection.

@@ -135,6 +135,7 @@ option(NOTEPAD_BUILD_UI "Build the native editor and installed shared picker con
 if(NOTEPAD_BUILD_UI)
   find_package(FileManagerDocumentPicker 1.0 CONFIG REQUIRED)
   add_library(notepad_ui src/editor.cpp src/windows.cpp src/csv_view.cpp src/markdown_view.cpp src/query_field.cpp src/character_picker.cpp src/conflict.cpp src/user_paths.cpp)
+  target_compile_definitions(notepad_ui PRIVATE SWIFTEDIT_VERSION="${PROJECT_VERSION}")
   target_link_libraries(notepad_ui PUBLIC notepad_document GUIForms::Application FileManager::DocumentPickerView)
   if(APPLE)
     add_executable(notepad MACOSX_BUNDLE src/main.cpp)

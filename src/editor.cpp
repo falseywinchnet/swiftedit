@@ -705,11 +705,15 @@ void Editor::execute(const std::string &id) {
                 "session-only. Save resets ordinary Undo. Document > Restore As Opened "
                 "recovers the original session text. Document also offers explicit newline "
                 "conversion and date/time insertion (F5). The separate command-session "
-                "executable supports bounded large-file pages and CSV calculations.");
+                "executable supports bounded large-file pages and CSV calculations.\n\n"
+                "In rendered Markdown, arrows and Page Up/Down scroll; Home/End go to the "
+                "beginning/end. Links remain inactive. In CSV table view, Page Up/Down move "
+                "by a viewport; Home/End go to the first/last cell in the row. Ctrl/Cmd+Home/End "
+                "go to the first/last cell in the table. Hold Shift to extend a cell rectangle.");
         else if (id == "about")
             message(
                 "About SwiftEdit",
-                "SwiftEdit 0.2\nA plain-text editor with Markdown and CSV views.\n\nDevelopment build.");
+                "SwiftEdit " SWIFTEDIT_VERSION "\nA plain-text editor with Markdown and CSV views.\n\nDevelopment build.");
         refresh();
     } catch (const std::exception &e) {
         error(e.what());

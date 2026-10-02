@@ -402,7 +402,7 @@ void CsvView::on_pointer(gf::PointerEvent &event) {
         return;
     }
     if (event.action == gf::PointerAction::wheel) {
-        if (table_ && (*table_).rows().size() > visible_rows_)
+        if (event.wheel_delta.y != 0 && table_ && (*table_).rows().size() > visible_rows_)
             (*vertical_).increment(event.wheel_delta.y < 0 ? 3 : -3);
         event.handled = true;
         return;
@@ -475,6 +475,8 @@ void CsvView::on_key(gf::KeyEvent &event) {
         event.handled = true;
     } else {
         swiftedit::CellAddress next = caret_;
+        const bool document = gf::has_modifier(event.modifiers, gf::Modifier::control) ||
+            gf::has_modifier(event.modifiers, gf::Modifier::meta);
         if (event.physical_key == gf::PhysicalKey::left && next.column)
             --next.column;
         else if (event.physical_key == gf::PhysicalKey::right &&
@@ -485,6 +487,17 @@ void CsvView::on_key(gf::KeyEvent &event) {
         else if (event.physical_key == gf::PhysicalKey::down &&
                  next.row + 1 < (*table_).rows().size())
             ++next.row;
+        else if (event.physical_key == gf::PhysicalKey::page_up)
+            next.row -= std::min(next.row, visible_rows_);
+        else if (event.physical_key == gf::PhysicalKey::page_down)
+            next.row += std::min(visible_rows_, (*table_).rows().size() - 1 - next.row);
+        else if (event.physical_key == gf::PhysicalKey::home) {
+            if (document) next.row = 0;
+            next.column = 0;
+        } else if (event.physical_key == gf::PhysicalKey::end) {
+            if (document) next.row = (*table_).rows().size() - 1;
+            next.column = (*table_).rows()[next.row].size() - 1;
+        }
         else
             return;
         next.column = std::min(next.column, (*table_).rows()[next.row].size() - 1);
