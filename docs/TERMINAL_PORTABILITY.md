@@ -252,3 +252,8 @@ pending.
 
 Resize source c2fb0aa passed native run 36958985720 and portable-core run
 36958985706 on Windows, macOS and Linux.
+
+Streaming terminal search source 53abb7c passed native run 36959673036 and
+portable-core run 36959673110 on all three platforms. Its verified Mac package
+is published as v0.2.9-dogfood.20261001. The CLI protocol follow-up remains
+pending native validation.
