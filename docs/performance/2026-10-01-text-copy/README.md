@@ -37,3 +37,8 @@ flush in this run, not proof that disk IO became faster. The runs were not paire
 background load and caches were uncontrolled. Step worst reached 1.0518 ms.
 Only three publication samples per fixture were taken. Physical input latency,
 native Mac/Linux timing and the full application lag audit remain pending.
+
+The native build workflow now runs this benchmark on Windows, macOS and Linux,
+retaining summary.txt, receipt.json and fixtures/samples.csv under
+text-copy-evidence. Large source/copy fixtures are not uploaded. First native
+measurements from this wiring are pending; local numbers above remain local.

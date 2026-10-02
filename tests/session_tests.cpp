@@ -154,6 +154,34 @@ int main() {
             task.begin_publication(paged_copy_source);
         }
         check(std::filesystem::exists(joined_target), "Publication owner joins work before destruction");
+        const std::filesystem::path failed_background = dir / "failed-background.txt";
+        {
+            SessionTextCopy task(paged_copy_source, failed_background);
+            while (!task.step(paged_copy_source)) {}
+            raw(failed_background, "competing file");
+            task.begin_publication(paged_copy_source);
+            while (!task.publication_ready(std::chrono::milliseconds(8))) {}
+            bool failed = false;
+            try { task.finish_publication(); }
+            catch (const std::exception &) { failed = true; }
+            check(failed && task.state() == TextCopyState::failed,
+                  "Worker publication failures reach the task owner");
+        }
+        check(notepad::read_file(failed_background).bytes == "competing file",
+              "Worker publication failure preserves competing destination");
+        const std::filesystem::path independent_output = dir / "independent-copy.txt";
+        {
+            Session source{};
+            source.replace_ranges({{0, 0}}, "prepared snapshot", source.stamp());
+            SessionTextCopy task(source, independent_output);
+            check(task.step(source), "Independent publication fixture is prepared");
+            task.begin_publication(source);
+            source.reset();
+            while (!task.publication_ready(std::chrono::milliseconds(8))) {}
+            task.finish_publication();
+        }
+        check(notepad::read_file(independent_output).bytes == "prepared snapshot",
+              "Publication worker owns its prepared file independently of Session lifetime");
         const std::filesystem::path stale_target = dir / "stale-copy.txt";
         {
             Session changing{};

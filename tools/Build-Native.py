@@ -148,6 +148,38 @@ def main() -> None:
         'performance_threshold': 'none',
         'limits': 'three simple-pattern fixtures; not exhaustive query-complexity coverage'}
     (search_evidence / 'receipt.json').write_text(json.dumps(search_receipt, indent=2) + '\n', encoding='utf-8')
+    copy_benchmark: Path = build / ('swiftedit-text-copy-bench.exe' if os.name == 'nt'
+                                    else 'swiftedit-text-copy-bench')
+    copy_evidence: Path = build / 'text-copy-evidence'
+    copy_evidence.mkdir()
+    copy_receipt: dict[str, object] = {
+        'source_revision': revision, 'provider_revision': lock['provider_revision'],
+        'platform': arguments.platform, 'executable_sha256': sha256(copy_benchmark),
+        'status': 'started',
+        'scope': 'headless SessionTextCopy stages; not physical input latency or idle CPU',
+        'fixture_bytes': 16777216, 'trials_per_fixture': 3, 'source_step_bytes': 65536,
+        'fixtures': ['ASCII', 'Unicode', 'invalid UTF-8'],
+        'operations': ['prepare', 'step', 'dispatch', 'publication total', 'completion', 'cancel'],
+        'validation': 'every completed output compared byte-for-byte with whole-source conversion; cancelled destination absent; source stamp unchanged',
+        'percentiles': 'nearest rank; steps pooled across trials; other phases only three samples per fixture',
+        'clock': 'steady_clock wall; GetProcessTimes Windows or std::clock POSIX process CPU',
+        'cpu_fields': 'measured for step/publication total; empty elsewhere; coarse accounting may report zero',
+        'cache_state': 'uncontrolled; ASCII then Unicode then invalid; validation after each trial',
+        'completion_wait_ms': 8, 'process_timeout_seconds': 120,
+        'performance_threshold': 'none'}
+    try:
+        with (copy_evidence / 'summary.txt').open('w', encoding='utf-8') as summary:
+            measured = subprocess.run(
+                [str(copy_benchmark), str(copy_evidence / 'fixtures')], check=False,
+                timeout=120, stdout=summary, stderr=subprocess.STDOUT)
+        copy_receipt['exit_code'] = measured.returncode
+        copy_receipt['status'] = 'completed' if measured.returncode == 0 else 'failed'
+        measured.check_returncode()
+    except subprocess.TimeoutExpired:
+        copy_receipt['status'] = 'timed_out'
+        raise
+    finally:
+        (copy_evidence / 'receipt.json').write_text(json.dumps(copy_receipt, indent=2) + '\n', encoding='utf-8')
     if arguments.platform == 'macos-arm64':
         run([sys.executable, '-B', 'tools/Package-Mac.py', '--build', str(build), '--sdk', str(sdk)])
 

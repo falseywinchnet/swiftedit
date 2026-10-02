@@ -275,3 +275,15 @@ completion timings and limitations are in performance/2026-10-01-text-copy.
 Full 23-test suite passed in 18.83 seconds; the added exit-during-publication
 shared-loop test passed in a final terminal-app run of 5.09 seconds. Native
 validation and physical input latency remain pending.
+
+Native CI now runs the copy benchmark after the existing search benchmark and
+retains only summary, raw samples and a source/provider/platform/executable
+receipt. The fixture/output files stay in the runner workspace. Failed exits and
+timeouts retain an explicit receipt and still fail the build. No numerical
+performance threshold is asserted. This wiring awaits its first native run.
+
+Additional publication-owner tests verify that a worker failure is reported,
+a raced destination remains unchanged, and resetting the source Session after
+publication dispatch cannot invalidate the worker's prepared-file ownership.
+The focused session test passed in 0.96 seconds. House-style audit passed across
+123 source files, and the updated native build script parsed successfully.
