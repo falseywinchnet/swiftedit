@@ -1,4 +1,5 @@
 #include "editor.hpp"
+#include "native_font_check.hpp"
 #include "new_window.hpp"
 #include "platform.hpp"
 #include <chrono>
@@ -83,6 +84,7 @@ private:
         std::function<void(gf::HostCloseRequest &)> closing{};
     };
     void ready(const std::size_t index, gf::Window &window, gf::ApplicationWindowHandle handle) {
+        require_native_fonts(window);
         if (hooks_[index].ready)
             hooks_[index].ready(window, handle);
         if (!index) {

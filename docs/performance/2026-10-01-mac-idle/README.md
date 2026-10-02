@@ -1,5 +1,26 @@
 # Mac idle CPU baseline — unresolved defect
 
+## Evidence correction: native fixtures lacked bundled fonts
+
+The native CSV view capture from source `27655d1`, run `36949493970`, exposed
+missing text despite successful tests. Its renderer, and the controlled idle
+probe renderer, report `incomplete bundled font pack`. The Mac host resolves
+fonts from NSBundle; our bare test executables did not have bundle resources.
+`GUI_FORMS_FONT_DIR` in the test environment does not override that Mac path.
+
+**All earlier controlled native idle observations below are fontless-fixture
+measurements, not representative measurements of the packaged application's
+normal text-rendering path.** Preserve their raw counters, but do not use their
+lower CPU percentages to discount the owner's 7% report or assess a product fix.
+The separately launched packaged app already has fonts; its measurements retain
+their stated uncontrolled-focus/occlusion limitations. No numerical correction
+or loaded-font baseline can be inferred from these older observations.
+
+The correction bundles each Mac native GUI fixture with the installed font pack
+and refuses visual/idle runs when the host reports incomplete fonts. Corrected
+native results are pending. The provider coordinator independently confirmed
+the same resource gap in its idle fixture and is correcting it there too.
+
 Owner report: SwiftEdit consumes approximately 7% CPU on an Apple silicon Mac
 running macOS 26 while showing a blank document. No claim of acceptability or
 resolved cause is made.

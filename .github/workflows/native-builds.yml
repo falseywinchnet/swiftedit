@@ -68,5 +68,5 @@ jobs:
             .build/native-${{ matrix.platform }}/Testing/Temporary/
             .build/native-${{ matrix.platform }}/mac-package-*/startup.log
             .build/native-${{ matrix.platform }}/mac-package-*/idle-stack*.txt
-            .build/native-${{ matrix.platform }}/native-visual-csv-*/*.png
+            .build/native-${{ matrix.platform }}/native-visual-*/*.png
           if-no-files-found: ignore

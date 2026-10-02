@@ -1,4 +1,5 @@
 #include "editor.hpp"
+#include "native_font_check.hpp"
 #include <chrono>
 #include <ctime>
 #include <iostream>
@@ -49,6 +50,7 @@ public:
 
 private:
     void ready(std::size_t index, gf::Window &window, gf::ApplicationWindowHandle handle) {
+        require_native_fonts(window);
         if (observed_[index].ready)
             observed_[index].ready(window, handle);
         if (index == 0)

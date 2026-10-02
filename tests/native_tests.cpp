@@ -1,4 +1,5 @@
 #include "editor.hpp"
+#include "native_font_check.hpp"
 #include <array>
 #include <fstream>
 #include <iostream>
@@ -65,6 +66,7 @@ public:
         timer.reset();
     }
     void ready(std::size_t index, gf::Window &window, gf::ApplicationWindowHandle handle) {
+        require_native_fonts(window);
         hooks[index].ready(window, handle);
         handles[index] = handle;
         ++ready_count;

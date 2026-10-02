@@ -1,4 +1,5 @@
 #include "csv_view.hpp"
+#include "native_font_check.hpp"
 #include <gui_forms/application.hpp>
 #include <iostream>
 #include <stdexcept>
@@ -44,6 +45,7 @@ public:
 
 private:
     void ready(gf::Window &window, gf::ApplicationWindowHandle handle) {
+        require_native_fonts(window);
         handle_ = handle;
         window_ = &window;
         window.perform_layout();
@@ -87,7 +89,7 @@ private:
             // Capture only after the measurement so its forced view redraw
             // cannot contaminate settled-idle counters.
             try {
-                capture_csv_native_view();
+                capture_native_view("SwiftEdit CSV native regression", "csv");
             } catch (...) {
                 capture_failure_ = std::current_exception();
             }

@@ -22,7 +22,10 @@ This is a native view redraw into a bitmap, not a compositor screenshot.
 Successful capture alone does not establish correct pixels, keyboard behavior,
 desktop placement or acceptable latency. The artifact still requires inspection.
 It is also a direct CsvView fixture rather than the full editor menu topology.
-Rendered Markdown and other platforms still require separate visual evidence.
+The new Markdown fixture waits for an observed visible native paint before
+capture and includes headings, emphasis, a quotation, task markers, a table,
+code, an inert link and image alt text. It also runs native paint/shutdown checks
+on Windows and Linux; PNG capture is currently Mac-only.
 
 Apple documents the capture semantics in
 [cacheDisplayInRect:toBitmapImageRep:](https://developer.apple.com/documentation/appkit/nsview/cachedisplay(in:to:)?language=objc).
@@ -34,3 +37,25 @@ unique window selection, scoped native lifetime, post-measurement capture and
 failure propagation through shutdown. macOS compilation, artifact generation
 and visual inspection remain pending native CI.
 No local native window launch is required or claimed.
+
+## First artifact revealed invalid font provisioning
+
+Source `27655d1`, native run `36949493970`, passed all three platforms and core
+run `36949493974` passed. Mac visual inspection nevertheless FAILED: the 800x600
+CSV PNG shows the grid, selection, code background and warning triangle, but
+no text anywhere. The log reports `incomplete bundled font pack`. This proves
+why a successful native test is insufficient visual evidence.
+
+The Mac host loads fonts from NSBundle. The packaged app has fonts, but bare
+test executables did not. The test environment's GUI_FORMS_FONT_DIR is not used
+by the Mac host. All five Mac GUI fixture executables now receive app bundles
+with the installed fonts, and public renderer diagnostics reject missing fonts
+before native visual/idle tests. Earlier controlled idle results are reclassified
+in the idle evidence README; no product CPU fix is claimed.
+
+The failed artifact is preserved as `performance/2026-10-01-mac-idle/fontless-csv-27655d1.png`.
+The original downloaded log is in `.build/native-27655d1-evidence/mac` and the
+immutable CI artifact remains attached to the run. These corrections and the
+Markdown fixture passed the local build and all 20 headless tests in 4.03 seconds;
+105 authored source/header files passed the spelling scan. Mac bundle execution
+and corrected pixel inspection are pending the next native run.
