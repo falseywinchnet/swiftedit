@@ -9,14 +9,16 @@ limits; broad desktop and responsiveness validation remain in progress. Grid
 paste inserts plain clipboard text into the selected cell; rectangular clipboard
 import and column resizing are not implemented.
 
-- Native Windows, macOS ARM64 and Linux builds and lifecycle tests pass. The
-  first Mac dogfood archive is published; see DOGFOOD_2026-10-01.md. The interactive
-  console host remains Windows-only; terminal core tests run on all three systems.
+- Release v0.3.2 has validated Windows x64, macOS ARM64 and Linux x64 packages.
+  Each platform package includes the GUI, interactive terminal and CLI. Native
+  terminal and application tests run on all three systems; current development
+  revisions still require their own CI and packaging evidence.
 - The current GUI.Forms multiline provider has a 1 MiB UTF-8 document limit and
   4096-byte logical-line limit. Files beyond either limit are refused intact.
   This is a toolkit development bound, not a final product decision.
-- Scrolling currently uses the mouse wheel and caret reveal, without visible
-  scrollbars. Tabs use four-space stops. Home/End address the visual row;
+- Plain-text GUI scrolling currently uses the mouse wheel and caret reveal,
+  without visible scrollbars. Markdown and CSV have their own scrollbars.
+  Tabs use four-space stops. Home/End address the visual row;
   Ctrl+Home/End address the document. Full bidi visual caret navigation, IME
   composition, accessibility text ranges and native screen-reader behavior
   require further provider validation.
@@ -24,8 +26,9 @@ import and column resizing are not implemented.
   it is not an arbitrary installed-font-family chooser.
 - Case-insensitive search folds only ASCII A-Z. Literal non-ASCII text searches
   exactly. Query characters can be flagged as one-grapheme wildcards by right-click.
-  Native Ctrl+? requires the provider's Windows key normalization update; normalized
-  key events are covered by headless tests. Find Next and Replace All yield and
+  Normalized Ctrl+? key events are covered by headless tests; the owned AppKit
+  synthetic Control+Shift+/ path passed in run 36981694678. This does not establish
+  physical keyboard delivery across platforms. Find Next and Replace All yield and
   cancel stale work; snapshot/final-publication latency still needs measurement.
   No regex, whole-word
   or selection-only modes.
