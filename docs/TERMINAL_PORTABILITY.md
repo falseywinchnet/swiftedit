@@ -319,3 +319,10 @@ passed (terminal test 4.22 seconds); the terminal application test passed in
 4.55 seconds, and the 117-file spelling audit remained clean. The preceding
 c36b0ba caret correction passed native run 36962090425 on all three platforms
 and portable run 36962090399. Home/End native validation follows this push.
+
+Ctrl+T Save Text Copy now supports read-only paged files. Conversion/writes run
+in at most 64 KiB source steps, with any-key cancellation before publication.
+The output is a new file, each illegal byte becomes one space, valid UTF-8 split
+across reads is preserved, and the original session is unchanged. The final OS
+flush/publication is synchronous. Shared-loop tests cover a real 16 MiB success
+and Escape cancellation; physical terminal and native integration QA are pending.

@@ -143,6 +143,14 @@ try {
     } finally { $largeCountStream.Dispose() }
     $response = Send-Request -Process $process -Fields @('open',$largeCountPath.Replace('\','\\'))
     Assert ($response[-1].StartsWith("ok`topen`t")) 'Open real paged count fixture'
+    $largeTextCopy = Join-Path $fixture 'large-text-copy.txt'
+    $response = Send-Request -Process $process -Fields @('save-text-copy',$largeTextCopy.Replace('\','\\'))
+    Assert ($response[-1].StartsWith("ok`tsave-text-copy`t")) 'Paged Save Text Copy succeeds through CLI'
+    $sourceHash = (Get-FileHash -LiteralPath $largeCountPath -Algorithm SHA256).Hash
+    $copyHash = (Get-FileHash -LiteralPath $largeTextCopy -Algorithm SHA256).Hash
+    Assert ($sourceHash -eq $copyHash) 'Paged CLI text copy preserves valid source bytes'
+    $response = Send-Request -Process $process -Fields @('save-text-copy',$largeTextCopy.Replace('\','\\'))
+    Assert ($response[-1].StartsWith("error`t")) 'Paged CLI text copy refuses an existing destination'
     $response = Send-Request -Process $process -Fields @('word-count-start')
     Assert ($response[0] -eq "word-count-progress`t0`t16777216") 'Paged count begins without scanning'
     for ($countStep = 0; $countStep -lt 256; ++$countStep) {

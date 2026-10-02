@@ -55,7 +55,9 @@ CRCR is reserved for line-marker metadata and prohibited in replacement payloads
 existing source CRCR can still be read and saved unchanged.
 
 Files >=16 MiB are read-only via a retained file handle and bounded reads.
-The older `find` command, edits and sanitize remain restricted to smaller files.
+The older `find` command and edits remain restricted to smaller files.
+`save-text-copy` supports paged files with bounded streaming conversion and
+new-file publication; the command runs synchronously until completion.
 The streaming `search-start/next/cancel` commands support paged files. There is
 no background thread for these tasks; callers advance them cooperatively.
 Read-only paging follows the opened file

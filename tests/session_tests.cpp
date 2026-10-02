@@ -1,5 +1,6 @@
 #include "session.hpp"
 #include "new_file_writer.hpp"
+#include "session_text_copy.hpp"
 #include "text_copy_stream.hpp"
 #include <fstream>
 #include <iostream>
@@ -116,6 +117,38 @@ int main() {
         for (const std::filesystem::directory_entry &entry : std::filesystem::directory_iterator(dir))
             check(entry.path() == copy_target || entry.path() == raced_target,
                   "Successful and refused publication leave no temporary files");
+        Session paged_copy_source{};
+        paged_copy_source.open(copy_target);
+        const DocumentStamp copy_stamp = paged_copy_source.stamp();
+        const std::filesystem::path task_target = dir / "task-copy.txt";
+        {
+            SessionTextCopy task(paged_copy_source, task_target);
+            check(!task.step(paged_copy_source, 1) && task.offset() == 1,
+                  "Text copy task performs a bounded read");
+        }
+        check(!std::filesystem::exists(task_target), "Cancelled copy task does not publish output");
+        paged_copy_source.save_text_copy(task_target);
+        {
+            PagedFile copied(task_target);
+            check(copied.size() == paged_copy_source.size() && copied.page(copied.size() - 4, 4).bytes == "tail",
+                  "Session Save Text Copy supports paged sources");
+        }
+        check(paged_copy_source.identity() == copy_stamp.identity &&
+              paged_copy_source.revision() == copy_stamp.revision && !paged_copy_source.dirty(),
+              "Copy publication preserves the source session");
+        const std::filesystem::path stale_target = dir / "stale-copy.txt";
+        {
+            Session changing{};
+            changing.replace_ranges({{0, 0}}, "before", changing.stamp());
+            SessionTextCopy task(changing, stale_target);
+            check(task.step(changing), "Small copy reaches ready state");
+            changing.replace_ranges({{0, 6}}, "after", changing.stamp());
+            bool stale_rejected = false;
+            try { task.publish(changing); }
+            catch (const std::exception &) { stale_rejected = true; }
+            check(stale_rejected && task.state() == TextCopyState::failed &&
+                  !std::filesystem::exists(stale_target), "Stale ready copy cannot publish");
+        }
         const std::filesystem::path file = dir / "sample.txt";
         raw(file, "before old after\r\nsecond old after");
         Session s{};

@@ -1,4 +1,5 @@
 #include "session.hpp"
+#include "session_text_copy.hpp"
 #include "session_replace.hpp"
 #include <algorithm>
 #include <atomic>
@@ -417,11 +418,9 @@ void Session::save_as(const std::filesystem::path &target) {
     published(std::move(path), std::move(saved), std::move(written));
 }
 void Session::save_text_copy(const std::filesystem::path &target) const {
-    editable();
-    const std::filesystem::path destination = std::filesystem::absolute(target);
-    const std::string sanitized = text_copy(text_);
-    const notepad::FileSnapshot published_copy = notepad::write_file(destination, sanitized, {});
-    static_cast<void>(published_copy);
+    SessionTextCopy copy(*this, target);
+    while (!copy.step(*this)) {}
+    copy.publish(*this);
 }
 std::string normalize_newlines(std::string_view s, std::string_view ending) {
     if (ending != "\n" && ending != "\r" && ending != "\r\n")

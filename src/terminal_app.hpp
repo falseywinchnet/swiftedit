@@ -7,6 +7,7 @@
 #include "date_time.hpp"
 #include "session_word_count.hpp"
 #include "session_copy.hpp"
+#include "session_text_copy.hpp"
 #include <algorithm>
 #include <iostream>
 #include "terminal_console.hpp"
@@ -60,6 +61,7 @@ public:
         copying_.reset();
         ending_.reset();
         line_boundary_.reset();
+        text_copy_.reset();
         page_anchor_ = 0;
         page_caret_ = 0;
         buffer_.open(path);
@@ -96,6 +98,26 @@ public:
                 redraw = false;
             }
             try {
+                if (text_copy_) {
+                    if ((*text_copy_).state() == swiftedit::TextCopyState::ready) {
+                        if (!console_.input_ready()) {
+                            (*text_copy_).publish(buffer_.session());
+                            text_copy_.reset();
+#ifdef SWIFTEDIT_TERMINAL_SMOKE
+                            ++text_copy_saves_;
+#endif
+                            status_ = "Text copy saved; open document unchanged";
+                            redraw = true;
+                            continue;
+                        }
+                    } else {
+                        const bool ready = (*text_copy_).step(buffer_.session());
+                        if (ready)
+                            continue;
+                        if (!console_.input_ready())
+                            continue;
+                    }
+                }
                 if (line_boundary_) {
                     if ((*line_boundary_).step(buffer_.session())) {
                         const std::uint64_t target = (*line_boundary_).result(buffer_.session());
@@ -218,6 +240,7 @@ public:
                 copying_.reset();
                 ending_.reset();
                 line_boundary_.reset();
+                text_copy_.reset();
                 status_ = failure.what();
                 redraw = true;
                 continue;
@@ -407,8 +430,6 @@ private:
             done_ = true;
     }
     void text_copy() {
-        if (buffer_.session().read_only())
-            throw std::runtime_error("Save Text Copy is not yet available for read-only pages.");
         const std::filesystem::path source =
             buffer_.session().path().empty()
                 ? terminal_path(swiftedit::suggested_name(buffer_.session().text()))
@@ -521,6 +542,12 @@ private:
         const bool alt = event.alt;
         const bool shift = event.shift;
         const std::uint32_t key = event.key;
+        if (text_copy_) {
+            text_copy_.reset();
+            status_ = "Text copy cancelled; destination unchanged";
+            if (key == terminal_key::escape)
+                return;
+        }
         if (line_boundary_) {
             line_boundary_.reset();
             status_ = "Read-only navigation cancelled";
@@ -647,11 +674,16 @@ private:
                     if (exit_after_save_)
                         done_ = true;
                 } else if (prompt_ == Prompt::text_copy_path) {
-                    buffer_.save_text_copy(path);
+                    if (buffer_.session().read_only()) {
+                        text_copy_ = std::make_unique<swiftedit::SessionTextCopy>(buffer_.session(), path);
+                        status_ = "Saving text copy... Any key cancels";
+                    } else {
+                        buffer_.save_text_copy(path);
 #ifdef SWIFTEDIT_TERMINAL_SMOKE
-                    ++text_copy_saves_;
+                        ++text_copy_saves_;
 #endif
-                    status_ = "Text copy saved; open document unchanged";
+                        status_ = "Text copy saved; open document unchanged";
+                    }
                 } else
                     open(path);
                 prompt_ = Prompt::none;
@@ -881,6 +913,7 @@ private:
     std::unique_ptr<swiftedit::SessionWordCount> counting_{};
     std::unique_ptr<swiftedit::SessionCopy> copying_{};
     std::unique_ptr<swiftedit::TerminalPageEnd> ending_{};
+    std::unique_ptr<swiftedit::SessionTextCopy> text_copy_{};
     std::unique_ptr<swiftedit::TerminalLineBoundary> line_boundary_{};
     bool line_extend_{};
     bool end_extend_{};

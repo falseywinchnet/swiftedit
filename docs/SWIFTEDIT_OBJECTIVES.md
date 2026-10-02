@@ -225,3 +225,21 @@ findings. Native POSIX validation is pending this push. The preceding Home/End
 checkpoint 828dfb7 passed native run 36962515925 and portable run 36962515920.
 The paged Save Text Copy command remains disabled until the source-stamped task
 and terminal/CLI orchestration are connected and verified.
+
+Paged Save Text Copy is now connected (2026-10-01). SessionTextCopy validates
+source identity/revision/size for each bounded read-convert-write step and again
+before publication. A ready task does not publish automatically; dropping it
+cancels its owned temporary. The terminal Ctrl+T command advances paged copies
+cooperatively and checks queued input before publication. Any key cancels; Escape
+is consumed. Successful output leaves the open source, selection and revision
+unchanged. CLI save-text-copy uses the same task synchronously; it supports paged
+files but does not yet expose cooperative protocol advancement. Final OS flush
+and atomic publication are synchronous and require separate latency measurement.
+
+Tests cover one-byte task steps, cancellation without publication, a source
+change after readiness, >16 MiB Session publication, actual 16 MiB terminal save
+and Escape cancellation, plus CLI SHA-256 equality and existing-target refusal.
+Full local suite: 23 passed in 11.15 seconds. Expanded CLI test passed in 1.15
+seconds. House-style audit: 122 source files, zero spelling findings. Native
+integration validation is pending. This supersedes earlier ledger statements
+that paged Save Text Copy is unavailable; large GUI integration remains pending.

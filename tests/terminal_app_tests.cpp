@@ -14,7 +14,8 @@ public:
     mutable std::size_t found_count{};
     mutable bool three_copy_seen{}, two_copy_seen{}, caret_completed{};
     mutable bool line_pending{}, line_completed{};
-    bool wait_for_line{};
+    bool wait_for_line{}, wait_for_text_copy{};
+    mutable bool text_copy_pending{}, text_copy_saved{};
     bool started{};
     void start() override { started = true; }
     swiftedit::TerminalSize size() const override { return {80, 24}; }
@@ -22,6 +23,12 @@ public:
         if (text.empty() || !started)
             throw std::runtime_error("Unexpected empty or premature terminal frame.");
         ++writes;
+        if (text.find("Saving text copy...") != std::string_view::npos)
+            text_copy_pending = true;
+        if (text.find("Text copy saved; open document unchanged") != std::string_view::npos) {
+            text_copy_pending = false;
+            text_copy_saved = true;
+        }
         if (text.find("Finding line boundary...") != std::string_view::npos)
             line_pending = true;
         if (text.find("Read-only line boundary reached") != std::string_view::npos) {
@@ -59,7 +66,7 @@ public:
     }
     bool input_ready() const override {
         const bool ready = cursor < inputs.size() && (!wait_for_end || end_seen) &&
-                           (!wait_for_line || !line_pending) && (!wait_for_copy || copy_seen) && (!wait_for_previous || !previous_pending) &&
+                           (!wait_for_text_copy || !text_copy_pending) && (!wait_for_line || !line_pending) && (!wait_for_copy || copy_seen) && (!wait_for_previous || !previous_pending) &&
                            (!wait_for_search || !search_pending);
         return ready;
     }
@@ -205,6 +212,32 @@ int main() {
             output.seekp(swiftedit::editable_limit - 1);
             output.put('z');
         }
+        const std::filesystem::path saved_copy = swiftedit::versioned_name(large_path);
+        ScriptConsole copy_navigation{};
+        copy_navigation.wait_for_text_copy = true;
+        copy_navigation.press('T', 0, true);
+        copy_navigation.press(swiftedit::terminal_key::enter);
+        copy_navigation.press('X', 0, true);
+        swiftedit::Terminal copy_terminal(copy_navigation);
+        if (copy_terminal.run(large_path) != 0 || !copy_navigation.text_copy_saved)
+            throw std::runtime_error("Read-only Save Text Copy did not complete cooperatively.");
+        {
+            swiftedit::PagedFile copied(saved_copy);
+            if (copied.size() != swiftedit::editable_limit || copied.page(copied.size() - 1, 1).bytes != "z")
+                throw std::runtime_error("Read-only text copy lost source bytes.");
+        }
+        if (!std::filesystem::remove(saved_copy))
+            throw std::runtime_error("Could not remove the completed owned copy fixture.");
+        const std::filesystem::path cancelled_copy_path = swiftedit::versioned_name(large_path);
+        ScriptConsole cancelled_copy{};
+        cancelled_copy.press('T', 0, true);
+        cancelled_copy.press(swiftedit::terminal_key::enter);
+        cancelled_copy.press(swiftedit::terminal_key::escape);
+        cancelled_copy.press('X', 0, true);
+        swiftedit::Terminal cancelled_copy_terminal(cancelled_copy);
+        if (cancelled_copy_terminal.run(large_path) != 0 || cancelled_copy.text_copy_saved ||
+            std::filesystem::exists(cancelled_copy_path))
+            throw std::runtime_error("Read-only text copy cancellation published output.");
         ScriptConsole end_navigation{};
         end_navigation.wait_for_end = true;
         end_navigation.wait_for_copy = true;
