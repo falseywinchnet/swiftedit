@@ -187,3 +187,20 @@ physical terminal dogfooding remain unfinished.
 Read-only terminal Home/End now use cancellable, bounded logical-line scans with
 Shift selection. This removes their editable-buffer fallback; desired-column
 vertical caret motion and physical terminal dogfooding remain unfinished.
+
+Large-file Save Text Copy implementation stage (2026-10-01): TextCopyStream now
+accepts up to 64 KiB per append, retains at most three trailing bytes, preserves
+complete UTF-8 across chunk boundaries, and replaces each illegal source byte
+with exactly one space. Finalization consumes incomplete trailing sequences;
+finished streams refuse further input. Validation/allocation failure preserves
+pending state. The result reports illegal-byte count for that emitted chunk.
+
+Tests compare all 65,536 split two-byte inputs with the established text_copy
+operation, plus every chunk width for valid emoji/CJK/combining text, CRLF,
+surrogates, out-of-range code points and truncated sequences. Oversized-input
+refusal preserves a pending emoji. All 23 local tests passed in 11.35 seconds;
+spelling audit passed across 119 source files. This does not yet enable the
+paged Save Text Copy command: remaining work is a sibling temporary streaming
+writer with atomic no-overwrite publication, source-stamped cancellable task,
+terminal/CLI wiring and cross-platform failure/cancellation tests. The existing
+16 MiB snapshot writer is not suitable for arbitrarily large copies.

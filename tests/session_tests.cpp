@@ -1,4 +1,5 @@
 #include "session.hpp"
+#include "text_copy_stream.hpp"
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -16,6 +17,49 @@ void raw(const std::filesystem::path &p, std::string_view s) {
 int main() {
     try {
         using namespace swiftedit;
+        for (std::size_t pair = 0; pair < 65536; ++pair) {
+            std::string source{};
+            source += static_cast<char>(pair / 256);
+            source += static_cast<char>(pair % 256);
+            std::size_t invalid = 0;
+            const std::string expected = text_copy(source, &invalid);
+            TextCopyStream stream{};
+            TextCopyChunk first = stream.append(std::string_view(source).substr(0, 1));
+            const TextCopyChunk last = stream.append(std::string_view(source).substr(1), true);
+            first.bytes += last.bytes;
+            check(first.bytes == expected && first.invalid_bytes + last.invalid_bytes == invalid,
+                  "Streaming text copy agrees for every split two-byte input");
+        }
+        const std::string sequences = "A\xf0\x9f\x98\x80\xe7\x95\x8c\xcc\x81\r\n"
+                                      "\xed\xa0\x80\xf4\x90\x80\x80\xf0\x9f";
+        for (std::size_t width = 1; width <= sequences.size(); ++width) {
+            TextCopyStream stream{};
+            std::string actual{};
+            std::size_t invalid = 0;
+            for (std::size_t offset = 0; offset < sequences.size(); offset += width) {
+                const TextCopyChunk part = stream.append(std::string_view(sequences).substr(offset, width));
+                actual += part.bytes;
+                invalid += part.invalid_bytes;
+            }
+            const TextCopyChunk tail = stream.append({}, true);
+            actual += tail.bytes;
+            invalid += tail.invalid_bytes;
+            std::size_t expected_invalid = 0;
+            check(actual == text_copy(sequences, &expected_invalid) && invalid == expected_invalid,
+                  "Streaming copy preserves split Unicode and sanitizes invalid and truncated sequences");
+            bool rejected = false;
+            try { static_cast<void>(stream.append("x")); }
+            catch (const std::exception &) { rejected = true; }
+            check(rejected, "Finished copy streams reject further input");
+        }
+        TextCopyStream bounded{};
+        static_cast<void>(bounded.append("\xf0\x9f"));
+        bool oversized_rejected = false;
+        try { static_cast<void>(bounded.append(std::string(maximum_page + 1, 'x'))); }
+        catch (const std::exception &) { oversized_rejected = true; }
+        const TextCopyChunk recovered = bounded.append("\x98\x80", true);
+        check(oversized_rejected && recovered.bytes == "\xf0\x9f\x98\x80" && !recovered.invalid_bytes,
+              "Rejected oversized input preserves pending UTF-8 state");
         const std::filesystem::path dir =
             std::filesystem::temp_directory_path() /
             ("swiftedit-session-" + std::to_string(test_process_id()));
