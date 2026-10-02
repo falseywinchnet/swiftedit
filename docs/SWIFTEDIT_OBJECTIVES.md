@@ -102,6 +102,17 @@ any key cancels pending counting. Large GUI counting remains pending.
 
 An objective is not complete merely because it appears in this ledger.
 
+2026-10-02 native Find follow-up: run 36981155243 at 58c22fd observed the
+correctly titled Find NSWindow created but hidden after one toolkit timer turn;
+the other 31 Mac tests passed. This does not establish the underlying cause.
+The next test revision checks command admission through seeded query text and
+the reported show result, then observes actual AppKit visibility for at most
+two seconds without forcing presentation. Timeout retains the window inventory
+diagnostic. The observation interval is a readiness bound, not an input latency
+measurement. Windows compilation and the 129-file spelling audit pass; native
+execution remains pending. The reviewed provider title/menu patch has its final
+receipt and const correction handed back for coordinator CI and SDK export.
+
 Read-only source copying now has a shared cooperative task and command interface.
 It reserves one clipboard buffer, reads at most 64 KiB per step, rejects stale
 source identities/revisions and transfers the completed result without another

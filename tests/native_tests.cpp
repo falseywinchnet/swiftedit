@@ -1,6 +1,7 @@
 #include "editor.hpp"
 #include "native_font_check.hpp"
 #include <array>
+#include <chrono>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -59,6 +60,7 @@ public:
     std::size_t ready_count{};
     bool passed{};
     bool find_open_requested{};
+    std::chrono::steady_clock::time_point find_requested_at{};
     int stage{};
     std::exception_ptr test_failure{};
     std::unique_ptr<gf::Timer> timer{};
@@ -104,8 +106,19 @@ public:
                     const notepad::FileSnapshot observed_1 = notepad::read_file(path);
                     require(observed_1.bytes == "native saved\r\n", "Native save");
                     // Public lifecycle only: no global input, cursor or desktop automation.
+                    (*(*editor).text_control()).select(gf::Utf8Offset(0), gf::Utf8Offset(6));
+                    find_requested_at = std::chrono::steady_clock::now();
                     (*editor).execute("find");
                     require(handles[3].active(), "Owned find window active");
+                    const std::shared_ptr<notepad::QueryField> opened_query =
+                        std::dynamic_pointer_cast<notepad::QueryField>(
+                            find_control((*find_window).root(), "find.query"));
+                    require(opened_query && (*opened_query).text() == "native",
+                            "Find command reached the dialog and seeded selected source text");
+                    const std::shared_ptr<gf::Label> status =
+                        std::dynamic_pointer_cast<gf::Label>(find_control(editor, "notepad.status"));
+                    require(status && !(*status).text().starts_with("Cannot show the Find window"),
+                            "Find show request accepted by host");
                     find_open_requested = true;
                     // Give queued native presentation an event-loop turn.
                     // The AppKit helper separately verifies actual visibility.
@@ -120,6 +133,16 @@ public:
                         find_control((*find_window).root(), "find.replacement"));
                 require(query && replacement, "Find dialog public controls");
 #ifdef __APPLE__
+                const bool visible = native_window_visible("Find and Replace - SwiftEdit");
+                const std::chrono::steady_clock::duration elapsed =
+                    std::chrono::steady_clock::now() - find_requested_at;
+                if (!visible && elapsed < std::chrono::seconds(2)) {
+                    --stage;
+                    return;
+                }
+                std::cout << "Find native visibility=" << visible << " after "
+                          << std::chrono::duration<double, std::milli>(elapsed).count()
+                          << " ms; presentation readiness, not an input latency benchmark.\n";
                 (*query).set_text("n?tive");
                 (*query).select(gf::Utf8Offset(1), gf::Utf8Offset(1));
                 (*find_window).request_focus(query);

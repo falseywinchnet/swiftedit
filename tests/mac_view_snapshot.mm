@@ -5,6 +5,30 @@
 #include <iostream>
 #include <stdexcept>
 
+bool native_window_visible(const char *const title) {
+    if (![NSThread isMainThread])
+        throw std::runtime_error("Native visibility observation requires the UI thread.");
+    @autoreleasepool {
+        NSString *const expected = [NSString stringWithUTF8String:title];
+        if (expected == nil)
+            throw std::runtime_error("Native visibility title is not UTF-8.");
+        NSWindow *selected = nil;
+        NSArray<NSWindow *> *const windows = [NSApp windows];
+        for (NSUInteger index = 0; index < [windows count]; ++index) {
+            NSWindow *const candidate = [windows objectAtIndex:index];
+            if ([[candidate title] isEqualToString:expected]) {
+                if (selected != nil)
+                    throw std::runtime_error("Native visibility title is ambiguous.");
+                selected = candidate;
+            }
+        }
+        if (selected == nil)
+            throw std::runtime_error("Native visibility window title was not found.");
+        const bool visible = [selected isVisible];
+        return visible;
+    }
+}
+
 void send_native_query_wildcard(const char *const title) {
     if (![NSThread isMainThread])
         throw std::runtime_error("Native query input requires the UI thread.");
