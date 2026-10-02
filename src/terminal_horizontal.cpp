@@ -10,8 +10,9 @@ TerminalHorizontalLine::TerminalHorizontalLine(const Session &session,
                                                const TerminalLogicalPage &page,
                                                const std::size_t row,
                                                const std::uint64_t left,
-                                               const std::size_t width)
-    : stamp_(session.stamp()), size_(session.size()), left_(left) {
+                                               const std::size_t width,
+                                               const std::optional<std::uint64_t> source_caret)
+    : stamp_(session.stamp()), size_(session.size()), left_(left), source_caret_(source_caret) {
     if (!width || width > 1000 || left > std::numeric_limits<std::uint64_t>::max() - width)
         throw std::runtime_error("Horizontal viewport width must be 1..1000 without overflow.");
     const std::vector<TerminalLogicalRow> &rows = page.result(session);
@@ -20,6 +21,8 @@ TerminalHorizontalLine::TerminalHorizontalLine(const Session &session,
     offset_ = rows[row].offset;
     read_offset_ = offset_;
     end_ = offset_ + rows[row].length;
+    if (source_caret_ && (*source_caret_ < offset_ || *source_caret_ > end_))
+        throw std::runtime_error("Requested caret is outside the logical line body.");
     right_ = left + width;
     const std::size_t source_capacity = static_cast<std::size_t>(
         std::min<std::uint64_t>(rows[row].length, maximum_page));
@@ -76,6 +79,16 @@ void TerminalHorizontalLine::prepare() {
         if (glyph.cells > std::numeric_limits<std::uint64_t>::max() - column_)
             throw std::runtime_error("Logical line display width exceeds the supported range.");
         const std::uint64_t following = column_ + glyph.cells;
+        const std::uint64_t source_start = offset_ + start;
+        const std::uint64_t source_end = source_start + length;
+        if (source_caret_) {
+            if (*source_caret_ == source_start)
+                frame_.source_caret_column = column_;
+            else if (*source_caret_ == source_end)
+                frame_.source_caret_column = following;
+            else if (*source_caret_ > source_start && *source_caret_ < source_end)
+                throw std::runtime_error("Requested caret splits a source grapheme.");
+        }
         if (column_ < right_ && following > left_) {
             const std::uint64_t first = std::max(column_, left_);
             const std::uint64_t last = std::min(following, right_);
@@ -98,12 +111,14 @@ void TerminalHorizontalLine::prepare() {
         }
         column_ = following;
         consumed = start + length;
-        if (column_ >= right_)
+        if (column_ >= right_ && (!source_caret_ || frame_.source_caret_column))
             break;
     }
     offset_ += consumed;
     source_.erase(0, consumed);
-    complete_ = column_ >= right_ || offset_ == end_;
+    if (source_caret_ && *source_caret_ == end_ && offset_ == end_)
+        frame_.source_caret_column = column_;
+    complete_ = (column_ >= right_ && (!source_caret_ || frame_.source_caret_column)) || offset_ == end_;
     if (complete_) {
         if (offset_ == end_) {
             frame_.total_cells = column_;

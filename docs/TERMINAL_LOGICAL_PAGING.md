@@ -71,6 +71,19 @@ byte fixtures at budgets 1..9 and heights 1, 2, 3 and 300. A real 16 MiB line
 rewinds in 2049 bounded steps. Unfinished/stale/foreign results and invalid
 starts/budgets are refused; dropping work cancels without changing source.
 
+Horizontal row preparation can now also locate a requested source caret's
+absolute display column outside the visible slice. It continues bounded reads
+until that boundary is found, retaining only visible runs. Tabs, wide characters
+and combining sequences use the same mapping as rendering; a split UTF-8 or
+grapheme caret is refused without publishing partial output. Tests cover every
+legal boundary of a mixed-width row with tiny read budgets, invalid interior
+offsets, empty lines, and an off-screen caret in an actual 16 MiB read-only line.
+This provides the coordinate needed to reveal a caret after a mode/width change.
+
+Native run 36987563029 at 2949e5c passed tests and packaging on all three
+platforms. This establishes the composed viewport checkpoint; subsequent
+backward navigation and caret lookup have focused local test evidence only.
+
 Still required: connect this work to the terminal event loop, preserve caret/selection
 and backward navigation across mode/width changes, implement space wrapping,
 and exercise F2 and cancellation through the terminal host. This component does

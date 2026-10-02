@@ -221,6 +221,12 @@ void check_large_file(const Fixture &fixture) {
     swiftedit::TerminalHorizontalLine following(session, page, 1, 0, 10);
     require(following.step(session) && following.result(session).total_cells == 3,
             "Following short logical row renders independently");
+    swiftedit::TerminalHorizontalLine caret_probe(session, page, 0, 0, 1, 8193);
+    require(!caret_probe.step(session) && caret_probe.read_offset() == 8192,
+            "Off-screen caret lookup yields before reading its target");
+    require(caret_probe.step(session) && caret_probe.result(session).source_caret_column == 8193 &&
+                caret_probe.result(session).runs.size() == 1 && caret_probe.read_offset() == 16384,
+            "Actual read-only caret lookup stops at its target without retaining the long prefix");
     session.reset();
     bool refused = false;
     try {
@@ -276,6 +282,49 @@ void check_viewport(const Fixture &fixture) {
     }
     require(refused, "Viewport refuses stale source identity");
 }
+void check_source_caret(const Fixture &fixture) {
+    // Tab reaches column 4, Han reaches 6, combining sequence reaches 7.
+    const std::string source = "a\t\xe6\xbc\xa2" "e\xcc\x81z";
+    swiftedit::Session session{};
+    session.open(fixture.write("source-caret.txt", source));
+    swiftedit::TerminalLogicalPage page(session, 0, 1);
+    finish_logical(page, session);
+    const std::vector<swiftedit::TerminalHorizontalCaret> expected = {
+        {0, 0}, {1, 1}, {2, 4}, {5, 6}, {8, 7}, {9, 8}};
+    for (const swiftedit::TerminalHorizontalCaret caret : expected) {
+        for (const std::size_t budget : {1U, 2U, 8192U}) {
+            swiftedit::TerminalHorizontalLine line(session, page, 0, 0, 1, caret.source_offset);
+            while (!line.step(session, budget)) {}
+            const swiftedit::TerminalHorizontalFrame &frame = line.result(session);
+            require(frame.source_caret_column == caret.column && frame.runs.size() == 1 &&
+                        frame.runs[0].text == "a",
+                    "Off-screen caret lookup preserves bounded visible output and exact columns");
+        }
+    }
+    for (const std::uint64_t offset : {3U, 4U, 6U, 7U}) {
+        swiftedit::TerminalHorizontalLine line(session, page, 0, 0, 1, offset);
+        bool refused = false;
+        try {
+            while (!line.step(session, 1)) {}
+        } catch (const std::runtime_error &) {
+            refused = true;
+        }
+        require(refused, "Source caret cannot split UTF-8 or a combining grapheme");
+        refused = false;
+        try {
+            static_cast<void>(line.result(session));
+        } catch (const std::runtime_error &) {
+            refused = true;
+        }
+        require(refused, "Invalid caret cannot publish partial visible output");
+    }
+    session.open(fixture.write("empty-caret.txt", ""));
+    swiftedit::TerminalLogicalPage empty(session, 0, 1);
+    finish_logical(empty, session);
+    swiftedit::TerminalHorizontalLine line(session, empty, 0, 0, 10, 0);
+    require(line.step(session) && line.result(session).source_caret_column == 0,
+            "Empty logical row retains its source caret");
+}
 } // namespace
 int main() {
     try {
@@ -289,6 +338,7 @@ int main() {
         check_context_limit(fixture);
         check_large_file(fixture);
         check_viewport(fixture);
+        check_source_caret(fixture);
         std::cout << "Bounded horizontal rendering matches source, width and inert-control policies.\n";
         return 0;
     } catch (const std::exception &failure) {
