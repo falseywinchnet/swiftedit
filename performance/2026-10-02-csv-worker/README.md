@@ -63,3 +63,20 @@ formula-error recovery and destruction with active work. View tests cover stale
 source/viewport rejection, pending hover updates, duplicate formula reuse and
 zero extra scheduling/dirty marks after completion. The C++ spelling audit passed
 145 files; native execution remains pending CI for this checkpoint.
+
+## Native measurement extension
+
+The next native CSV test retains the settled-idle check and Mac visual capture,
+then loads the 4096-row distinct-formula fixture. Only the native frame scheduler
+advances calculation; a ten-millisecond requested timer observes readiness and
+routes Down/Up through the native window's model dispatcher. The test checks
+selection restoration and all 85 exact result labels through a counting painter.
+It records source preparation, maximum observation-timer gap, routed key callback
+duration and observed completion time. These are event-loop/model measurements,
+not physical key-to-screen or raster/compositor latency.
+
+After completion, the test restarts pending work and requests window close. It
+records time through Application::run return and retained test-owner release,
+including worker teardown. No hard latency threshold is imposed from one CI run;
+five seconds is a readiness watchdog. The Windows executable compiles locally;
+native execution and measured values remain pending the next CI revision.
