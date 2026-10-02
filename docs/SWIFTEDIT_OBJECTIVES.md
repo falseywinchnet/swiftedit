@@ -36,7 +36,7 @@ precedence. The previous DECISIONS.md is historical implementation evidence.
 | CSV | `.csv` only, real quoting, flat table, rectangle selection; Delete clears cells without shifting | Native source/table toggle, bounded visible grid, rectangle clear, source entry, scrollbars and CLI; broad desktop QA pending |
 | CSV math, 02:43–46 and 2026-10-01 corrections | Enter stores formula and displays result; menu and right-click Convert to Value; strict exact math/errors/reference hover | Formula dependency evaluation, cycles/depth/work refusal, native formula entry/results/hover highlights and both conversion menus implemented; viewport performance and desktop QA pending |
 | CSV code shading, 02:36 | Triple backticks in a cell give it a gray background; no HTML formatting or hierarchy | The table uses its themed code background for cells containing triple backticks. Source characters remain visible and unchanged; selection highlighting takes precedence. Native visual QA pending |
-| Lifetime | Multiple independent document windows; no tabs or persistent recovery/history | New Window command launches the exact running executable as an independent process; cross-platform launch verification in progress |
+| Lifetime | Multiple independent document windows; no tabs or persistent recovery/history | New Window launches the exact running executable independently; native launch, unsaved-parent preservation, routed Unicode clipboard and surviving-window lifetime tests pass on all three platforms. Physical keyboard and visual placement dogfood remain pending; see NEW_WINDOW.md |
 
 ## Deliberate implementation choices, not additional owner answers
 

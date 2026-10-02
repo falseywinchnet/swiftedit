@@ -93,7 +93,11 @@ pass threshold. Raw logs are under .build/new-window-7518073. Production launch
 and clipboard code is unchanged from the published a011391 package.
 Local compilation and the 101-file spelling audit pass.
 
-The Mac branch of the native fixture now closes each editor through a routed
-Cmd+W key event, then checks the other editor's continued lifetime as before.
-Execution evidence for this new binding is pending. The Windows local build
-and 20 headless suites pass; they do not execute that Mac-specific branch.
+The Mac branch closes each editor through a routed Cmd+W key event, then checks
+the other editor's continued lifetime. This passed all three native jobs in
+run36890043148 at b4b6462. The later c968ae8 fixture also routes Copy/Paste through
+the focused document: Meta+C/V on Mac, Control+C/V elsewhere. All three native
+jobs36946000203 and core36946000230 passed. The Mac raw log confirms the complete
+Unicode clipboard/lifetime fixture passed in4.31s. This covers toolkit event
+routing, not physical keyboard translation. Raw evidence is retained under
+.build/native-c968ae8-evidence/mac.
