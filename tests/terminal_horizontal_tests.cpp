@@ -438,6 +438,52 @@ void check_logical_movement(const Fixture &fixture) {
     }
     require(refused, "Logical movement rejects changed source identity");
 }
+void check_reused_reveal(const Fixture &fixture) {
+    swiftedit::Session session{};
+    session.open(fixture.write("reuse.txt", "a\t\xe6\xbc\xa2" "e\xcc\x81z\n\x1b\tend\n"));
+    for (const std::uint64_t target : {0U, 1U, 2U, 5U, 8U, 9U, 10U, 11U}) {
+        std::unique_ptr<swiftedit::TerminalNoWrapReveal> previous =
+            std::make_unique<swiftedit::TerminalNoWrapReveal>(session, 8, 0, 4, 3);
+        finish_reveal(*previous, session);
+        const std::uint64_t left = (*previous).left(session);
+        const std::uint64_t top = (*previous).top(session);
+        swiftedit::TerminalNoWrapReveal reused(session, target, left, 4, 3, top, previous.get());
+        previous.reset();
+        finish_reveal(reused, session);
+        swiftedit::TerminalNoWrapReveal fresh(session, target, left, 4, 3, top);
+        finish_reveal(fresh, session);
+        require(reused.left(session) == fresh.left(session) && reused.top(session) == fresh.top(session) &&
+                    reused.caret(session).row == fresh.caret(session).row &&
+                    reused.caret(session).column == fresh.caret(session).column,
+                "Reused reveal matches fresh coordinates after previous owner destruction");
+        const swiftedit::TerminalHorizontalPage &actual = reused.viewport(session);
+        const swiftedit::TerminalHorizontalPage &expected = fresh.viewport(session);
+        const std::vector<swiftedit::TerminalHorizontalFrame> &actual_rows = actual.result(session);
+        const std::vector<swiftedit::TerminalHorizontalFrame> &expected_rows = expected.result(session);
+        require(actual_rows.size() == expected_rows.size(), "Reused row count is exact");
+        for (std::size_t row = 0; row < actual_rows.size(); ++row) {
+            require(actual_rows[row].runs.size() == expected_rows[row].runs.size(), "Reused run count is exact");
+            for (std::size_t index = 0; index < actual_rows[row].runs.size(); ++index) {
+                const swiftedit::TerminalPageRun &a = actual_rows[row].runs[index];
+                const swiftedit::TerminalPageRun &b = expected_rows[row].runs[index];
+                require(a.column == b.column && a.cells == b.cells && a.text == b.text &&
+                            a.source_offset == b.source_offset && a.source_length == b.source_length &&
+                            a.starts_grapheme == b.starts_grapheme && a.ends_grapheme == b.ends_grapheme,
+                        "Reused rendering preserves exact source and clipped grapheme mappings");
+            }
+        }
+    }
+    swiftedit::TerminalNoWrapReveal previous(session, 8, 0, 4, 3);
+    finish_reveal(previous, session);
+    session.reset();
+    bool refused = false;
+    try {
+        const swiftedit::TerminalNoWrapReveal invalid(session, 0, 0, 4, 3, 0, &previous);
+    } catch (const std::runtime_error &) {
+        refused = true;
+    }
+    require(refused, "Reuse cannot admit metadata from an older source");
+}
 } // namespace
 int main() {
     try {
@@ -454,6 +500,7 @@ int main() {
         check_source_caret(fixture);
         check_reveal(fixture);
         check_logical_movement(fixture);
+        check_reused_reveal(fixture);
         std::cout << "Bounded horizontal rendering matches source, width and inert-control policies.\n";
         return 0;
     } catch (const std::exception &failure) {

@@ -172,6 +172,24 @@ TerminalHorizontalPage::TerminalHorizontalPage(const Session &session,
         throw std::runtime_error("Horizontal viewport width must be 1..1000 without overflow.");
     frames_.reserve(rows);
 }
+TerminalHorizontalPage::TerminalHorizontalPage(const Session &session,
+                                               const TerminalHorizontalPage &previous,
+                                               const std::uint64_t left,
+                                               const std::size_t width)
+    : stamp_(session.stamp()), size_(session.size()), left_(left), width_(width),
+      logical_(previous.logical_) {
+    previous.require_complete(session);
+    if (!width || width > 1000 || left > std::numeric_limits<std::uint64_t>::max() - width)
+        throw std::runtime_error("Horizontal viewport width must be 1..1000 without overflow.");
+    indexed_ = true;
+    if (left == previous.left_ && width == previous.width_) {
+        frames_ = previous.frames_;
+        complete_ = true;
+    } else {
+        seed_frames_ = previous.frames_;
+        frames_.reserve(seed_frames_.size());
+    }
+}
 void TerminalHorizontalPage::validate(const Session &session) const {
     const DocumentStamp current = session.stamp();
     if (current.identity != stamp_.identity || current.revision != stamp_.revision ||
@@ -196,15 +214,33 @@ bool TerminalHorizontalPage::step(const Session &session, const std::size_t budg
             indexed_ = logical_.step(session, budget);
             return false;
         }
-        if (!line_)
+        if (!line_) {
             line_ = std::make_unique<TerminalHorizontalLine>(
                 session, logical_, frames_.size(), left_, width_);
+            if (!seed_frames_.empty()) {
+                const TerminalHorizontalFrame &seed = seed_frames_[frames_.size()];
+                std::optional<TerminalHorizontalCaret> start{};
+                for (const TerminalHorizontalCaret caret : seed.carets) {
+                    if (caret.column <= left_ && (!start || caret.column > (*start).column))
+                        start = caret;
+                }
+                if (start) {
+                    // Only this completed same-source page grants authority to
+                    // skip the prefix. A caller cannot inject raw seed offsets.
+                    (*line_).offset_ = (*start).source_offset;
+                    (*line_).read_offset_ = (*start).source_offset;
+                    (*line_).column_ = (*start).column;
+                }
+            }
+        }
         const bool ready = (*line_).step(session, budget);
         if (ready) {
             // Copy only the completed visible row, then release its scratch.
             frames_.push_back((*line_).result(session));
             line_.reset();
             complete_ = frames_.size() == logical_.result(session).size();
+            if (complete_)
+                seed_frames_.clear();
         }
     } catch (...) {
         failed_ = true;

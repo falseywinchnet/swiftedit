@@ -128,3 +128,13 @@ Still required: intelligent space wrapping for read-only views, native/physical
 host checks, and responsiveness measurement of mode changes and long-line
 navigation. Read-only wrap mode remains hard wrapping; this does not close the
 full wrap or final responsiveness requirement.
+
+Native run 36989937839 at 901152d passed all three platforms and packaging,
+including the F2/no-wrap input-loop tests. A subsequent timing scan found
+repeated long-prefix segmentation during adjacent caret reveals. Preparation
+now copies completed same-source row/grapheme metadata and starts at a proven
+nearby boundary, while retaining the normal fallback when no mapping exists.
+No previous task is borrowed after construction. Reuse and stale-source tests
+pass; native validation of this optimization is pending. Raw comparisons and
+the remaining slow initial-jump limitation are recorded in
+`performance/2026-10-02-terminal-reveal`.

@@ -30,7 +30,8 @@ class TerminalNoWrapReveal final {
 public:
     TerminalNoWrapReveal(const Session &, std::uint64_t caret, std::uint64_t left,
                         std::size_t width, std::size_t rows,
-                        std::optional<std::uint64_t> old_top = std::nullopt);
+                        std::optional<std::uint64_t> old_top = std::nullopt,
+                        const TerminalNoWrapReveal *previous = nullptr);
     [[nodiscard]] bool step(const Session &);
     [[nodiscard]] const TerminalHorizontalPage &viewport(const Session &) const;
     [[nodiscard]] TerminalPageCaret caret(const Session &) const;

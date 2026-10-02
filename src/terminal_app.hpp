@@ -390,7 +390,7 @@ private:
         const std::optional<std::uint64_t> top = no_wrap_visible_
             ? std::optional<std::uint64_t>((*no_wrap_visible_).top(buffer_.session())) : std::nullopt;
         no_wrap_pending_ = std::make_unique<swiftedit::TerminalNoWrapReveal>(
-            buffer_.session(), page_caret_, left, width_, rows_, top);
+            buffer_.session(), page_caret_, left, width_, rows_, top, no_wrap_visible_.get());
         no_wrap_suspended_ = false;
         status_ = "Preparing no-wrap view... Any key cancels";
     }

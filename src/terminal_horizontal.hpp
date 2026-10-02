@@ -33,6 +33,7 @@ public:
     [[nodiscard]] std::uint64_t read_offset() const { return read_offset_; }
 
 private:
+    friend class TerminalHorizontalPage;
     void validate(const Session &) const;
     void retain_caret(std::uint64_t offset, std::uint64_t column);
     void prepare();
@@ -50,6 +51,10 @@ class TerminalHorizontalPage final {
 public:
     TerminalHorizontalPage(const Session &, std::uint64_t start, std::size_t rows,
                            std::uint64_t left, std::size_t width);
+    // Reuses only a completed, current viewport's proven row/grapheme metadata.
+    // Copies retained metadata; does not borrow the previous task.
+    TerminalHorizontalPage(const Session &, const TerminalHorizontalPage &previous,
+                           std::uint64_t left, std::size_t width);
     [[nodiscard]] bool step(const Session &, std::size_t budget = 8192);
     [[nodiscard]] const std::vector<TerminalHorizontalFrame> &result(const Session &) const;
     [[nodiscard]] const std::vector<TerminalLogicalRow> &rows(const Session &) const;
@@ -65,6 +70,7 @@ private:
     TerminalLogicalPage logical_;
     std::unique_ptr<TerminalHorizontalLine> line_{};
     std::vector<TerminalHorizontalFrame> frames_{};
+    std::vector<TerminalHorizontalFrame> seed_frames_{};
     bool indexed_{}, complete_{}, failed_{};
 };
 } // namespace swiftedit

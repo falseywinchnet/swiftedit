@@ -94,13 +94,39 @@ TerminalNoWrapReveal::TerminalNoWrapReveal(const Session &session,
                                          const std::uint64_t left,
                                          const std::size_t width,
                                          const std::size_t rows,
-                                         const std::optional<std::uint64_t> old_top)
+                                         const std::optional<std::uint64_t> old_top,
+                                         const TerminalNoWrapReveal *const previous)
     : stamp_(session.stamp()), size_(session.size()), source_caret_(caret), left_(left),
       width_(width), rows_(rows), old_top_(old_top), boundary_(session, caret, false) {
     if (!width || width > 1000 || !rows || rows > 300 ||
         left > std::numeric_limits<std::uint64_t>::max() - width ||
         (old_top && *old_top > size_))
         throw std::runtime_error("No-wrap reveal bounds are invalid.");
+    if (previous) {
+        (*previous).require_complete(session);
+        if (width_ == (*previous).width_ && rows_ == (*previous).rows_ &&
+            (!old_top_ || *old_top_ == (*previous).top(session))) {
+            const TerminalHorizontalPage &page = (*previous).viewport(session);
+            const std::vector<TerminalHorizontalFrame> &frames = page.result(session);
+            const std::vector<TerminalLogicalRow> &logical_rows = page.rows(session);
+            for (std::size_t row = 0; row < frames.size(); ++row) {
+                for (const TerminalHorizontalCaret boundary : frames[row].carets) {
+                    if (boundary.source_offset != source_caret_)
+                        continue;
+                    if (boundary.column < left_)
+                        left_ = boundary.column;
+                    else if (boundary.column - left_ >= width_)
+                        left_ = boundary.column - width_ + 1;
+                    caret_ = {row, static_cast<std::size_t>(boundary.column - left_)};
+                    line_start_ = logical_rows[row].offset;
+                    top_ = (*previous).top(session);
+                    viewport_ = std::make_unique<TerminalHorizontalPage>(session, page, left_, width_);
+                    phase_ = Phase::viewport;
+                    return;
+                }
+            }
+        }
+    }
 }
 void TerminalNoWrapReveal::validate(const Session &session) const {
     const DocumentStamp current = session.stamp();
