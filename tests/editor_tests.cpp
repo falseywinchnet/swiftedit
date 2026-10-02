@@ -396,7 +396,22 @@ void verify_picker_file_links() {
     const std::filesystem::path alias = directory / "linked.txt";
     const notepad::FileSnapshot initial = notepad::write_file(target, "linked original\n", {});
     check(initial.exists, "Create linked document");
-    std::filesystem::create_symlink(std::filesystem::path("target") / "document.txt", alias);
+    const std::filesystem::path relative_target = std::filesystem::path("target") / "document.txt";
+#ifdef _WIN32
+    // MinGW's std::filesystem implementation can omit symlink creation even
+    // when Windows supports it. Both attempts create a real file symlink.
+    bool linked = CreateSymbolicLinkW(alias.c_str(), relative_target.c_str(),
+                                     SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE) != 0;
+    if (!linked)
+        linked = CreateSymbolicLinkW(alias.c_str(), relative_target.c_str(), 0) != 0;
+    if (!linked) {
+        const DWORD error = GetLastError();
+        throw std::runtime_error("Cannot create file-link fixture: Windows error " +
+                                 std::to_string(error));
+    }
+#else
+    std::filesystem::create_symlink(relative_target, alias);
+#endif
     const std::shared_ptr<notepad::Editor> editor =
         gf::make_control<notepad::Editor>(gf::StableId("file-links.editor"));
     std::vector<gf::ApplicationWindow> windows = (*editor).application_windows({});

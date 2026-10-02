@@ -691,3 +691,15 @@ then build succeeded. Archive bytes remain unchanged. Native consumer alias
 execution and new Mac download are still pending; no CPU fix or prepared-text
 availability claim. c968ae8 native36946000203/core36946000230 passed; Mac routed
 clipboard/lifecycle raw evidence is .build/native-c968ae8-evidence/mac.
+
+7415870 consumer native36946592395: Mac and Linux passed the actual picker
+file-link Open/edit/Save probe (0.03s/0.01s), and core36946592528 passed. Windows
+failed before picker execution: MinGW std::filesystem::create_symlink reported
+Function not implemented. Corrected fixture creation to native CreateSymbolicLinkW
+with unprivileged flag then ordinary native fallback; both require an actual
+symlink and neither skips failures. Local editor suite passed1.68s and101-file
+style clean. Explicit local alias probe reaches native error1314 (privilege not
+held), so Windows runner execution remains required. Mac package7415870 was
+verified but NOT published pending the complete consumer gate. Raw evidence
+and prepared release notes are under .build/release-7415870; that package is not
+the next corrected test source's package.
