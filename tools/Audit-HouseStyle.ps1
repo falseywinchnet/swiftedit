@@ -10,7 +10,7 @@ function Get-CodeText([string]$Text) {
 foreach ($directory in @('src','tests')) {
     [IO.FileInfo[]]$entries = @(Get-ChildItem -LiteralPath (Join-Path $repo $directory) -File)
     foreach ($entry in $entries) {
-        if ($entry.Extension -eq '.cpp' -or $entry.Extension -eq '.hpp') { $files.Add($entry) }
+        if ($entry.Extension -eq '.cpp' -or $entry.Extension -eq '.hpp' -or $entry.Extension -eq '.mm') { $files.Add($entry) }
     }
 }
 [hashtable]$rules = @{

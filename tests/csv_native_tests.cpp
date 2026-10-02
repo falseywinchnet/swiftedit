@@ -2,6 +2,9 @@
 #include <gui_forms/application.hpp>
 #include <iostream>
 #include <stdexcept>
+#ifdef __APPLE__
+#include "mac_view_snapshot.hpp"
+#endif
 
 namespace gf = gui_forms;
 // Application::run synchronously owns the window. Named hooks borrow this
@@ -33,6 +36,8 @@ public:
         timer_.reset();
         if (result.callback_exception)
             std::rethrow_exception(result.callback_exception);
+        if (capture_failure_)
+            std::rethrow_exception(capture_failure_);
         if (!result.accepted() || !passed_)
             throw std::runtime_error("Native CSV completion or settled-idle check failed.");
     }
@@ -47,6 +52,14 @@ private:
             if (row)
                 source += '\n';
             source += "=" + std::to_string(1000 + row);
+            // Visible evidence includes results, errors and inert code shading.
+            // Keep the first column distinct to exercise deferred evaluation.
+            if (row == 0)
+                source += ",=1/0,```code```";
+            else if (row == 1)
+                source += ",=A2+1,plain text";
+            else
+                source += ",,";
         }
         (*view_).set_source(source);
         if (!(*view_).calculations_pending())
@@ -70,6 +83,15 @@ private:
             std::cout << "CSV settled idle metrics: " << metrics.to_json() << '\n';
             passed_ = !(*view_).calculations_pending() && metrics.frame_deadlines_fired == 0 &&
                       metrics.scheduled_frame_requests == 0;
+#ifdef __APPLE__
+            // Capture only after the measurement so its forced view redraw
+            // cannot contaminate settled-idle counters.
+            try {
+                capture_csv_native_view();
+            } catch (...) {
+                capture_failure_ = std::current_exception();
+            }
+#endif
             (*timer_).stop();
             static_cast<void>(handle_.request_close());
         } else if (ticks_ >= 40) {
@@ -84,6 +106,7 @@ private:
     gf::SubscriptionToken subscription_{};
     std::size_t ticks_{}, phase_{};
     bool passed_{};
+    std::exception_ptr capture_failure_{};
 };
 int main() {
     try {
