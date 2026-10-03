@@ -242,3 +242,20 @@ Version 0.3.6 preparation passed the full 29-test local headless suite in
 19.15 seconds and the 148-file spelling audit. Release-tag native validation and
 independent archive verification remain separate requirements before claiming
 the new release is available.
+
+## Repeated native sampling
+
+The native regression now repeats its 10000-word quoted document 21 times,
+changing an off-screen suffix so every sample performs preparation and layout.
+It retains the per-sample raw metrics and reports nearest-rank p50, p95, p99 and
+maximum for observed completion, synchronous layout, worst presentation per
+sample and maximum observer gap per sample. At n=21, p99 equals the maximum.
+Every sample checks completed presentation and bounded visible text before
+acceptance; settled idle and pending-work close still run after the final sample.
+
+These samples share one process, font resources and host. They characterize
+repeated document replacement under that run's conditions, not independent cold
+starts, physical input latency or controlled before/after performance. The
+15-second native-test timeout remains. The executable compiles locally and the
+148-file spelling audit passes; execution is assigned to native CI to preserve
+the locally coordinated desktop. No repeated-sample results are claimed yet.

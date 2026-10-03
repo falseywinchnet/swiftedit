@@ -9,6 +9,15 @@
 #endif
 
 namespace gf = gui_forms;
+void report_samples(const std::string_view label, std::vector<double> samples) {
+    if (samples.size() != 21)
+        throw std::runtime_error("Markdown timing sample set is incomplete.");
+    std::sort(samples.begin(), samples.end());
+    // Nearest-rank percentiles for 21 observations: p99 equals the maximum.
+    std::cout << "Markdown " << label << " ms; n=21; p50=" << samples[10]
+              << "; p95=" << samples[19] << "; p99=" << samples[20]
+              << "; max=" << samples.back() << '\n';
+}
 class MarkdownProbe final : public gf::Painter {
 public:
     std::size_t words{};
@@ -40,6 +49,10 @@ public:
         void operator()() const { (*owner).observe(); }
     };
     void run() {
+        completion_samples_.reserve(21);
+        layout_samples_.reserve(21);
+        presentation_samples_.reserve(21);
+        gap_samples_.reserve(21);
         stress_source_ = "> ";
         for (std::size_t word = 0; word < 10000; ++word)
             stress_source_ += "stressword ";
@@ -78,6 +91,17 @@ public:
     }
 
 private:
+    void begin_stress() {
+        // Change the source each time so every observation prepares and lays
+        // out a fresh model. The varying suffix remains below the viewport.
+        const std::string source = stress_source_ + "\n\nSample " +
+            std::to_string(completion_samples_.size());
+        (*window_).reset_activity_metrics();
+        maximum_tick_gap_ms_ = 0;
+        stress_started_ = gf::FrameClock::now();
+        last_stress_tick_ = stress_started_;
+        (*view_).set_source(source);
+    }
     void observe() {
         try {
             tick();
@@ -137,6 +161,19 @@ private:
             const std::chrono::duration<double, std::milli> layout = (*view_).last_layout_duration();
             std::cout << "Markdown stress synchronous layout ms: " << layout.count()
                       << "; maximum observer gap ms: " << maximum_tick_gap_ms_ << '\n';
+            completion_samples_.push_back(elapsed.count());
+            layout_samples_.push_back(layout.count());
+            presentation_samples_.push_back(
+                static_cast<double>(metrics.worst_present_duration_nanoseconds) / 1000000.0);
+            gap_samples_.push_back(maximum_tick_gap_ms_);
+            if (completion_samples_.size() < 21) {
+                begin_stress();
+                return;
+            }
+            report_samples("observed completion", completion_samples_);
+            report_samples("synchronous layout", layout_samples_);
+            report_samples("worst presentation per sample", presentation_samples_);
+            report_samples("maximum observer gap per sample", gap_samples_);
             stress_passed_ = true;
             (*timer_).set_interval(std::chrono::milliseconds(200));
             return;
@@ -153,10 +190,7 @@ private:
 #endif
                 passed_ = true;
                 std::cout << "Native Markdown observed paint: " << metrics.to_json() << '\n';
-                (*window_).reset_activity_metrics();
-                stress_started_ = gf::FrameClock::now();
-                last_stress_tick_ = stress_started_;
-                (*view_).set_source(stress_source_);
+                begin_stress();
                 (*timer_).set_interval(std::chrono::milliseconds(10));
                 return;
             } catch (...) {
@@ -178,6 +212,7 @@ private:
     gf::FrameTime stress_started_{};
     gf::FrameTime last_stress_tick_{};
     double maximum_tick_gap_ms_{};
+    std::vector<double> completion_samples_{}, layout_samples_{}, presentation_samples_{}, gap_samples_{};
     gf::FrameTime close_started_{};
 };
 int main() {
