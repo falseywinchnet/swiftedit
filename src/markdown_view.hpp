@@ -21,7 +21,8 @@ public:
     [[nodiscard]] std::chrono::nanoseconds last_layout_duration() const { return layout_duration_; }
     [[nodiscard]] std::chrono::nanoseconds longest_layout_slice() const { return longest_layout_slice_; }
     [[nodiscard]] bool presentation_ready() const {
-        const bool ready = !preparation_pending_ && source_prepared_ && !layout_dirty_ && layout_error_.empty();
+        const bool ready = !preparation_pending_ && source_prepared_ && !layout_dirty_ &&
+            layout_painted_ && layout_error_.empty();
         return ready;
     }
     [[nodiscard]] bool layout_pending() const {
@@ -100,7 +101,7 @@ private:
     double layout_width_{}, content_height_{}, content_width_{};
     double ruler_baseline_{};
     std::chrono::nanoseconds layout_duration_{}, longest_layout_slice_{};
-    bool layout_dirty_{true};
+    bool layout_dirty_{true}, layout_painted_{};
     std::string hovered_url_{};
     std::string layout_error_{};
 };

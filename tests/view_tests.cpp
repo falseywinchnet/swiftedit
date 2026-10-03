@@ -513,6 +513,14 @@ void verify_markdown_layout_slices() {
     window.set_text_metrics_provider(&replacement);
     window.perform_layout();
     (*view).arrange({0, 0, 400, 200});
+    (*view).on_paint(replacement, {0, 0, 400, 200});
+    check((*view).layout_pending(), "Readiness fixture retains work after its first paint");
+    const gf::FrameTime deadline = gf::FrameClock::now() + std::chrono::seconds(5);
+    while ((*view).layout_pending()) {
+        (*view).on_frame(gf::FrameClock::now());
+        check(gf::FrameClock::now() < deadline, "Timer layout readiness timeout");
+    }
+    check(!(*view).presentation_ready(), "Timer completion alone does not claim a completed paint");
     paint_markdown(*view, replacement, {0, 0, 400, 200});
     check((*view).presentation_ready() && !replacement.origins.empty(),
           "Provider and width changes restart unfinished layout successfully");

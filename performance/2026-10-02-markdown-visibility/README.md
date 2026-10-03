@@ -358,3 +358,20 @@ The step ceiling is now 32768; the 8 ms clock target still applies. This avoids
 forcing a cache-friendly 10000-word paragraph through 11 presentations.
 Editor/view tests passed 2/2 in 2.65 seconds after this refinement; the spelling
 audit passed all 148 files. New native measurements remain pending.
+
+Run 37101965709 at c2c8e52 passed native tests and packaging on all three
+platforms. Raw timer-native files preserve its metrics. These timings have a
+readiness limitation: a timer can finish geometry before native paint, while
+the prior readiness predicate checked layout alone. Do not treat that run's
+completion/presentation fields as proof that final text reached the screen.
+The next revision requires the completed layout to pass through on_paint before
+presentation_ready becomes true. A headless regression verifies this transition.
+
+The distinct native case now also routes Escape through Window::dispatch_key
+while layout is pending, checks that cancellation survives the following tick
+with no scheduled work, reopens the same source, and closes during unfinished
+layout. Handler duration and close-through-owner-release are logged separately.
+This is routed native-window testing, not physical keyboard latency measurement.
+The executable builds locally; its new native path still needs CI execution.
+Focused editor/view suites passed 2/2 in 2.74 seconds; the added readiness
+regression then passed the view suite in 0.29 seconds. Style audit is clean.

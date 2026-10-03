@@ -100,6 +100,7 @@ public:
     }
 
 private:
+    enum class LayoutShutdown { none, await_cancel, verify_cancel, await_close };
     void begin_stress() {
         // Change the source each time so every observation prepares and lays
         // out a fresh model. The varying suffix remains below the viewport.
@@ -128,8 +129,45 @@ private:
         subscription_ = (*timer_).tick().subscribe(Tick{this});
         (*timer_).start();
     }
+    void observe_layout_shutdown() {
+        if (gf::FrameClock::now() - shutdown_started_ > std::chrono::seconds(15))
+            throw std::runtime_error("Native Markdown layout shutdown readiness timeout.");
+        if (layout_shutdown_ == LayoutShutdown::verify_cancel) {
+            if ((*view_).layout_pending() || (*view_).preparation_pending() || (*view_).presentation_ready())
+                throw std::runtime_error("Cancelled native Markdown resumed without a request.");
+            const gf::MetricsSnapshot cancelled = (*window_).metrics().snapshot();
+            if (cancelled.scheduled_frame_requests || cancelled.frame_deadlines_fired)
+                throw std::runtime_error("Cancelled native Markdown retained scheduling.");
+            std::cout << "Markdown routed Escape remained cancelled through the next UI tick.\n";
+            (*view_).set_source(stress_source_ + " changed");
+            layout_shutdown_ = LayoutShutdown::await_close;
+            return;
+        }
+        if (!(*view_).layout_pending())
+            return;
+        if (layout_shutdown_ == LayoutShutdown::await_cancel) {
+            if (!(*window_).request_focus(view_))
+                throw std::runtime_error("Native Markdown could not focus for cancellation.");
+            const gf::FrameTime started = gf::FrameClock::now();
+            const bool handled = (*window_).dispatch_key({gf::KeyAction::down, gf::PhysicalKey::escape});
+            const std::chrono::duration<double, std::milli> elapsed = gf::FrameClock::now() - started;
+            if (!handled || (*view_).layout_pending() || (*view_).preparation_pending())
+                throw std::runtime_error("Routed Escape did not cancel native Markdown layout.");
+            std::cout << "Markdown routed Escape handler ms: " << elapsed.count() << '\n';
+            (*window_).reset_activity_metrics();
+            layout_shutdown_ = LayoutShutdown::verify_cancel;
+            return;
+        }
+        (*timer_).stop();
+        close_started_ = gf::FrameClock::now();
+        static_cast<void>(handle_.request_close());
+    }
     void tick() {
         ++ticks_;
+        if (layout_shutdown_ != LayoutShutdown::none) {
+            observe_layout_shutdown();
+            return;
+        }
         const gf::MetricsSnapshot metrics = (*window_).metrics().snapshot();
         if (stress_passed_) {
             if (!idle_started_) {
@@ -145,6 +183,12 @@ private:
             (*view_).set_source(stress_source_ + " changed");
             if (!(*view_).preparation_pending())
                 throw std::runtime_error("Markdown close fixture did not create pending work.");
+            if (distinct_words_) {
+                layout_shutdown_ = LayoutShutdown::await_cancel;
+                shutdown_started_ = gf::FrameClock::now();
+                (*timer_).set_interval(std::chrono::milliseconds(10));
+                return;
+            }
             (*timer_).stop();
             close_started_ = gf::FrameClock::now();
             static_cast<void>(handle_.request_close());
@@ -227,7 +271,8 @@ private:
     gf::FrameTime last_stress_tick_{};
     double maximum_tick_gap_ms_{};
     std::vector<double> completion_samples_{}, layout_samples_{}, presentation_samples_{}, gap_samples_{};
-    gf::FrameTime close_started_{};
+    gf::FrameTime close_started_{}, shutdown_started_{};
+    LayoutShutdown layout_shutdown_{LayoutShutdown::none};
 };
 int main(const int argc, char *argv[]) {
     try {

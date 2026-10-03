@@ -217,6 +217,7 @@ void MarkdownView::arrange(gf::Rect bounds) {
 }
 void MarkdownView::layout(gf::TextMetricsProvider &painter, double width) {
     if (!layout_work_) {
+        layout_painted_ = false;
         layout_work_ = std::make_unique<LayoutWork>();
         (*layout_work_).next.reserve(std::min<std::size_t>(source_.size() / 4 + 1, 250000));
         (*layout_work_).width = width;
@@ -488,6 +489,7 @@ void MarkdownView::on_paint(gf::Painter &painter, gf::Rect) {
         const std::string label = std::to_string(static_cast<unsigned>(tick / 48));
         painter.draw_text_utf8({position + 3, ruler_baseline_}, label, ruler_font, style.disabled_text);
     }
+    layout_painted_ = true;
 }
 void MarkdownView::clear_hover() {
     hovered_url_.clear();
