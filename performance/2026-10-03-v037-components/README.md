@@ -41,3 +41,14 @@ These checks support narrow application-work conclusions. They do not close the
 native performance, 16 MiB GUI integration, physical keyboard/clipboard, or full
 bug audit. Markdown native results and their limitations are recorded separately
 in ../2026-10-02-markdown-visibility/README.md.
+
+## Release native visual inspection
+
+Inspected the two saved macOS view captures from release run 37102666871:
+`macos-markdown.png` and `macos-markdown-menu.png`. The Markdown fixture shows
+readable heading/body styles, table columns, code text/backgrounds, inert link
+text, alt-text-only images and the rendered ruler. The editor capture shows a
+checked Markdown Rendered View menu item, no initially highlighted menu command,
+no extra filename row below the menu, and the bordered/inset status bar. These
+are screenshots of the toolkit view; they do not include or prove the native
+title-bar filename, physical menu interaction or idle process CPU.
