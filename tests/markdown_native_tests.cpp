@@ -30,7 +30,7 @@ public:
     void draw_line(gf::Point, gf::Point, gf::Color, double) override {}
     void draw_image(gf::ImageId, gf::Rect, double) override {}
     void draw_text_utf8(gf::Point, std::string_view text, gf::FontSpec, gf::Color) override {
-        if (text == "stressword")
+        if (text.starts_with("stressword"))
             ++words;
     }
 };
@@ -38,6 +38,7 @@ public:
 // owner until shutdown; no native handle or timer survives run().
 class MarkdownNative final {
 public:
+    explicit MarkdownNative(const bool distinct_words) : distinct_words_(distinct_words) {}
     struct Ready {
         MarkdownNative *owner{};
         void operator()(gf::Window &window, gf::ApplicationWindowHandle handle) const {
@@ -54,8 +55,16 @@ public:
         presentation_samples_.reserve(21);
         gap_samples_.reserve(21);
         stress_source_ = "> ";
-        for (std::size_t word = 0; word < 10000; ++word)
-            stress_source_ += "stressword ";
+        for (std::size_t word = 0; word < 10000; ++word) {
+            stress_source_ += "stressword";
+            if (distinct_words_)
+                stress_source_ += std::to_string(word);
+            stress_source_ += ' ';
+            if (distinct_words_ && word % 20 == 19 && word + 1 < 10000)
+                stress_source_ += "\n> ";
+        }
+        std::cout << "Markdown workload: " << (distinct_words_ ? "10000 distinct words" : "10000 repeated words")
+                  << "; same-process samples: " << (distinct_words_ ? 1 : 21) << '\n';
         view_ = gf::make_control<notepad::MarkdownView>(gf::StableId("native.markdown"));
         (*view_).set_source(
             "# SwiftEdit Markdown\n\n"
@@ -166,14 +175,16 @@ private:
             presentation_samples_.push_back(
                 static_cast<double>(metrics.worst_present_duration_nanoseconds) / 1000000.0);
             gap_samples_.push_back(maximum_tick_gap_ms_);
-            if (completion_samples_.size() < 21) {
+            if (!distinct_words_ && completion_samples_.size() < 21) {
                 begin_stress();
                 return;
             }
-            report_samples("observed completion", completion_samples_);
-            report_samples("synchronous layout", layout_samples_);
-            report_samples("worst presentation per sample", presentation_samples_);
-            report_samples("maximum observer gap per sample", gap_samples_);
+            if (!distinct_words_) {
+                report_samples("observed completion", completion_samples_);
+                report_samples("synchronous layout", layout_samples_);
+                report_samples("worst presentation per sample", presentation_samples_);
+                report_samples("maximum observer gap per sample", gap_samples_);
+            }
             stress_passed_ = true;
             (*timer_).set_interval(std::chrono::milliseconds(200));
             return;
@@ -207,6 +218,7 @@ private:
     gf::SubscriptionToken subscription_{};
     std::exception_ptr failure_{};
     std::size_t ticks_{};
+    bool distinct_words_{};
     bool passed_{}, stress_passed_{}, idle_started_{};
     std::string stress_source_{};
     gf::FrameTime stress_started_{};
@@ -215,9 +227,12 @@ private:
     std::vector<double> completion_samples_{}, layout_samples_{}, presentation_samples_{}, gap_samples_{};
     gf::FrameTime close_started_{};
 };
-int main() {
+int main(const int argc, char *argv[]) {
     try {
-        MarkdownNative test{};
+        const bool distinct_words = argc == 2 && std::string_view(argv[1]) == "--distinct-words";
+        if (argc > 2 || (argc == 2 && !distinct_words))
+            throw std::runtime_error("Expected no argument or --distinct-words.");
+        MarkdownNative test(distinct_words);
         test.run();
         std::cout << "Native Markdown paint and shutdown completed; pixels require inspection.\n";
         return 0;

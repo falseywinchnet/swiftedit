@@ -259,3 +259,14 @@ starts, physical input latency or controlled before/after performance. The
 15-second native-test timeout remains. The executable compiles locally and the
 148-file spelling audit passes; execution is assigned to native CI to preserve
 the locally coordinated desktop. No repeated-sample results are claimed yet.
+
+A separate markdown-distinct-native case submits 10000 distinct numbered words.
+Source lines contain 20 words each and remain within the current GUI line and
+document limits; explicit quote continuation retains one rendered paragraph.
+This case performs one observation, independently reports layout/presentation/
+observer timing, and retains completion, bounded visible text, idle and close
+checks. It does not claim a distribution. The original repeated-word case stays
+unchanged so its 21-sample results still describe the same cache-friendly source.
+Both native cases have a 15-second timeout; passing that timeout is not an
+interactive latency acceptance threshold. This added executable path compiles
+locally and passes the spelling audit; native execution remains pending.
