@@ -84,3 +84,14 @@ Context scanning remains synchronous and linear. Long Unicode lines still
 require segmentation allocations, with an additional ASCII classification pass
 up to the first non-ASCII byte. These five samples do not establish a hard
 deadline, tail percentile, or native input latency.
+
+## Cross-platform correctness checkpoint
+
+Source `ced4dc6661e38816978a9721aa3f8be45d96238a` passed core CI
+37106073578 and native build/test/package run 37106073573. The native logs
+confirm 37/37 Windows suites, 37/37 Linux suites, and 38/38 macOS suites.
+Selection and document-projection tests passed on every platform. This covers
+the decoded selection bridge and all three context optimizations above.
+The table timings remain Windows-only component measurements; native CI success
+does not establish comparable latency on other machines. This master run did
+not publish a new release.
