@@ -1,5 +1,4 @@
 #include "markdown_view.hpp"
-#include "display.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -41,21 +40,6 @@ private:
     std::map<std::string, WordMetrics> values_{};
     std::size_t retained_bytes_{};
 };
-std::string inert_text(std::string_view source) {
-    std::string result{};
-    std::size_t begin = 0;
-    while (begin < source.size()) {
-        std::size_t end = begin;
-        while (end < source.size() && end - begin < 60000) {
-            const std::size_t length = swiftedit::utf8_sequence_length(source, end);
-            end += length ? length : 1;
-        }
-        const swiftedit::DisplayPage page(source.substr(begin, end - begin));
-        result += page.text();
-        begin = end;
-    }
-    return result;
-}
 } // namespace
 MarkdownView::MarkdownView(gf::StableId id) : Control(std::move(id)) { set_focusable(true); }
 bool MarkdownView::RunOrder::operator()(const Run &left, const Run &right) const {
@@ -153,12 +137,12 @@ void MarkdownView::on_frame(gf::FrameTime) {
     if (!preparation_pending_)
         return;
     try {
-        std::optional<std::vector<swiftedit::MarkdownBlock>> completed = (*preparation_).take();
+        std::optional<swiftedit::PreparedMarkdown> completed = (*preparation_).take();
         if (!completed) {
             schedule_preparation();
             return;
         }
-        blocks_ = std::move(*completed);
+        blocks_ = std::move((*completed).blocks);
         preparation_pending_ = false;
         source_prepared_ = true;
         layout_dirty_ = true;
@@ -228,7 +212,7 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
             }
             if (block.kind == swiftedit::MarkdownKind::heading)
                 font.size = 30 - static_cast<double>(std::min<std::size_t>(block.level, 6)) * 2;
-            const std::string safe = inert_text(span.text);
+            const std::string &safe = span.text;
             for (std::size_t offset = 0; offset < safe.size();) {
                 if (safe[offset] == '\n' || safe[offset] == '\r') {
                     x[column] = left;

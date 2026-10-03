@@ -6,6 +6,11 @@
 #include <thread>
 
 namespace swiftedit {
+// Presentation-only blocks: span text already contains inert display labels.
+// Never use this model as document content or for source/edit mapping.
+struct PreparedMarkdown {
+    std::vector<MarkdownBlock> blocks{};
+};
 // Owns one worker, one replaceable source and one completed model. The caller
 // serializes request/cancel/take. No source borrow, UI callback or native handle
 // crosses the worker boundary. Destruction cancels and joins; library work
@@ -18,7 +23,7 @@ public:
     MarkdownPreparation &operator=(const MarkdownPreparation &) = delete;
     void request(std::string source);
     void cancel();
-    std::optional<std::vector<MarkdownBlock>> take();
+    std::optional<PreparedMarkdown> take();
 private:
     struct Request {
         std::string source{};
@@ -32,7 +37,7 @@ private:
     std::mutex mutex_{};
     std::condition_variable changed_{};
     std::optional<Request> pending_{};
-    std::optional<std::vector<MarkdownBlock>> completed_{};
+    std::optional<PreparedMarkdown> completed_{};
     std::exception_ptr failure_{};
     std::stop_source cancellation_{};
     bool stopping_{};

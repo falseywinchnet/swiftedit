@@ -134,3 +134,24 @@ begins measurement on the following tick and captures exceptions before closing.
 This preserves the settled-idle assertion rather than relaxing it. The corrected
 native probe compiles locally; four focused headless suites passed in 2.12 seconds
 and the spelling audit passed across 148 files. Native revalidation is pending.
+
+## Worker-owned display text
+
+The worker now projects span text into inert display labels before publishing a
+distinct PreparedMarkdown model. The raw parser and source remain unchanged.
+Native layout borrows prepared span text instead of constructing DisplayPage
+objects on every layout or resize. The projection preserves the previous
+scalar-aligned 60000-byte chunks; no edit mappings use these artificial edges.
+Cancellation is checked between blocks and before/after each display chunk.
+
+Prepared display text has an aggregate 32 MiB logical-byte limit, with an explicit
+diagnostic on overflow. This excludes string capacity, block/span metadata, URLs,
+the raw source, and a temporary DisplayPage. During replacement, raw span text
+and its prepared replacement can coexist. It is not a total allocation ceiling
+or a hard cancellation-time guarantee. Native shaping and run layout remain on
+the UI thread. Tests cover control labels, unchanged raw parser output, and a
+four-byte scalar crossing the chunk threshold, alongside existing cancellation,
+replacement, view, and editor checks: four suites passed in 2.26 seconds locally.
+The final full headless run passed all 29 tests in 20.68 seconds, and the source
+spelling audit passed across 148 files. Native performance comparison is pending;
+moving work off the UI thread is not itself proof of lower end-to-end latency.
