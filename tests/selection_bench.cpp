@@ -6,14 +6,17 @@
 int main(const int argc, char** const argv) {
     try {
         const bool sparse = argc == 2 && std::string_view(argv[1]) == "--sparse";
-        if (argc > 1 && !sparse)
-            throw std::runtime_error("Usage: swiftedit-selection-bench [--sparse]");
+        const bool long_line = argc == 2 && std::string_view(argv[1]) == "--long-line";
+        if (argc > 1 && !sparse && !long_line)
+            throw std::runtime_error("Usage: swiftedit-selection-bench [--sparse|--long-line]");
         const std::size_t sizes[] = {65536, 1048576, swiftedit::editable_limit - 1};
         std::cout << "source_bytes,selection_count,sample,selection_ms\n";
         for (const std::size_t size : sizes) {
             std::string source(size, 'a');
-            for (std::size_t index = 79; index < source.size(); index += 80)
-                source[index] = '\n';
+            if (!long_line) {
+                for (std::size_t index = 79; index < source.size(); index += 80)
+                    source[index] = '\n';
+            }
             swiftedit::Session session{};
             session.replace_ranges({{0, 0}}, source, session.stamp());
             const std::size_t offset = sparse ? 80 : (size / 160) * 80;

@@ -58,3 +58,29 @@ The byte-pair oracle regression additionally combines each candidate range with
 a separate initial grapheme, comparing acceptance and rewrite eligibility to
 whole-document segmentation. Selection and projection suites passed in 0.25s;
 149-file spelling audit is clean. No native GUI latency claim is made.
+
+## ASCII long-line follow-up
+
+Baseline: 0efad85 with the `--long-line` harness extension only. This fixture
+has no newline: it selects one midpoint character in an all-ASCII line of each
+listed size. Same local Release build/SDK and timing scope, one warmup and five
+samples. Raw samples: `long-before.csv` and `long-after.csv`.
+
+| Document bytes | Segmentation baseline ms | ASCII fast path ms |
+| --- | --- | --- |
+| 65,536 | 1.8889–3.2592 | 0.0347–0.0435 |
+| 1,048,576 | 29.0634–35.3396 | 0.5561–0.6488 |
+| 16,777,215 | 465.287–513.795 | 8.9648–9.1848 |
+
+The complete group context must contain only ASCII before the shortcut applies.
+Every ASCII byte is one grapheme except CRLF, whose interior endpoints are
+rejected and whose count is one. Counting reads only selected ranges after the
+context classification; source is never copied into segmentation metadata on
+this path. Non-ASCII context retains the existing Unicode validator. The
+byte-pair oracle includes NUL, tab, C0, DEL, lone CR and CRLF, plus Unicode
+Prepend/combining/ZWJ/regional-indicator cases that must retain their context.
+
+Context scanning remains synchronous and linear. Long Unicode lines still
+require segmentation allocations, with an additional ASCII classification pass
+up to the first non-ASCII byte. These five samples do not establish a hard
+deadline, tail percentile, or native input latency.

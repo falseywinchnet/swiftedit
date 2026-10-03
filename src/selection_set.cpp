@@ -5,6 +5,26 @@
 namespace swiftedit {
 namespace gf = gui_forms;
 namespace {
+bool ascii_context(const std::string_view context) {
+    for (const unsigned char byte : context) {
+        if (byte >= 128) return false;
+    }
+    return true;
+}
+std::size_t ascii_graphemes(const std::string_view context, const SourceRange range) {
+    const std::size_t end = range.offset + range.length;
+    if ((range.offset && range.offset < context.size() && context[range.offset - 1] == '\r' && context[range.offset] == '\n') ||
+        (end && end < context.size() && context[end - 1] == '\r' && context[end] == '\n'))
+        throw std::runtime_error("Selection splits a source grapheme or line ending.");
+    std::size_t count = range.length;
+    for (std::size_t offset = range.offset; offset < end; ++offset) {
+        if (context[offset] == '\r' && offset + 1 < end && context[offset + 1] == '\n') {
+            --count;
+            ++offset;
+        }
+    }
+    return count;
+}
 std::vector<SourceRange> map_selections(const Session &session, const gf::DocumentViewState &view,
                                       const gf::DocumentPageRequest &token,
                                       const std::vector<DisplaySelection> &selections) {
@@ -84,6 +104,22 @@ SelectionSet::SelectionSet(const Session &session, const std::vector<SourceRange
                 context_end = following_lf == std::string::npos ? source.size() : following_lf + 1;
             }
             ++after_group;
+        }
+        const std::string_view context(source.data() + context_begin, context_end - context_begin);
+        // With complete ASCII context, each byte is one grapheme except CRLF.
+        // Inspect the entire context before taking this path: a preceding
+        // non-ASCII Prepend or a following combining scalar changes legality.
+        if (ascii_context(context)) {
+            for (std::size_t index = group; index < after_group; ++index) {
+                const SourceRange &range = ranges[index];
+                const std::size_t count = ascii_graphemes(context, {range.offset - context_begin, range.length});
+                if (index == 0)
+                    first_count = count;
+                else if (count != first_count)
+                    equal_lengths_ = false;
+            }
+            group = after_group;
+            continue;
         }
         // Illegal-byte sentinels force grapheme breaks without changing byte
         // lengths. Metadata is never copied into source or clipboard output.

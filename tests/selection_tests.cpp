@@ -150,7 +150,7 @@ int main() {
                 "Replacing invalid bytes is undoable without metadata leaking into source");
         const std::string boundary_source = std::string("\n\r\ne\xcc\x81\r\n\xcc\x81\xff") +
             "\xf0\x9f\x87\xa6\xf0\x9f\x87\xa7\xf0\x9f\x87\xa8\n" +
-            "\xf0\x9f\x91\xa9\xe2\x80\x8d\xf0\x9f\x92\xbb\rZ\n";
+            "\xf0\x9f\x91\xa9\xe2\x80\x8d\xf0\x9f\x92\xbb\rZ\n\xd8\x80" "a\n";
         {
             std::ofstream output(path, std::ios::binary | std::ios::trunc);
             output.write(boundary_source.data(), static_cast<std::streamsize>(boundary_source.size()));
@@ -160,6 +160,11 @@ int main() {
         session.open(path);
         verify_context_boundaries(session);
         require(session.text() == boundary_source && !session.dirty(), "Boundary checks preserve source");
+        session.reset();
+        const std::string ascii = std::string("\nA\r\n\0\t\x01", 7) + "\x7f\rB\n\r\n";
+        session.replace_ranges({{0, 0}}, ascii, session.stamp());
+        verify_context_boundaries(session);
+        require(session.text() == ascii, "ASCII fast path preserves every source control");
         std::cout << "Interactive selection policy tests passed\n";
         return 0;
     } catch (const std::exception &failure) {
