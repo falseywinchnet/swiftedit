@@ -30,7 +30,12 @@ result, queued results and UI-consumed result may coexist. Allocation, reference
 metadata preparation, source parsing, queue cleanup and joining are not guaranteed
 to meet a wall-clock deadline. Convert to Value now reuses a current successful
 cell's exact result (2525a2f), preserving the original source elsewhere. Pending
-or uncached conversions still compute synchronously.
+conversions now wait for the existing viewport worker instead of recalculating
+on the UI thread. Escape, a changed selection, focus loss, source replacement,
+viewport replacement, editing, or leaving table view revokes the pending intent.
+The intent is cleared before publishing the change because an editor listener
+can synchronously replace the source. Source replacement and Undo publication
+still run on the UI thread; this does not establish a total command deadline.
 
 ## Measurements and rejected first attempt
 
@@ -105,3 +110,28 @@ scheduling counters can help locate the delay. Logging a delayed observation can
 itself influence subsequent timing; these remain diagnostic observations, not
 performance acceptance thresholds. This extension compiles locally; its native
 results remain pending.
+
+## Presentation trace follow-up
+
+Native run [37094617212](https://github.com/falseywinchnet/swiftedit/actions/runs/37094617212)
+at 7a59318 passed all native jobs and packaging. Exact diagnostic lines are
+retained in trace-*.txt. All three hosts presented 12 stress frames.
+
+| Platform | Completion observed ms | Maximum timer gap ms | Total measured presentation ms | Worst measured presentation ms |
+|---|---:|---:|---:|---:|
+| Windows x64 | 84.225 | 13.7472 | 78.4894 | 6.9604 |
+| Linux x64 | 224.786 | 20.1529 | 219.489463 | 20.067897 |
+| macOS arm64 | 425.989 | 97.8794 | 109.557127 | 13.607041 |
+
+The Mac's measured worst presentation is shorter than its largest timer gap;
+the counters do not attribute the remainder to a specific cause. The repeated
+result-publication frames and native scheduling are the next profiling targets.
+These counters are the public provider's instrumentation, not OS input delivery
+or end-to-end compositor timing. The changed CI host conditions and extra logging
+prevent treating the lower Mac total as an optimization result.
+
+Deferred conversion regression checks cover one-step Undo through the editor,
+both menu routes, exact cached values, errors, stale source, Escape, selection,
+focus and table-view cancellation. The native context-menu test now returns to
+the event loop before asserting its result, retaining the same source/Undo/save
+assertions. Native validation of deferred conversion is pending.

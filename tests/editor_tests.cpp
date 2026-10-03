@@ -4,12 +4,22 @@
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
+#include <thread>
 #include "platform.hpp"
 #ifdef _WIN32
 #include <winioctl.h>
 #endif
 
 namespace gf = gui_forms;
+void settle_csv(notepad::CsvView &grid) {
+    const gf::FrameTime deadline = gf::FrameClock::now() + std::chrono::seconds(5);
+    while (grid.calculations_pending()) {
+        grid.on_frame(gf::FrameClock::now());
+        if (gf::FrameClock::now() >= deadline)
+            throw std::runtime_error("CSV conversion did not finish within test timeout.");
+        std::this_thread::yield();
+    }
+}
 gf::HostCapabilities capabilities() {
     gf::HostCapabilities caps{};
     caps.platform = "notepad-test";
@@ -933,6 +943,7 @@ int main(const int argc, char **const argv) {
         (*grid).commit_cell("=A1*4");
         check((*text).text() == "2,=A1*4\r\n4,5", "Enter stores formula source");
         (*editor).execute("csv-convert-value");
+        settle_csv(*grid);
         check((*text).text() == "2,8\r\n4,5", "CSV menu converts formula to value");
         (*editor).execute("undo");
         check((*text).text() == "2,=A1*4\r\n4,5", "Conversion is one undo step");
@@ -948,6 +959,7 @@ int main(const int argc, char **const argv) {
         (*grid).on_pointer(context_press);
         check((*grid).context_menu().is_open(), "Right click opens the cell menu");
         const bool context_executed = (*context_items[0].command).execute("csv.context");
+        settle_csv(*grid);
         check(context_executed && (*text).text() == "2,8\r\n4,5",
               "Context menu invokes the same conversion operation");
         (*grid).context_menu().close();
@@ -957,6 +969,7 @@ int main(const int argc, char **const argv) {
         (*grid).commit_cell("=B1");
         const std::string cyclic_source((*text).text());
         (*grid).convert_to_value();
+        settle_csv(*grid);
         check((*text).text() == cyclic_source, "Conversion error preserves formula source");
         check((*grid).status().find("Circular") != std::string::npos,
               "Grid exposes formula conversion error");

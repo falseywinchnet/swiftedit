@@ -26,6 +26,7 @@ public:
     void on_paint(gf::Painter &, gf::Rect) override;
     void on_pointer(gf::PointerEvent &) override;
     void on_key(gf::KeyEvent &) override;
+    void on_focus_changed(bool) override;
     void on_frame(gf::FrameTime) override;
     void cancel_calculations();
     [[nodiscard]] bool calculations_pending() const { return next_calculation_ < calculations_.size(); }
@@ -45,6 +46,11 @@ private:
         std::weak_ptr<CsvView> owner{};
         void operator()(const double &) const;
     };
+    struct EntryListener {
+        std::weak_ptr<CsvView> owner{};
+        void operator()() const;
+        void operator()(const std::string &) const;
+    };
     struct CellDisplay {
         std::string text{}, detail{};
         std::optional<std::string> exact_value{};
@@ -54,6 +60,8 @@ private:
     std::weak_ptr<CsvView> observe();
     void prepare_view();
     void advance_view();
+    void finish_conversion();
+    void cancel_conversion() noexcept;
     void reveal_caret();
     void update_scrollbars();
     void update_field();
@@ -63,6 +71,7 @@ private:
     std::shared_ptr<const swiftedit::Csv> table_{};
     std::unique_ptr<swiftedit::CsvCalculator> calculator_{};
     bool calculation_requested_{};
+    std::optional<swiftedit::CellAddress> conversion_{};
     std::string source_{};
     std::shared_ptr<gf::TextBox> entry_{};
     std::shared_ptr<gf::VScrollBar> vertical_{};

@@ -38,6 +38,16 @@ void CsvView::ScrollListener::operator()(const double &) const {
     if (self && (*self).is_alive())
         (*self).prepare_view();
 }
+void CsvView::EntryListener::operator()() const {
+    const std::shared_ptr<CsvView> self = owner.lock();
+    if (self && (*self).is_alive() && (*self).conversion_) {
+        (*self).cancel_conversion();
+        (*self).invalidate(gf::Dirty::paint);
+    }
+}
+void CsvView::EntryListener::operator()(const std::string &) const {
+    operator()();
+}
 void CsvView::initialize_control_tree() {
     entry_ = gf::make_control<gf::TextBox>(gf::StableId("csv.entry"));
     (*entry_).set_accessible_name("Cell source or formula; Enter to apply");
@@ -48,6 +58,8 @@ void CsvView::initialize_control_tree() {
     add_child(vertical_);
     add_child(horizontal_);
     subscriptions_.push_back((*entry_).committed().subscribe(*this, CommitListener{observe()}));
+    subscriptions_.push_back((*entry_).text_changed().subscribe(*this, EntryListener{observe()}));
+    subscriptions_.push_back((*entry_).cancelled().subscribe(*this, EntryListener{observe()}));
     subscriptions_.push_back(
         (*vertical_).value_changed().subscribe(*this, ScrollListener{observe()}));
     subscriptions_.push_back(
@@ -64,6 +76,7 @@ void CsvView::on_dispose() noexcept {
     Control::on_dispose();
 }
 void CsvView::cancel_calculations() {
+    cancel_conversion();
     if (calculator_)
         (*calculator_).cancel();
     calculation_requested_ = false;
@@ -87,6 +100,7 @@ void CsvView::set_source(std::string_view source) {
     std::size_t columns = 0;
     for (const std::vector<swiftedit::Cell> &row : (*next).rows())
         columns = std::max(columns, row.size());
+    cancel_conversion();
     table_ = std::move(next);
     source_ = std::move(retained);
     columns_ = columns;
@@ -167,6 +181,7 @@ void CsvView::prepare_view() {
     cells_dirty_ = true;
     top_ = top;
     left_ = left;
+    cancel_conversion();
     if (calculator_)
         (*calculator_).cancel();
     calculation_requested_ = false;
@@ -206,6 +221,8 @@ void CsvView::on_frame(gf::FrameTime) {
     try {
         advance_view();
     } catch (const std::exception &failure) {
+        cancel_conversion();
+        status_ = failure.what();
         if (calculator_)
             (*calculator_).cancel();
         calculation_requested_ = false;
@@ -304,8 +321,11 @@ void CsvView::advance_view() {
     }
     if (updated)
         invalidate(gf::Dirty::paint);
+    finish_conversion();
 }
 void CsvView::update_field() {
+    if (conversion_ && !(*conversion_ == caret_))
+        cancel_conversion();
     if (!table_)
         return;
     (*entry_).set_text((*table_).cell(caret_).value);
@@ -322,6 +342,7 @@ void CsvView::select_cell(swiftedit::CellAddress address) {
     invalidate(gf::Dirty::paint);
 }
 void CsvView::select_all() {
+    cancel_conversion();
     if (!table_)
         return;
     // Keep a valid active cell even when rows have different lengths. The
@@ -331,6 +352,7 @@ void CsvView::select_all() {
 }
 void CsvView::publish(std::string source) { changed_.emit(source); }
 void CsvView::commit_cell(std::string_view value) {
+    cancel_conversion();
     if (!table_)
         return;
     try {
@@ -346,25 +368,54 @@ void CsvView::convert_to_value() {
     if (!table_)
         return;
     try {
-        std::string source{};
+        cancel_conversion();
+        if (!(*table_).cell(caret_).value.starts_with('='))
+            throw std::runtime_error("The selected cell does not contain a formula.");
+        reveal_caret();
+        prepare_view();
+        conversion_ = caret_;
+        status_ = "Waiting for formula result. Escape cancels conversion.";
+        finish_conversion();
+    } catch (const std::exception &failure) {
+        cancel_conversion();
+        status_ = failure.what();
+    }
+    invalidate(gf::Dirty::paint);
+}
+void CsvView::cancel_conversion() noexcept {
+    if (conversion_) {
+        conversion_.reset();
+        status_.clear();
+    }
+}
+void CsvView::finish_conversion() {
+    if (!conversion_ || cells_dirty_ || !table_)
+        return;
+    try {
+        const swiftedit::CellAddress address = *conversion_;
         const std::map<std::pair<std::size_t, std::size_t>, CellDisplay>::const_iterator found =
-            cells_.find({caret_.row, caret_.column});
-        if (!cells_dirty_ && found != cells_.end() && (*found).second.exact_value &&
-            !(*found).second.error) {
-            // This cache belongs to the current immutable table and viewport.
-            // Use the exact value, never the shortened display label.
-            source = (*table_).set(caret_, *(*found).second.exact_value);
-        } else {
-            source = swiftedit::convert_to_value(*table_, caret_);
-        }
+            cells_.find({address.row, address.column});
+        if (found == cells_.end())
+            throw std::runtime_error("Conversion cancelled because the cell is no longer visible.");
+        const CellDisplay &display = (*found).second;
+        if (display.error)
+            throw std::runtime_error(display.detail);
+        if (!display.exact_value)
+            return;
+        // Cache and intent belong to the current immutable source/viewport.
+        // Clear the intent before publishing: listeners may replace the source.
+        std::string source = (*table_).set(address, *display.exact_value);
+        conversion_.reset();
         publish(std::move(source));
         status_ = "Converted formula to value. Undo restores the formula.";
     } catch (const std::exception &failure) {
+        cancel_conversion();
         status_ = failure.what();
     }
     invalidate(gf::Dirty::paint);
 }
 void CsvView::clear_cells() {
+    cancel_conversion();
     if (!table_)
         return;
     try {
@@ -500,9 +551,22 @@ void CsvView::on_pointer(gf::PointerEvent &event) {
         invalidate(gf::Dirty::paint);
     }
 }
+void CsvView::on_focus_changed(bool focused) {
+    if (!focused && conversion_) {
+        cancel_conversion();
+        invalidate(gf::Dirty::paint);
+    }
+}
 void CsvView::on_key(gf::KeyEvent &event) {
     if (event.phase != gf::EventPhase::target || event.action != gf::KeyAction::down || !table_)
         return;
+    if (event.physical_key == gf::PhysicalKey::escape && conversion_) {
+        cancel_conversion();
+        status_ = "Conversion cancelled.";
+        invalidate(gf::Dirty::paint);
+        event.handled = true;
+        return;
+    }
     if (event.physical_key == gf::PhysicalKey::a &&
         (event.modifiers == gf::Modifier::control || event.modifiers == gf::Modifier::meta)) {
         select_all();
@@ -511,6 +575,7 @@ void CsvView::on_key(gf::KeyEvent &event) {
         clear_cells();
         event.handled = true;
     } else if (event.physical_key == gf::PhysicalKey::enter && window()) {
+        cancel_conversion();
         (*window()).request_focus(entry_);
         (*entry_).select_all();
         event.handled = true;

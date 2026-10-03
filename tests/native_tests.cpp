@@ -402,9 +402,22 @@ public:
                 require(items.size() == 1 && items[0].text == "Convert to Value",
                         "Native cell menu exposes conversion");
                 const bool converted = (*items[0].command).execute("csv.context");
-                require(converted && (*(*editor).text_control()).text() == "2,8\r\n4,5",
-                        "Native cell context command converts formula");
+                require(converted, "Native cell context command admits conversion");
                 (*grid).context_menu().close();
+                csv_submitted_at = std::chrono::steady_clock::now();
+                break;
+            }
+            case 16: {
+                const std::shared_ptr<notepad::CsvView> grid = (*editor).csv_control();
+                if ((*grid).calculations_pending()) {
+                    const std::chrono::steady_clock::duration elapsed =
+                        std::chrono::steady_clock::now() - csv_submitted_at;
+                    require(elapsed < std::chrono::seconds(2), "Native context conversion readiness");
+                    --stage;
+                    return;
+                }
+                require((*(*editor).text_control()).text() == "2,8\r\n4,5",
+                        "Native cell context command converts formula asynchronously");
                 (*editor).execute("undo");
                 require((*(*editor).text_control()).text() == "2,=A1*4\r\n4,5",
                         "Native context conversion undo restores formula");

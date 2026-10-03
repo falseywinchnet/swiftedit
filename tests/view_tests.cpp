@@ -182,6 +182,7 @@ void verify_cached_conversion() {
     output.clear();
     (*grid).set_source("8,=A1/8,=A1/8\r\nkeep,\"quoted,value\",tail");
     (*grid).convert_to_value();
+    settle_formulas(*grid);
     check(output == "8,=A1/8,1\r\nkeep,\"quoted,value\",tail",
           "Source replacement cannot convert using the preceding source's cached result");
     output.clear();
@@ -191,6 +192,42 @@ void verify_cached_conversion() {
     (*grid).convert_to_value();
     check(output.empty() && (*grid).status().find("Circular") != std::string::npos,
           "Erroneous formula conversion publishes no source change");
+    // No frame is pumped between request and cancellation. Even if the worker
+    // finishes immediately, only the UI frame may adopt and publish its result.
+    for (std::size_t scenario = 0; scenario < 8; ++scenario) {
+        (*grid).set_source("8,=A1/8,=A1/8");
+        (*grid).select_cell({0, 2});
+        (*grid).convert_to_value();
+        check(output.empty(), "Pending conversion returns before worker adoption");
+        if (scenario == 0) {
+            gf::KeyEvent escape{};
+            escape.physical_key = gf::PhysicalKey::escape;
+            (*grid).on_key(escape);
+            check(escape.handled, "Escape cancels a pending conversion");
+        } else if (scenario == 1) {
+            (*grid).select_cell({0, 1});
+        } else if (scenario == 2) {
+            (*grid).set_source("16,=A1/8,=A1/8");
+        } else if (scenario == 3) {
+            (*grid).cancel_calculations();
+        } else if (scenario == 4) {
+            (*grid).on_focus_changed(false);
+        } else if (scenario == 5) {
+            (*grid).select_all();
+        } else {
+            const std::shared_ptr<gf::TextBox> entry =
+                std::dynamic_pointer_cast<gf::TextBox>(window.find("csv.entry"));
+            check(static_cast<bool>(entry), "Conversion fixture has a cell entry");
+            if (scenario == 6)
+                (*entry).set_text("=A1/4");
+            else
+                (*entry).cancelled().emit();
+        }
+        settle_formulas(*grid);
+        check(output.empty(), "Cancelled or obsolete conversion cannot publish later");
+        // Force fresh source next iteration, including after explicit cancel.
+        (*grid).set_source("4,=A1/8,=A1/8");
+    }
 }
 void verify_cooperative_formulas() {
     const std::shared_ptr<notepad::CsvView> grid =
