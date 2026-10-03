@@ -375,3 +375,13 @@ This is routed native-window testing, not physical keyboard latency measurement.
 The executable builds locally; its new native path still needs CI execution.
 Focused editor/view suites passed 2/2 in 2.74 seconds; the added readiness
 regression then passed the view suite in 0.29 seconds. Style audit is clean.
+
+Run 37102333980 at 51cdad7 passed all three native/package jobs with the corrected
+paint readiness and routed cancellation tests. Raw painted-native files preserve
+all observations. Linux distinct-word layout took 724.70 ms cumulatively across
+slices, with a longest slice of 9.47 ms and complete-paint observation at 896.88
+ms. macOS took 1290.67 ms cumulatively, longest slice 33.35 ms and completion
+2604.86 ms. These are separate CI observations, not controlled before/after
+experiments or proof of an 8 ms hard bound. Routed Escape, cancellation surviving
+the next tick without scheduled work, reopening and close during unfinished
+layout passed on every platform. Full physical dogfood remains open.
