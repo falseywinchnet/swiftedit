@@ -164,7 +164,7 @@ void MarkdownView::on_frame(gf::FrameTime) {
         layout_dirty_ = true;
     } catch (const std::exception &failure) {
         preparation_pending_ = false;
-        source_prepared_ = true;
+        source_prepared_ = false;
         layout_dirty_ = false;
         layout_error_ = failure.what();
     }
@@ -393,7 +393,7 @@ void MarkdownView::on_paint(gf::Painter &painter, gf::Rect) {
     const gf::Rect bounds = arranged_bounds();
     const gf::BasicControlStyle &style = effective_theme().basic_style();
     painter.fill_rect({0, 0, bounds.width, bounds.height}, style.paper);
-    if (preparation_pending_ || !source_prepared_) {
+    if (preparation_pending_ || (!source_prepared_ && layout_error_.empty())) {
         schedule_preparation();
         const gf::FontSpec font{gf::FontRole::content, 14, 400, false};
         const std::string_view message = preparation_pending_
@@ -401,7 +401,7 @@ void MarkdownView::on_paint(gf::Painter &painter, gf::Rect) {
         painter.draw_text_utf8({24, 48}, message, font, style.text);
         return;
     }
-    if (layout_dirty_) {
+    if (layout_pending()) {
         const gf::FrameTime layout_start = gf::FrameClock::now();
         try {
             layout(painter, bounds.width);

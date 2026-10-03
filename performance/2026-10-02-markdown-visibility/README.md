@@ -334,3 +334,16 @@ focused verification follows those adjustments. The spelling audit found zero
 findings in 148 files. No local desktop was launched.
 
 Final focused editor/view verification passed 2/2 in 2.84 seconds; the style audit remained clean.
+
+Run 37101481404 at 40c240e passed all three native/package jobs. Raw
+sliced-native files retain both fixtures. Linux distinct layout longest slice
+was 8.16 ms, but completion rose to 4450 ms over 186 paints; repeated-word
+completion also rose to about 223 ms over 11 paints. Yielding fixed the long
+measurement callback but exposes unnecessary presentation work between slices.
+The next change uses the public UI timer and current window text-metrics service
+to advance layout without repainting an unchanged placeholder.
+
+A further regression failed when metrics invalidation erased a worker parse
+failure and published an empty successful view. Keeping source readiness false
+and separate from layout readiness fixes it; editor/view tests passed 2/2 in
+2.45 seconds and style audit remained clean.

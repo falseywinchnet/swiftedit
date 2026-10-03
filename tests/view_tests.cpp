@@ -397,6 +397,13 @@ void verify_markdown_preparation() {
     paint_markdown(*view, invalid, {0, 0, 640, 480});
     check(invalid.drawn.find("valid UTF-8") != std::string::npos,
           "Worker parse failures are shown instead of a stale presentation");
+    ObservingPainter changed_metrics{};
+    window.set_text_metrics_provider(&changed_metrics);
+    window.perform_layout();
+    paint_markdown(*view, changed_metrics, {0, 0, 640, 480});
+    check(changed_metrics.drawn.find("valid UTF-8") != std::string::npos &&
+              !(*view).presentation_ready(),
+          "Metrics invalidation cannot turn rejected Markdown into an empty successful view");
 }
 void verify_tall_markdown_visibility() {
     const std::shared_ptr<notepad::MarkdownView> view =
