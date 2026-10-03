@@ -155,3 +155,19 @@ replacement, view, and editor checks: four suites passed in 2.26 seconds locally
 The final full headless run passed all 29 tests in 20.68 seconds, and the source
 spelling audit passed across 148 files. Native performance comparison is pending;
 moving work off the UI thread is not itself proof of lower end-to-end latency.
+
+## Asynchronous parsing native checkpoint
+
+Run 37097937531 at 2c9256f passed native tests and packaging on Windows, Linux,
+and macOS. This revision includes asynchronous parsing and the corrected observer,
+but predates worker-owned display-text projection. Raw results are recorded in
+async-native-*.txt. Observed stress first-paint times were 40.30 ms on Windows,
+79.40 ms on Linux, and 67.73 ms on macOS. All three recorded zero paint passes,
+presented frames, scheduled frame requests, and frame deadlines during the
+settled-idle interval. Closing with replacement preparation pending, measured
+through owner release, took 16.46, 21.75, and 47.44 ms respectively.
+
+These are single CI observations, not controlled before/after performance ratios
+or guaranteed deadlines. The macOS native-view capture was inspected: heading,
+emphasis, quote, task list, table, code, inert link and image-alt text were visible.
+It is a native view capture rather than physical-screen or keyboard dogfooding.
