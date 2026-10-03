@@ -52,8 +52,6 @@ public:
             "```text\ncode block <literal> & text\nsecond line\n```\n\n"
             "[Inert example link](https://example.invalid/?a=1&amp;b=2)\n\n"
             "![Image alt text only](https://example.invalid/image.png)\n");
-        if ((*view_).block_count() < 8)
-            throw std::runtime_error("Markdown native fixture did not parse its blocks.");
         gf::ApplicationWindow entry{};
         entry.stable_id = "markdown.native";
         entry.model = std::make_unique<gf::Window>(view_, gf::Size{900, 800});
@@ -65,11 +63,16 @@ public:
         const gf::ApplicationResult result = gf::Application::run(std::move(windows));
         subscription_ = {};
         timer_.reset();
+        view_.reset();
+        if (close_started_ != gf::FrameTime{}) {
+            const std::chrono::duration<double, std::milli> elapsed = gf::FrameClock::now() - close_started_;
+            std::cout << "Markdown pending-work close through owner release ms: " << elapsed.count() << '\n';
+        }
         if (result.callback_exception)
             std::rethrow_exception(result.callback_exception);
         if (failure_)
             std::rethrow_exception(failure_);
-        if (!result.accepted() || !passed_ || !stress_passed_)
+        if (!result.accepted() || !passed_ || !stress_passed_ || close_started_ == gf::FrameTime{})
             throw std::runtime_error("Native Markdown did not complete a visible paint.");
     }
 
@@ -85,9 +88,21 @@ private:
     void tick() {
         ++ticks_;
         const gf::MetricsSnapshot metrics = (*window_).metrics().snapshot();
+        if (stress_passed_) {
+            std::cout << "Markdown settled idle: " << metrics.to_json() << '\n';
+            if (metrics.scheduled_frame_requests || metrics.frame_deadlines_fired)
+                throw std::runtime_error("Completed Markdown retained calculation scheduling.");
+            (*view_).set_source(stress_source_ + " changed");
+            if (!(*view_).preparation_pending())
+                throw std::runtime_error("Markdown close fixture did not create pending work.");
+            (*timer_).stop();
+            close_started_ = gf::FrameClock::now();
+            static_cast<void>(handle_.request_close());
+            return;
+        }
         if (stress_started_ != gf::FrameTime{}) {
             const std::chrono::duration<double, std::milli> elapsed = gf::FrameClock::now() - stress_started_;
-            if (metrics.paint_passes == 0) {
+            if (metrics.paint_passes == 0 || !(*view_).presentation_ready()) {
                 if (elapsed.count() < 5000)
                     return;
                 throw std::runtime_error("Native Markdown stress paint readiness timeout.");
@@ -99,15 +114,17 @@ private:
             std::cout << "Markdown stress first paint observed ms: " << elapsed.count()
                       << "; visible words: " << probe.words << "; metrics: " << metrics.to_json() << '\n';
             stress_passed_ = true;
-            (*timer_).stop();
-            static_cast<void>(handle_.request_close());
+            (*window_).reset_activity_metrics();
+            (*timer_).set_interval(std::chrono::milliseconds(200));
             return;
         }
-        if ((*window_).occluded() || metrics.paint_passes == 0) {
+        if ((*window_).occluded() || metrics.paint_passes == 0 || !(*view_).presentation_ready()) {
             if (ticks_ < 100)
                 return;
         } else {
             try {
+                if ((*view_).block_count() < 8)
+                    throw std::runtime_error("Markdown native fixture did not parse its blocks.");
 #ifdef __APPLE__
                 capture_native_view("SwiftEdit Markdown native regression", "markdown");
 #endif
@@ -135,6 +152,7 @@ private:
     bool passed_{}, stress_passed_{};
     std::string stress_source_{};
     gf::FrameTime stress_started_{};
+    gf::FrameTime close_started_{};
 };
 int main() {
     try {

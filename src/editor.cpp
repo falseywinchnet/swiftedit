@@ -417,6 +417,8 @@ void Editor::show_markdown(bool show) {
             show_csv(false);
     }
     markdown_visible_ = show;
+    if (!show)
+        (*markdown_).cancel_preparation();
     (*text_).set_visible(!show && !csv_visible_);
     (*markdown_).set_visible(show);
     refresh();

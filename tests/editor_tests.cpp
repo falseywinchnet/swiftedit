@@ -105,6 +105,18 @@ void verify_view_menu_state() {
         }
     }
     check(toggles == 4, "All four view toggles expose checkmarks");
+    (*(*editor).text_control()).set_text("# Pending Markdown");
+    const std::shared_ptr<notepad::MarkdownView> markdown =
+        std::dynamic_pointer_cast<notepad::MarkdownView>(find_control(editor, "swiftedit.markdown"));
+    check(static_cast<bool>(markdown), "Editor owns its Markdown view");
+    (*editor).execute("markdown-view");
+    check((*markdown).preparation_pending(), "Rendered mode submits Markdown preparation");
+    (*editor).execute("markdown-view");
+    check(!(*markdown).preparation_pending(), "Source mode cancels pending Markdown preparation");
+    (*editor).execute("markdown-view");
+    check((*markdown).preparation_pending() && (*(*editor).text_control()).text() == "# Pending Markdown",
+          "Reopening the same source restarts cancelled work without changing text");
+    (*editor).execute("markdown-view");
 }
 void verify_conflict_fields() {
     const std::filesystem::path dir =

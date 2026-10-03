@@ -62,6 +62,7 @@ public:
     bool find_open_requested{};
     std::chrono::steady_clock::time_point find_requested_at{};
     std::chrono::steady_clock::time_point csv_submitted_at{};
+    std::chrono::steady_clock::time_point markdown_submitted_at{};
     int stage{};
     std::exception_ptr test_failure{};
     std::unique_ptr<gf::Timer> timer{};
@@ -310,9 +311,19 @@ public:
                         "Native reviewed overwrite publishes and restores owner");
                 break;
             case 11:
+                markdown_submitted_at = std::chrono::steady_clock::now();
                 (*editor).execute("markdown-view");
                 break;
             case 12: {
+                const std::shared_ptr<notepad::MarkdownView> markdown =
+                    std::dynamic_pointer_cast<notepad::MarkdownView>(find_control(editor, "swiftedit.markdown"));
+                require(static_cast<bool>(markdown), "Native Markdown view exists");
+                if (!(*markdown).presentation_ready()) {
+                    require(std::chrono::steady_clock::now() - markdown_submitted_at < std::chrono::seconds(5),
+                            "Native Markdown preparation readiness");
+                    --stage;
+                    return;
+                }
                 const std::shared_ptr<gf::MenuStrip> menu =
                     std::dynamic_pointer_cast<gf::MenuStrip>(
                         find_control(editor, "notepad.menus"));

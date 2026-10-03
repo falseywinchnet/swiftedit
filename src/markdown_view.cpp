@@ -110,20 +110,64 @@ void MarkdownView::initialize_control_tree() {
     (*horizontal_).set_small_change(32);
 }
 void MarkdownView::on_dispose() noexcept {
+    cancel_preparation();
+    preparation_.reset();
     subscriptions_.clear();
     tooltip_.reset();
     Control::on_dispose();
 }
 void MarkdownView::set_source(std::string_view source) {
-    if (source == source_)
+    if (source == source_ && (source_prepared_ || preparation_pending_))
         return;
-    std::vector<swiftedit::MarkdownBlock> parsed = swiftedit::parse_markdown(source);
     std::string retained(source);
-    blocks_ = std::move(parsed);
+    if (!preparation_)
+        preparation_ = std::make_unique<swiftedit::MarkdownPreparation>();
+    (*preparation_).request(retained);
+    preparation_frame_.disconnect();
+    preparation_pending_ = true;
+    source_prepared_ = false;
+    blocks_.clear();
+    runs_.clear();
+    run_bottoms_.clear();
     source_ = std::move(retained);
     layout_dirty_ = true;
     layout_error_.clear();
     clear_hover();
+    schedule_preparation();
+    invalidate(gf::Dirty::paint);
+}
+void MarkdownView::schedule_preparation() {
+    if (preparation_pending_ && window() && !preparation_frame_.connected()) {
+        const gf::FrameTime deadline = gf::FrameClock::now() + std::chrono::milliseconds(1);
+        preparation_frame_ = (*window()).schedule_paint(shared_from_this(), deadline);
+    }
+}
+void MarkdownView::cancel_preparation() {
+    if (preparation_)
+        (*preparation_).cancel();
+    preparation_frame_.disconnect();
+    preparation_pending_ = false;
+}
+void MarkdownView::on_frame(gf::FrameTime) {
+    preparation_frame_.disconnect();
+    if (!preparation_pending_)
+        return;
+    try {
+        std::optional<std::vector<swiftedit::MarkdownBlock>> completed = (*preparation_).take();
+        if (!completed) {
+            schedule_preparation();
+            return;
+        }
+        blocks_ = std::move(*completed);
+        preparation_pending_ = false;
+        source_prepared_ = true;
+        layout_dirty_ = true;
+    } catch (const std::exception &failure) {
+        preparation_pending_ = false;
+        source_prepared_ = true;
+        layout_dirty_ = false;
+        layout_error_ = failure.what();
+    }
     invalidate(gf::Dirty::paint);
 }
 void MarkdownView::arrange(gf::Rect bounds) {
@@ -139,6 +183,7 @@ void MarkdownView::arrange(gf::Rect bounds) {
         layout_dirty_ = true;
     if (!layout_dirty_)
         update_scroll_ranges();
+    schedule_preparation();
 }
 void MarkdownView::layout(gf::Painter &painter, double width) {
     MarkdownMeasurements measurements(painter);
@@ -304,6 +349,14 @@ void MarkdownView::on_paint(gf::Painter &painter, gf::Rect) {
     const gf::Rect bounds = arranged_bounds();
     const gf::BasicControlStyle &style = effective_theme().basic_style();
     painter.fill_rect({0, 0, bounds.width, bounds.height}, style.paper);
+    if (preparation_pending_ || !source_prepared_) {
+        schedule_preparation();
+        const gf::FontSpec font{gf::FontRole::content, 14, 400, false};
+        const std::string_view message = preparation_pending_
+            ? "Preparing Markdown. Escape cancels." : "Markdown preparation cancelled.";
+        painter.draw_text_utf8({24, 48}, message, font, style.text);
+        return;
+    }
     if (layout_dirty_) {
         try {
             layout(painter, bounds.width);
@@ -361,8 +414,15 @@ void MarkdownView::clear_hover() {
         (*tooltip_).hide();
 }
 void MarkdownView::on_key(gf::KeyEvent &event) {
+    if (event.phase == gf::EventPhase::target && event.action == gf::KeyAction::down &&
+        event.physical_key == gf::PhysicalKey::escape && preparation_pending_) {
+        cancel_preparation();
+        invalidate(gf::Dirty::paint);
+        event.handled = true;
+        return;
+    }
     if (event.phase != gf::EventPhase::target || event.action != gf::KeyAction::down ||
-        layout_dirty_ || !layout_error_.empty())
+        preparation_pending_ || !source_prepared_ || layout_dirty_ || !layout_error_.empty())
         return;
     const bool plain = event.modifiers == gf::Modifier::none;
     const bool document = event.modifiers == gf::Modifier::control || event.modifiers == gf::Modifier::meta;

@@ -67,6 +67,18 @@ void check(bool good, const char *message) {
         throw std::runtime_error(message);
 }
 void settle_formulas(notepad::CsvView &);
+void settle_markdown(notepad::MarkdownView &view) {
+    const gf::FrameTime deadline = gf::FrameClock::now() + std::chrono::seconds(5);
+    while (view.preparation_pending()) {
+        view.on_frame(gf::FrameClock::now());
+        check(gf::FrameClock::now() < deadline, "Markdown worker readiness timeout");
+        std::this_thread::yield();
+    }
+}
+void paint_markdown(notepad::MarkdownView &view, gf::Painter &painter, gf::Rect bounds) {
+    settle_markdown(view);
+    view.on_paint(painter, bounds);
+}
 void verify_text_baselines() {
     ObservingPainter painter{};
     painter.tall_metrics = true;
@@ -93,7 +105,7 @@ void verify_text_baselines() {
     gf::Window markdown_window(markdown, {640, 480});
     (*markdown).set_source("body");
     markdown_window.perform_layout();
-    (*markdown).on_paint(painter, {0, 0, 640, 480});
+    paint_markdown(*markdown, painter, {0, 0, 640, 480});
     check(!painter.labels.empty() && painter.labels[0] == "body" &&
               painter.origins[0].y - 18 >= 24,
           "Markdown text remains below its block top using renderer ascent");
@@ -337,6 +349,49 @@ void verify_csv_page_navigation() {
     (*grid).on_key(key);
     check((*grid).selected().row == 0 && (*grid).selected().column == 0, "Ctrl Home reaches the first cell");
 }
+void verify_markdown_preparation() {
+    const std::shared_ptr<notepad::MarkdownView> view =
+        gf::make_control<notepad::MarkdownView>(gf::StableId("preparation.markdown"));
+    gf::Window window(view, {640, 480});
+    window.perform_layout();
+    (*view).set_source("# Obsolete");
+    (*view).set_source("# Current");
+    check((*view).preparation_pending() && (*view).block_count() == 0,
+          "Markdown submission yields before model adoption and revokes old presentation");
+    ObservingPainter pending{};
+    (*view).on_paint(pending, {0, 0, 640, 480});
+    check(pending.drawn.find("Preparing Markdown") != std::string::npos,
+          "Pending Markdown is explicitly visible");
+    ObservingPainter current{};
+    paint_markdown(*view, current, {0, 0, 640, 480});
+    check(current.drawn.find("Current") != std::string::npos &&
+          current.drawn.find("Obsolete") == std::string::npos && (*view).presentation_ready(),
+          "Only current Markdown becomes visible");
+    window.reset_activity_metrics();
+    (*view).on_frame(gf::FrameClock::now());
+    (*view).set_source("# Current");
+    const gf::MetricsSnapshot idle = window.metrics().snapshot();
+    check(idle.scheduled_frame_requests == 0 && idle.dirty_marks == 0,
+          "Completed Markdown retains no polling or redundant preparation");
+    (*view).set_source("# Cancel me");
+    gf::KeyEvent escape{};
+    escape.physical_key = gf::PhysicalKey::escape;
+    (*view).on_key(escape);
+    (*view).on_frame(gf::FrameClock::now());
+    ObservingPainter cancelled{};
+    (*view).on_paint(cancelled, {0, 0, 640, 480});
+    check(escape.handled && !(*view).preparation_pending() &&
+          cancelled.drawn.find("cancelled") != std::string::npos,
+          "Escape cancels preparation without later result adoption");
+    (*view).set_source("# Cancel me");
+    check((*view).preparation_pending(), "Reopening cancelled source requests preparation again");
+    settle_markdown(*view);
+    (*view).set_source("\xff");
+    ObservingPainter invalid{};
+    paint_markdown(*view, invalid, {0, 0, 640, 480});
+    check(invalid.drawn.find("valid UTF-8") != std::string::npos,
+          "Worker parse failures are shown instead of a stale presentation");
+}
 void verify_tall_markdown_visibility() {
     const std::shared_ptr<notepad::MarkdownView> view =
         gf::make_control<notepad::MarkdownView>(gf::StableId("tall.markdown"));
@@ -348,7 +403,7 @@ void verify_tall_markdown_visibility() {
     source += "[tail](https://example.invalid/tail)";
     (*view).set_source(source);
     ObservingPainter initial{};
-    (*view).on_paint(initial, {0, 0, 640, 140});
+    paint_markdown(*view, initial, {0, 0, 640, 140});
     check(initial.measurements < 10,
           "Repeated Markdown words share metrics within one font and layout rebuild");
     const std::shared_ptr<gf::VScrollBar> scroll =
@@ -356,7 +411,7 @@ void verify_tall_markdown_visibility() {
     check(static_cast<bool>(scroll), "Tall Markdown has a scrollbar");
     (*scroll).set_value(3000);
     ObservingPainter middle{};
-    (*view).on_paint(middle, {0, 0, 640, 140});
+    paint_markdown(*view, middle, {0, 0, 640, 140});
     check(middle.texts < 200 && middle.tall_rules == 1,
           "Tall quote preserves its intersecting rule without submitting off-screen text");
     gf::KeyEvent end{};
@@ -364,7 +419,7 @@ void verify_tall_markdown_visibility() {
     end.modifiers = gf::Modifier::control;
     (*view).on_key(end);
     ObservingPainter bottom{};
-    (*view).on_paint(bottom, {0, 0, 640, 140});
+    paint_markdown(*view, bottom, {0, 0, 640, 140});
     bool found_tail = false;
     for (std::size_t index = 0; index < bottom.labels.size(); ++index) {
         if (bottom.labels[index] != "tail")
@@ -383,15 +438,15 @@ void verify_tall_markdown_visibility() {
     source += "|\n> | --- |\n";
     (*view).set_source(source);
     ObservingPainter table_initial{};
-    (*view).on_paint(table_initial, {0, 0, 640, 140});
+    paint_markdown(*view, table_initial, {0, 0, 640, 140});
     (*scroll).set_value(3000);
     ObservingPainter table_middle{};
-    (*view).on_paint(table_middle, {0, 0, 640, 140});
+    paint_markdown(*view, table_middle, {0, 0, 640, 140});
     check(table_middle.texts < 200 && table_middle.tall_borders == 1 && table_middle.tall_rules == 1,
           "Tall table retains both overlapping decorations while pruning off-screen text");
     (*view).set_source("*word* **word** `word` word");
     ObservingPainter styles{};
-    (*view).on_paint(styles, {0, 0, 640, 140});
+    paint_markdown(*view, styles, {0, 0, 640, 140});
     bool italic = false, bold = false, monospace = false;
     for (const gf::FontSpec font : styles.measured_fonts) {
         italic = italic || font.italic;
@@ -408,6 +463,7 @@ int main() {
         verify_duplicate_formulas();
         verify_cooperative_formulas();
         verify_cached_conversion();
+        verify_markdown_preparation();
         verify_tall_markdown_visibility();
         const std::shared_ptr<notepad::CsvView> grid =
             gf::make_control<notepad::CsvView>(gf::StableId("test.csv"));
@@ -527,13 +583,13 @@ int main() {
                            "| A | B |\n|---|---|\n| one | two |\n");
         window.perform_layout();
         ObservingPainter painter{};
-        (*view).on_paint(painter, {0, 0, 640, 480});
+        paint_markdown(*view, painter, {0, 0, 640, 480});
         check(painter.drawn.find("Title") != std::string::npos &&
                   painter.drawn.find("Bold") != std::string::npos &&
                   painter.drawn.find("one") != std::string::npos,
               "Native Markdown paint contains parsed headings, styled text and table cells");
         const std::size_t measured = painter.measurements;
-        (*view).on_paint(painter, {0, 0, 640, 480});
+        paint_markdown(*view, painter, {0, 0, 640, 480});
         check(painter.measurements == measured, "Warm Markdown paint reuses layout measurements");
         gf::PointerEvent click{};
         click.action = gf::PointerAction::down;
@@ -542,7 +598,7 @@ int main() {
         check(click.handled, "Rendered clicks are inert");
         (*view).set_source("[first](file:///first)\n\nsecond\n\nthird\n\nfourth\n");
         (*view).arrange({0, 0, 640, 90});
-        (*view).on_paint(painter, {0, 0, 640, 90});
+        paint_markdown(*view, painter, {0, 0, 640, 90});
         gf::PointerEvent link_hover{};
         link_hover.action = gf::PointerAction::move;
         link_hover.position = {26, 54};
@@ -577,7 +633,7 @@ int main() {
         navigation.modifiers = gf::Modifier::none;
         (*view).on_key(navigation);
         check((*markdown_scroll).value() == preview_end, "Arrow scrolling clamps at preview bottom");
-        (*view).on_paint(painter, {0, 0, 640, 90});
+        paint_markdown(*view, painter, {0, 0, 640, 90});
         check(painter.measurements == before_navigation, "Keyboard navigation reuses prepared Markdown geometry");
         (*markdown_scroll).set_value(32);
         check((*view).hovered_url().empty(), "Scrolling clears the prior link tooltip");
@@ -594,36 +650,36 @@ int main() {
         (*view).arrange({0, 0, 640, 480});
         (*view).set_source("# Changed\n\nAfter revision.");
         painter.drawn.clear();
-        (*view).on_paint(painter, {0, 0, 640, 480});
+        paint_markdown(*view, painter, {0, 0, 640, 480});
         check(painter.drawn.find("Changed") != std::string::npos,
               "Changed source invalidates render cache");
         gf::PointerEvent wheel{};
         wheel.action = gf::PointerAction::wheel;
         wheel.wheel_delta.y = -1;
         (*view).on_pointer(wheel);
-        (*view).on_paint(painter, {0, 0, 640, 480});
+        paint_markdown(*view, painter, {0, 0, 640, 480});
         check(painter.translation.y == 28, "Fitting content cannot scroll into artificial range");
         navigation.physical_key = gf::PhysicalKey::page_down;
         (*view).on_key(navigation);
         check((*markdown_scroll).value() == 0, "Keyboard cannot scroll fitting content into artificial range");
         (*view).arrange({0, 0, 640, 90});
         (*view).on_pointer(wheel);
-        (*view).on_paint(painter, {0, 0, 640, 90});
+        paint_markdown(*view, painter, {0, 0, 640, 90});
         check(painter.translation.y < 28, "Height-only shrink updates scroll extent");
         const std::size_t before_expand = painter.measurements;
         (*view).arrange({0, 0, 640, 480});
-        (*view).on_paint(painter, {0, 0, 640, 480});
+        paint_markdown(*view, painter, {0, 0, 640, 480});
         check(painter.translation.y == 28 && painter.measurements == before_expand,
               "Height-only expansion resets scrolling without measuring text again");
         (*view).set_source("```\n" + std::string(300, 'x') + "\n```\n");
-        (*view).on_paint(painter, {0, 0, 640, 480});
+        paint_markdown(*view, painter, {0, 0, 640, 480});
         const std::size_t before_horizontal = painter.measurements;
         navigation.physical_key = gf::PhysicalKey::right;
         for (unsigned step = 0; step < 3; ++step)
             (*view).on_key(navigation);
         painter.labels.clear();
         painter.origins.clear();
-        (*view).on_paint(painter, {0, 0, 640, 480});
+        paint_markdown(*view, painter, {0, 0, 640, 480});
         check(painter.translation.x == -96 && painter.measurements == before_horizontal,
               "Horizontal keyboard navigation scrolls code without remeasuring");
         bool ruler_aligned = false;
@@ -636,13 +692,13 @@ int main() {
         (*view).set_source("# Recovery");
         painter.fail_measurement = true;
         painter.drawn.clear();
-        (*view).on_paint(painter, {0, 0, 640, 480});
+        paint_markdown(*view, painter, {0, 0, 640, 480});
         check(painter.drawn.find("Injected measurement failure") != std::string::npos,
               "Layout failures are reported");
         painter.fail_measurement = false;
         painter.drawn.clear();
         (*view).arrange({0, 0, 600, 480});
-        (*view).on_paint(painter, {0, 0, 600, 480});
+        paint_markdown(*view, painter, {0, 0, 600, 480});
         check(painter.drawn.find("Recovery") != std::string::npos &&
                   painter.drawn.find("Injected measurement failure") == std::string::npos,
               "Successful layout retry clears the previous error");
@@ -654,13 +710,13 @@ int main() {
         word_links += ')';
         (*view).set_source(word_links);
         painter.drawn.clear();
-        (*view).on_paint(painter, {0, 0, 600, 480});
+        paint_markdown(*view, painter, {0, 0, 600, 480});
         check(painter.drawn.find("Markdown layout exceeds display storage budget.") !=
                   std::string::npos,
               "Per-word URL copies are bounded during layout");
         (*view).set_source("Recovered after link storage limit");
         painter.drawn.clear();
-        (*view).on_paint(painter, {0, 0, 600, 480});
+        paint_markdown(*view, painter, {0, 0, 600, 480});
         check(painter.drawn.find("Recovered") != std::string::npos,
               "Layout storage refusal permits a later valid source");
         std::string decorated_limit = "> | ";
@@ -669,12 +725,12 @@ int main() {
         decorated_limit += "|\n> | --- |\n";
         (*view).set_source(decorated_limit);
         painter.drawn.clear();
-        (*view).on_paint(painter, {0, 0, 600, 480});
+        paint_markdown(*view, painter, {0, 0, 600, 480});
         check(painter.drawn.find("Markdown layout exceeds display run budget.") != std::string::npos,
               "Final table borders and quote decorations count against the run budget");
         (*view).set_source("Recovered after decoration limit");
         painter.drawn.clear();
-        (*view).on_paint(painter, {0, 0, 600, 480});
+        paint_markdown(*view, painter, {0, 0, 600, 480});
         check(painter.drawn.find("Recovered") != std::string::npos,
               "Decoration budget refusal permits a later valid source");
         std::cout << "Native Markdown paint/cache tests passed.\n";

@@ -98,3 +98,30 @@ completion, one-time adoption and active-work destruction. Precancellation tests
 cover empty, valid and invalid UTF-8 sources. These do not measure mid-library-call
 cancellation latency. The spelling audit passes 148 files. The worker is not yet
 connected to MarkdownView; that integration and native validation remain next.
+
+Native run 37097170527 at 249f49a passed all three platforms and packaging for
+the worker foundation.
+
+## Visible-view worker integration
+
+MarkdownView now submits owned source to the worker and displays a preparation
+message instead of parsing on the GUI thread. A pending-only frame request checks
+for completion. Source replacement revokes old work and presentation; only the
+current completed model is adopted. Errors display an explicit diagnostic.
+Escape and leaving rendered mode cancel pending work. Reopening the same cancelled
+source submits a fresh request. Disposal cancels and joins before releasing the
+worker. No polling remains after completion or cancellation.
+
+The view still copies source, releases prior presentation allocations and performs
+native text layout on the UI thread. This integration removes parsing from that
+thread; it does not yet make initial layout interruptible or guarantee a deadline.
+Both preparation and native layout must finish before presentation_ready is true.
+Pending/failed models do not expose old link hit regions or an old rendered page.
+
+Editor/view tests passed in 2.09 seconds. They cover pending display, latest-source
+adoption, source-mode cancellation, reopening, Escape, invalid-UTF-8 diagnostics,
+source preservation, and zero scheduled requests/dirty marks after completion.
+Existing layout tests explicitly await model adoption before testing geometry.
+Native tests now await completed presentation, verify settled-idle scheduling and
+close with a replacement still pending, measuring through owner release. The
+native executables compile locally; execution of this integration is pending CI.

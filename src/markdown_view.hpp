@@ -1,5 +1,6 @@
 #pragma once
 #include "markdown.hpp"
+#include "markdown_preparation.hpp"
 #include <gui_forms/gui_forms.hpp>
 #include <array>
 
@@ -11,6 +12,13 @@ public:
     explicit MarkdownView(gf::StableId);
     void initialize_control_tree();
     void set_source(std::string_view);
+    void cancel_preparation();
+    [[nodiscard]] bool preparation_pending() const { return preparation_pending_; }
+    [[nodiscard]] bool presentation_ready() const {
+        const bool ready = !preparation_pending_ && source_prepared_ && !layout_dirty_ && layout_error_.empty();
+        return ready;
+    }
+    void on_frame(gf::FrameTime) override;
     void arrange(gf::Rect) override;
     void on_paint(gf::Painter &, gf::Rect) override;
     void on_pointer(gf::PointerEvent &) override;
@@ -55,6 +63,10 @@ private:
     void layout(gf::Painter &, double width);
     void update_scroll_ranges();
     void clear_hover();
+    void schedule_preparation();
+    std::unique_ptr<swiftedit::MarkdownPreparation> preparation_{};
+    gf::FrameRequestToken preparation_frame_{};
+    bool preparation_pending_{}, source_prepared_{true};
     std::string source_{};
     std::vector<swiftedit::MarkdownBlock> blocks_{};
     std::vector<Run> runs_{};
