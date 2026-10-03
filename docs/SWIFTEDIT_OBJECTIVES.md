@@ -83,11 +83,15 @@ with indexed visible drawing and shared word metrics/URLs. Native rendering,
 settled-idle and pending-work close checks pass on all three platforms; these
 do not establish the full physical dogfood or responsiveness audit.
 
-v0.3.6 is published and independently verified at
-8b7382392d6e32b9cf5fe9fa321e25a1a9b24914; release run 37099319083 passed all
+v0.3.7 is published and independently verified at
+6272487e10af9cf8829c973143b30b2d6064a42e; release run 37102666871 passed all
 three native jobs and publication. Download verification checked all three
 archive hashes, source/SDK identities, 44 Windows files, 98 Linux files and
-three macOS executables. See docs/releases/v0.3.6-verification.json. The private GUI.Forms
+three macOS executables, plus all nine GitHub asset digests. See
+docs/releases/v0.3.7-verification.json. Markdown layout now advances in cancellable
+UI slices without repainting each pending step; full-paint readiness and routed
+Escape/close during unfinished layout pass all three native platforms. This is
+not a complete lag audit or a hard slice deadline. The private GUI.Forms
 prepared-window input proof is checkpointed by its owner as 6ffc81c in draft
 PR #14, not a public controller or SDK update. Full GUI Session/encoding
 migration, paged mapped editing, multiselection and native print/Markdown preview
