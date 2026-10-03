@@ -40,7 +40,10 @@ private:
     struct Run {
         gf::Rect bounds{};
         gf::FontSpec font{};
-        std::string text{}, url{};
+        std::string text{};
+        // Borrows an immutable prepared span. Runs are cleared before a new
+        // prepared model is adopted and never outlive the owning view.
+        std::string_view url{};
         double baseline{}, underline{}, strike_y{};
         bool strike{}, code{}, border{}, rule{};
     };

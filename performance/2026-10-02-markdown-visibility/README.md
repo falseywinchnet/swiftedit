@@ -182,3 +182,23 @@ Timing uses two clock reads per layout attempt, including failed attempts, and
 does not schedule extra product frames. Four focused headless suites passed in
 2.35 seconds; the native probe compiled and the 148-file spelling audit passed.
 Native timing results for this additional instrumentation are pending.
+
+## Prepared-display native results and URL ownership repair
+
+Run 37098258452 at 7a3e90f passed all three native platform jobs. Raw results
+are in worker-display-native-*.txt. Windows/Linux/macOS first completed paints
+were observed at 37.98/98.04/116.61 ms, with worst presentations of
+24.50/73.77/34.16 ms. Settled idle recorded zero paints, presentations and
+preparation-frame requests/deadlines on all three. Pending-work close through
+owner release took 18.91/17.24/62.24 ms. These mixed single-run results do not
+establish an end-to-end speedup over the preceding checkpoint.
+
+Source review also found that every word copied its span's URL into a run.
+Runs now borrow the immutable prepared span URL. Source replacement destroys
+runs before their owning blocks; layout replacement borrows the same unchanged
+blocks, and member destruction releases runs before blocks. The hovered URL is
+still copied into its own string. Prepared-model/parser URL budgets remain;
+the run budget counts owned text rather than repeatedly charging borrowed URLs.
+The 300-word/60000-byte URL regression now requires a completed rendered page
+instead of accepting artificial storage exhaustion. Existing source replacement,
+hover, navigation and recovery tests remain in the focused validation set.

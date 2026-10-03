@@ -110,9 +110,9 @@ void MarkdownView::set_source(std::string_view source) {
     preparation_frame_.disconnect();
     preparation_pending_ = true;
     source_prepared_ = false;
-    blocks_.clear();
     runs_.clear();
     run_bottoms_.clear();
+    blocks_.clear();
     source_ = std::move(retained);
     layout_dirty_ = true;
     layout_error_.clear();
@@ -234,8 +234,6 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
                 if (word.size() > storage_limit - retained_bytes)
                     throw std::runtime_error("Markdown layout exceeds display storage budget.");
                 const std::size_t text_total = retained_bytes + word.size();
-                if (span.url.size() > storage_limit - text_total)
-                    throw std::runtime_error("Markdown layout exceeds display storage budget.");
                 if (next.size() >= 250000)
                     throw std::runtime_error("Markdown layout exceeds display run budget.");
                 const WordMetrics metrics = measurements.measure(word, font);
@@ -260,7 +258,7 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
                 run.strike = span.strike;
                 run.code = span.code || block.kind == swiftedit::MarkdownKind::code;
                 next.push_back(std::move(run));
-                retained_bytes = text_total + span.url.size();
+                retained_bytes = text_total;
                 x[column] += measured.width;
                 maximum_x = std::max(maximum_x, x[column] + page_margin);
                 offset = end;

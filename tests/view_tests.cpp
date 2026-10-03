@@ -711,9 +711,9 @@ int main() {
         (*view).set_source(word_links);
         painter.drawn.clear();
         paint_markdown(*view, painter, {0, 0, 600, 480});
-        check(painter.drawn.find("Markdown layout exceeds display storage budget.") !=
-                  std::string::npos,
-              "Per-word URL copies are bounded during layout");
+        check((*view).presentation_ready() && painter.drawn.find("word") != std::string::npos &&
+                  painter.drawn.find("Markdown layout exceeds") == std::string::npos,
+              "Words in one long link share its prepared URL without per-word copies");
         (*view).set_source("Recovered after link storage limit");
         painter.drawn.clear();
         paint_markdown(*view, painter, {0, 0, 600, 480});
