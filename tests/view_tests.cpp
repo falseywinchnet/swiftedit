@@ -406,6 +406,9 @@ void verify_tall_markdown_visibility() {
     paint_markdown(*view, initial, {0, 0, 640, 140});
     check(initial.measurements < 10,
           "Repeated Markdown words share metrics within one font and layout rebuild");
+    for (const std::string &label : initial.labels)
+        check(label.find_first_not_of(' ') != std::string::npos,
+              "Space-only layout runs do not submit native text drawing");
     const std::shared_ptr<gf::VScrollBar> scroll =
         std::dynamic_pointer_cast<gf::VScrollBar>(window.find("markdown.vertical"));
     check(static_cast<bool>(scroll), "Tall Markdown has a scrollbar");

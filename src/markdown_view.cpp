@@ -375,7 +375,10 @@ void MarkdownView::on_paint(gf::Painter &painter, gf::Rect) {
         if (item.code)
             painter.fill_rect(item.bounds, style.face_light);
         const gf::Color color = item.url.empty() ? style.text : style.link;
-        painter.draw_text_utf8({item.bounds.x, item.bounds.y + item.baseline}, item.text, item.font, color);
+        // Space-only runs still own geometry, code backgrounds and link/strike
+        // decorations. They have no visible glyph ink to submit to the host.
+        if (item.text.find_first_not_of(' ') != std::string::npos)
+            painter.draw_text_utf8({item.bounds.x, item.bounds.y + item.baseline}, item.text, item.font, color);
         if (item.strike || !item.url.empty()) {
             const double baseline = item.bounds.y + (item.strike ? item.strike_y : item.underline);
             painter.draw_line({item.bounds.x, baseline},

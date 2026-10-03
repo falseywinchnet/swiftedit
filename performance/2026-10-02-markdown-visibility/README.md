@@ -202,3 +202,20 @@ the run budget counts owned text rather than repeatedly charging borrowed URLs.
 The 300-word/60000-byte URL regression now requires a completed rendered page
 instead of accepting artificial storage exhaustion. Existing source replacement,
 hover, navigation and recovery tests remain in the focused validation set.
+
+## Native drawing follow-up
+
+Partial results from run 37098620036 at e9ab3af distinguish layout from total
+presentation: Linux synchronous layout was 4.71 ms versus 76.07 ms worst
+presentation; macOS layout was 3.28 ms versus 36.02 ms worst presentation.
+Maximum observer gaps were 76.10 and 46.28 ms respectively. These results redirect
+the immediate investigation toward drawing/presentation rather than assuming
+initial layout accounts for the whole delay. Windows was still running when
+this follow-up was prepared.
+
+Space-only runs no longer submit native text-draw commands. They still take part
+in layout, hit regions, code background fills, and link/strike decorations.
+The tall-document test now rejects space-only text submissions, while existing
+navigation, hover and geometry tests continue to pass. Four focused suites passed
+in 2.24 seconds and the 148-file spelling audit passed. Native timing and visual
+verification of this change remain pending; no speedup is claimed yet.
