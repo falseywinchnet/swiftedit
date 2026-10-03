@@ -342,6 +342,7 @@ void MarkdownView::on_paint(gf::Painter &painter, gf::Rect) {
         return;
     }
     if (layout_dirty_) {
+        const gf::FrameTime layout_start = gf::FrameClock::now();
         try {
             layout(painter, bounds.width);
             layout_error_.clear();
@@ -349,6 +350,8 @@ void MarkdownView::on_paint(gf::Painter &painter, gf::Rect) {
             layout_error_ = failure.what();
             layout_dirty_ = false;
         }
+        layout_duration_ = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            gf::FrameClock::now() - layout_start);
     }
     if (!layout_error_.empty()) {
         const gf::FontSpec font{gf::FontRole::content, 14, 400, false};

@@ -3,6 +3,7 @@
 #include "markdown_preparation.hpp"
 #include <gui_forms/gui_forms.hpp>
 #include <array>
+#include <chrono>
 
 namespace notepad {
 namespace gf = gui_forms;
@@ -14,6 +15,9 @@ public:
     void set_source(std::string_view);
     void cancel_preparation();
     [[nodiscard]] bool preparation_pending() const { return preparation_pending_; }
+    // Last synchronous layout attempt, including native text measurement and
+    // index construction. Excludes worker preparation and paint submission.
+    [[nodiscard]] std::chrono::nanoseconds last_layout_duration() const { return layout_duration_; }
     [[nodiscard]] bool presentation_ready() const {
         const bool ready = !preparation_pending_ && source_prepared_ && !layout_dirty_ && layout_error_.empty();
         return ready;
@@ -78,6 +82,7 @@ private:
     std::unique_ptr<gf::ToolTip> tooltip_{};
     double layout_width_{}, content_height_{}, content_width_{};
     double ruler_baseline_{};
+    std::chrono::nanoseconds layout_duration_{};
     bool layout_dirty_{true};
     std::string hovered_url_{};
     std::string layout_error_{};

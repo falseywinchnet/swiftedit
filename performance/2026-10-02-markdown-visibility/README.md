@@ -171,3 +171,14 @@ These are single CI observations, not controlled before/after performance ratios
 or guaranteed deadlines. The macOS native-view capture was inspected: heading,
 emphasis, quote, task list, table, code, inert link and image-alt text were visible.
 It is a native view capture rather than physical-screen or keyboard dogfooding.
+
+The native probe now records synchronous layout duration separately from first
+completed paint and worst presentation. This covers native measurements, run
+construction, sorting and extent-index construction; it excludes background
+preparation and paint submission. It also records the largest gap between its
+10 ms observation callbacks during stress preparation. The gap includes host
+scheduling and presentation, so it is not an isolated input-latency metric.
+Timing uses two clock reads per layout attempt, including failed attempts, and
+does not schedule extra product frames. Four focused headless suites passed in
+2.35 seconds; the native probe compiled and the 148-file spelling audit passed.
+Native timing results for this additional instrumentation are pending.

@@ -1,6 +1,7 @@
 #include "markdown_view.hpp"
 #include "native_font_check.hpp"
 #include <gui_forms/application.hpp>
+#include <algorithm>
 #include <iostream>
 #include <stdexcept>
 #ifdef __APPLE__
@@ -117,7 +118,11 @@ private:
             return;
         }
         if (stress_started_ != gf::FrameTime{}) {
-            const std::chrono::duration<double, std::milli> elapsed = gf::FrameClock::now() - stress_started_;
+            const gf::FrameTime now = gf::FrameClock::now();
+            const std::chrono::duration<double, std::milli> gap = now - last_stress_tick_;
+            maximum_tick_gap_ms_ = std::max(maximum_tick_gap_ms_, gap.count());
+            last_stress_tick_ = now;
+            const std::chrono::duration<double, std::milli> elapsed = now - stress_started_;
             if (metrics.paint_passes == 0 || !(*view_).presentation_ready()) {
                 if (elapsed.count() < 5000)
                     return;
@@ -129,6 +134,9 @@ private:
                 throw std::runtime_error("Native Markdown stress viewport did not retain bounded text.");
             std::cout << "Markdown stress first paint observed ms: " << elapsed.count()
                       << "; visible words: " << probe.words << "; metrics: " << metrics.to_json() << '\n';
+            const std::chrono::duration<double, std::milli> layout = (*view_).last_layout_duration();
+            std::cout << "Markdown stress synchronous layout ms: " << layout.count()
+                      << "; maximum observer gap ms: " << maximum_tick_gap_ms_ << '\n';
             stress_passed_ = true;
             (*timer_).set_interval(std::chrono::milliseconds(200));
             return;
@@ -147,6 +155,7 @@ private:
                 std::cout << "Native Markdown observed paint: " << metrics.to_json() << '\n';
                 (*window_).reset_activity_metrics();
                 stress_started_ = gf::FrameClock::now();
+                last_stress_tick_ = stress_started_;
                 (*view_).set_source(stress_source_);
                 (*timer_).set_interval(std::chrono::milliseconds(10));
                 return;
@@ -167,6 +176,8 @@ private:
     bool passed_{}, stress_passed_{}, idle_started_{};
     std::string stress_source_{};
     gf::FrameTime stress_started_{};
+    gf::FrameTime last_stress_tick_{};
+    double maximum_tick_gap_ms_{};
     gf::FrameTime close_started_{};
 };
 int main() {
