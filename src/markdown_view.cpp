@@ -154,6 +154,13 @@ void MarkdownView::on_frame(gf::FrameTime) {
     }
     invalidate(gf::Dirty::paint);
 }
+gf::Size MarkdownView::measure(const gf::Size available) {
+    // Window provider/theme changes invalidate measurement even when width
+    // stays fixed. Geometry must not retain metrics from the preceding pass.
+    layout_dirty_ = true;
+    const gf::Size desired = Control::measure(available);
+    return desired;
+}
 void MarkdownView::arrange(gf::Rect bounds) {
     clear_hover();
     arrange_self(bounds);

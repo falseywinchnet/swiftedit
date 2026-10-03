@@ -23,6 +23,7 @@ public:
         return ready;
     }
     void on_frame(gf::FrameTime) override;
+    gf::Size measure(gf::Size) override;
     void arrange(gf::Rect) override;
     void on_paint(gf::Painter &, gf::Rect) override;
     void on_pointer(gf::PointerEvent &) override;

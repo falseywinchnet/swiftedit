@@ -459,8 +459,33 @@ void verify_tall_markdown_visibility() {
     check(italic && bold && monospace,
           "Identical Markdown words are measured separately when font style changes");
 }
+void verify_markdown_metric_invalidation() {
+    ObservingPainter original{};
+    ObservingPainter replacement{};
+    replacement.tall_metrics = true;
+    const std::shared_ptr<notepad::MarkdownView> view =
+        gf::make_control<notepad::MarkdownView>(gf::StableId("metrics.markdown"));
+    gf::Window window(view, {640, 200});
+    window.set_text_metrics_provider(&original);
+    window.perform_layout();
+    (*view).set_source("word");
+    paint_markdown(*view, original, {0, 0, 640, 200});
+    check(!original.origins.empty(), "Original Markdown baseline exists");
+    const double baseline = original.origins.front().y;
+    window.set_text_metrics_provider(&replacement);
+    window.perform_layout();
+    paint_markdown(*view, replacement, {0, 0, 640, 200});
+    check(replacement.measurements != 0 && !replacement.origins.empty() &&
+              replacement.origins.front().y != baseline,
+          "A same-width metrics-provider change rebuilds Markdown geometry");
+    const std::size_t measurements = replacement.measurements;
+    paint_markdown(*view, replacement, {0, 0, 640, 200});
+    check(replacement.measurements == measurements,
+          "Stable Markdown painting reuses the replacement provider geometry");
+}
 int main() {
     try {
+        verify_markdown_metric_invalidation();
         verify_csv_page_navigation();
         verify_text_baselines();
         verify_duplicate_formulas();

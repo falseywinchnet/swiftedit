@@ -288,3 +288,20 @@ contention are not controlled, so this is an observed result requiring further
 investigation, not proof of a specific provider defect. No full responsiveness
 acceptance follows from this run. Closing with work pending took 22.26 ms on
 Windows, 20.60 ms on Linux and 19.11 ms on macOS.
+
+## Distinct-word finding and metrics invalidation repair
+
+Run 37100399925 at 4528377 passed correctness/packaging on all platforms, but
+the new distinct-word case exposes unacceptable synchronous work. Windows/Linux/
+macOS layout took 1527.05/759.69/1654.37 ms, with observed completion at
+1595.42/825.83/1761.04 ms. The raw lines in distinct-native-*.txt preserve the
+finding. This test passing its 15-second timeout is not a responsiveness pass.
+Repeated-word caching is insufficient; native layout needs interruption/yielding
+while the public prepared-text integration is developed.
+
+A separate regression demonstrated stale geometry after replacing the text
+metrics provider at unchanged width. Markdown now invalidates its layout on a
+requested control measurement pass. The test failed before the repair and passes
+after it, also checking that subsequent stable paints reuse the rebuilt geometry.
+Editor and view tests passed 2/2 in 3.05 seconds; the 148-file spelling audit
+passed. This repair does not address the distinct-word stall.
