@@ -61,39 +61,56 @@ SelectionSet::SelectionSet(const Session &session, const std::vector<SourceRange
     // LF ends all grapheme context, including CRLF and regional-indicator
     // parity. Keep complete LF-delimited context around the selected interval;
     // never cut at a guessed scalar or a fixed look-behind distance.
-    std::size_t context_begin = 0;
-    if (ranges.front().offset) {
-        const std::size_t previous_lf = source.rfind('\n', ranges.front().offset - 1);
-        if (previous_lf != std::string::npos)
-            context_begin = previous_lf + 1;
-    }
-    const std::size_t next_lf = source.find('\n', previous_end);
-    const std::size_t context_end = next_lf == std::string::npos ? source.size() : next_lf + 1;
-    // Metadata placeholders force a grapheme break around each illegal byte.
-    // Their byte lengths match source; they are never copied or published.
-    std::string metadata = source.substr(context_begin, context_end - context_begin);
-    for (std::size_t offset = 0; offset < metadata.size();) {
-        const std::size_t length = utf8_sequence_length(metadata, offset);
-        if (length)
-            offset += length;
-        else {
-            metadata[offset] = '\x01';
-            ++offset;
-        }
-    }
-    const gf::TextStore text(metadata);
     std::size_t first_count = 0;
-    for (std::size_t index = 0; index < ranges.size(); ++index) {
-        const SourceRange &range = ranges[index];
-        const gf::Utf8Offset start(range.offset - context_begin);
-        const gf::Utf8Offset end(range.offset + range.length - context_begin);
-        if (!text.is_grapheme_boundary(start) || !text.is_grapheme_boundary(end))
-            throw std::runtime_error("Selection splits a source grapheme or line ending.");
-        const std::size_t count = text.grapheme_index(end).value() - text.grapheme_index(start).value();
-        if (index == 0)
-            first_count = count;
-        else if (count != first_count)
-            equal_lengths_ = false;
+    std::string metadata{};
+    for (std::size_t group = 0; group < ranges.size();) {
+        std::size_t context_begin = 0;
+        if (ranges[group].offset) {
+            const std::size_t previous_lf = source.rfind('\n', ranges[group].offset - 1);
+            if (previous_lf != std::string::npos)
+                context_begin = previous_lf + 1;
+        }
+        const std::size_t selected_end = ranges[group].offset + ranges[group].length;
+        const std::size_t next_lf = source.find('\n', selected_end);
+        std::size_t context_end = next_lf == std::string::npos ? source.size() : next_lf + 1;
+        std::size_t after_group = group + 1;
+        // Merge overlapping contexts so selections on one long line do not
+        // repeatedly scan/segment it. Unselected intervening lines stay out.
+        while (after_group < ranges.size() && ranges[after_group].offset <= context_end) {
+            const SourceRange &next = ranges[after_group];
+            const std::size_t end = next.offset + next.length;
+            if (end > context_end) {
+                const std::size_t following_lf = source.find('\n', end);
+                context_end = following_lf == std::string::npos ? source.size() : following_lf + 1;
+            }
+            ++after_group;
+        }
+        // Illegal-byte sentinels force grapheme breaks without changing byte
+        // lengths. Metadata is never copied into source or clipboard output.
+        metadata.assign(source, context_begin, context_end - context_begin);
+        for (std::size_t offset = 0; offset < metadata.size();) {
+            const std::size_t length = utf8_sequence_length(metadata, offset);
+            if (length)
+                offset += length;
+            else {
+                metadata[offset] = '\x01';
+                ++offset;
+            }
+        }
+        const gf::TextStore text(metadata);
+        for (std::size_t index = group; index < after_group; ++index) {
+            const SourceRange &range = ranges[index];
+            const gf::Utf8Offset start(range.offset - context_begin);
+            const gf::Utf8Offset end(range.offset + range.length - context_begin);
+            if (!text.is_grapheme_boundary(start) || !text.is_grapheme_boundary(end))
+                throw std::runtime_error("Selection splits a source grapheme or line ending.");
+            const std::size_t count = text.grapheme_index(end).value() - text.grapheme_index(start).value();
+            if (index == 0)
+                first_count = count;
+            else if (count != first_count)
+                equal_lengths_ = false;
+        }
+        group = after_group;
     }
     ranges_ = ranges;
 }

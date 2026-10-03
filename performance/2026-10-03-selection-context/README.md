@@ -32,3 +32,29 @@ Long lines without LF and widely separated ranges can still require large
 synchronous metadata work. This is a measured common-case improvement, not
 completion of the lag audit or proof of native GUI input latency. The old GUI
 has not yet adopted the Session selection path.
+
+## Sparse selection follow-up
+
+Baseline for `--sparse`: dbd2fba with the extended benchmark harness only.
+Two one-character selections lie near opposite ends of each same 80-byte-line
+fixture. Same Release build/SDK, one warmup and five retained samples, timed
+construction/destruction only. Raw evidence: `sparse-before.csv` and
+`sparse-after.csv`. Host activity remains uncontrolled.
+
+| Document bytes | Enclosing-interval baseline ms | Separate context groups ms |
+| --- | --- | --- |
+| 65,536 | 2.0683–3.2568 | 0.0053–0.0074 |
+| 1,048,576 | 28.9104–30.1466 | 0.0077–0.0287 |
+| 16,777,215 | 469.409–516.253 | 0.0053–0.0055 |
+
+The earlier limitation for widely separated short selections is now addressed:
+ordered selections share segmentation when their LF-delimited contexts overlap;
+separate groups skip unrelated intervening lines. One metadata string reuses
+capacity across groups. Counts remain global across all selections, preserving
+the equal-grapheme rewrite rule. Large selected ranges and long LF-free lines
+remain potentially expensive; there is no general worst-case latency bound.
+
+The byte-pair oracle regression additionally combines each candidate range with
+a separate initial grapheme, comparing acceptance and rewrite eligibility to
+whole-document segmentation. Selection and projection suites passed in 0.25s;
+149-file spelling audit is clean. No native GUI latency claim is made.

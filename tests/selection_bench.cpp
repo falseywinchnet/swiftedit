@@ -3,18 +3,23 @@
 #include <iostream>
 #include <stdexcept>
 
-int main() {
+int main(const int argc, char** const argv) {
     try {
+        const bool sparse = argc == 2 && std::string_view(argv[1]) == "--sparse";
+        if (argc > 1 && !sparse)
+            throw std::runtime_error("Usage: swiftedit-selection-bench [--sparse]");
         const std::size_t sizes[] = {65536, 1048576, swiftedit::editable_limit - 1};
-        std::cout << "source_bytes,sample,selection_ms\n";
+        std::cout << "source_bytes,selection_count,sample,selection_ms\n";
         for (const std::size_t size : sizes) {
             std::string source(size, 'a');
             for (std::size_t index = 79; index < source.size(); index += 80)
                 source[index] = '\n';
             swiftedit::Session session{};
             session.replace_ranges({{0, 0}}, source, session.stamp());
-            const std::size_t offset = (size / 160) * 80;
-            const std::vector<swiftedit::SourceRange> ranges{{offset, 1}};
+            const std::size_t offset = sparse ? 80 : (size / 160) * 80;
+            std::vector<swiftedit::SourceRange> ranges{{offset, 1}};
+            if (sparse)
+                ranges.push_back({(size / 80 - 2) * 80, 1});
             for (std::size_t sample = 0; sample < 6; ++sample) {
                 const std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
                 {
@@ -24,7 +29,7 @@ int main() {
                 }
                 const std::chrono::duration<double, std::milli> elapsed = std::chrono::steady_clock::now() - begin;
                 if (sample)
-                    std::cout << size << ',' << sample << ',' << elapsed.count() << '\n';
+                    std::cout << size << ',' << ranges.size() << ',' << sample << ',' << elapsed.count() << '\n';
             }
         }
         return 0;

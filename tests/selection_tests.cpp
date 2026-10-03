@@ -43,6 +43,23 @@ void verify_context_boundaries(const swiftedit::Session &session) {
                 accepted = false;
             }
             require(accepted == expected, "Line-context selection matches full-document segmentation at every byte pair");
+            if (begin > 1) {
+                bool parallel_accepted = false;
+                bool rewritable = false;
+                try {
+                    const swiftedit::SelectionSet parallel(session, {{0, 1}, {begin, end - begin}});
+                    parallel_accepted = true;
+                    rewritable = parallel.can_rewrite();
+                } catch (const std::runtime_error &) {
+                    parallel_accepted = false;
+                }
+                require(parallel_accepted == expected, "Grouped selection acceptance matches whole-document oracle");
+                if (expected) {
+                    const std::size_t count = whole.grapheme_index(gui_forms::Utf8Offset(end)).value() -
+                                              whole.grapheme_index(gui_forms::Utf8Offset(begin)).value();
+                    require(rewritable == (count == 1), "Separate context groups retain equal-grapheme edit policy");
+                }
+            }
         }
     }
 }
