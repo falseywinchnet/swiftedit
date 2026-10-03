@@ -4,7 +4,9 @@ Viewport formula evaluation now runs on one lazily created worker per CsvView.
 The worker receives shared immutable Csv storage and an owned batch of at most
 4096 cell addresses, matching the maximum 128 by 32 visible grid. It never calls
 controls, windows, host handles or wake callbacks. A replaceable request slot and
-at most eight queued completions bound the queue. The worker waits on a condition
+at most 64 queued completions and 800000 queued references bound the queue. The
+reference budget preserves the former eight-result worst case; each queue entry
+counts its references even when storage is shared. The worker waits on a condition
 variable when idle or when the result queue is full. It retains one successful
 formula result for identical formula reuse; errors remain local to their roots.
 
@@ -17,8 +19,8 @@ No worker completion can dereference a closed GUI object. All aliases must leave
 submitted Csv objects immutable; CsvView constructs const storage directly.
 
 While calculations remain pending, the UI schedules a completion check with a
-one-millisecond requested delay. The UI drains results for up to eight distinct
-formulas or a two-millisecond target, preserving placeholders, reference hover,
+one-millisecond requested delay. The UI drains results to a two-millisecond
+target, preserving placeholders, reference hover,
 error display and exact stored source. No calculation checks are scheduled after
 completion or cancellation. Empty checks do not explicitly invalidate the view.
 The worker sleeps when idle. This avoids an after-close host-wake dependency, but
@@ -134,4 +136,45 @@ Deferred conversion regression checks cover one-step Undo through the editor,
 both menu routes, exact cached values, errors, stale source, Escape, selection,
 focus and table-view cancellation. The native context-menu test now returns to
 the event loop before asserting its result, retaining the same source/Undo/save
-assertions. Native validation of deferred conversion is pending.
+assertions. Native run 37095184375 at 0c205bc passed all three platforms and
+packaging, including the deferred context conversion and Undo/save assertions.
+
+## Queue throughput experiment
+
+The eight-completion queue and eight-distinct-results-per-frame adoption limit
+forced at least eleven calculation-adoption frames for the 85-result fixture.
+The current implementation admits up to 64 results while charging each result's
+reference count against 800000 queued references. A single calculation remains
+limited to 100000 reference operations. The producer waits before computing when
+the count limit is reached, then checks both bounds before publication. Taking,
+replacement and cancellation update reference accounting under the same mutex.
+The active calculation and previously reused result remain outside queue counts,
+as before. These are logical limits, not a strict committed-memory budget.
+
+UI adoption retains the two-millisecond elapsed-time target without an additional
+eight-result cutoff. Individual adoption, allocation and cleanup can exceed that
+target; it is not a hard deadline. Source, error, hover, cancellation and exact
+result semantics are unchanged.
+
+Sequential local Windows Release measurements, same 657927-byte fixture and
+31 samples after warmup, are retained in queue-before.csv and queue-after.csv:
+
+| Measurement | Before | After |
+|---|---:|---:|
+| Completion median ms | 185.787 | 46.4696 |
+| Completion p95 ms | 201.309 | 46.9169 |
+| Completion maximum ms | 217.335 | 46.9933 |
+| Maximum UI slice ms | 0.4599 | 1.3833 |
+
+The post-change harness recorded four slices per sample, including the initial
+handler. Totals include requested one-millisecond sleeps whose actual Windows
+granularity is uncontrolled. This is evidence for reduced frame handoffs in the
+component harness, not a native input-to-screen claim. Native validation remains
+pending.
+
+The worker tests now drain 160 small results beyond the count cap and 20 results
+with 80000 references each beyond the reference budget, then exercise cancel and
+replacement. The first heavy fixture was incorrectly unquoted CSV and failed;
+after quoting its comma-containing formula, the worker suite passed in 0.10 s.
+The other 27 local tests passed in the preceding full run. The spelling audit
+passes all 145 files; native test executables compile locally.

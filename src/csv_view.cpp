@@ -243,7 +243,6 @@ void CsvView::on_frame(gf::FrameTime) {
 void CsvView::advance_view() {
     calculation_frame_.disconnect();
     const gf::FrameTime started = gf::FrameClock::now();
-    std::size_t evaluated = 0;
     bool updated = false;
     if (calculations_pending() && !calculation_requested_) {
         if (!calculator_)
@@ -270,7 +269,6 @@ void CsvView::advance_view() {
             const swiftedit::CellAddress previous = (*found).second;
             display = cells_.at({previous.row, previous.column});
         } else {
-            ++evaluated;
             try {
                 if (calculated.failed)
                     throw std::runtime_error(calculated.error.empty()
@@ -307,7 +305,7 @@ void CsvView::advance_view() {
                 (*tooltip_).set_tool_tip(shared_from_this(), status_);
         }
         ++next_calculation_;
-        if (evaluated >= 8 || gf::FrameClock::now() - started >= std::chrono::milliseconds(2))
+        if (gf::FrameClock::now() - started >= std::chrono::milliseconds(2))
             break;
     }
     if (calculations_pending() && window()) {

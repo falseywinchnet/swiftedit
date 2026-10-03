@@ -38,7 +38,7 @@ int main() {
             std::make_shared<const swiftedit::Csv>(std::string(1024 * 1024, '0') + "1,=A1+A1");
         const std::shared_ptr<const swiftedit::Csv> replacement =
             std::make_shared<const swiftedit::Csv>("7,=A1*2");
-        const std::vector<swiftedit::CellAddress> batch(40, swiftedit::CellAddress{0, 1});
+        const std::vector<swiftedit::CellAddress> batch(160, swiftedit::CellAddress{0, 1});
         calculator.request(replacement, batch);
         for (std::size_t index = 0; index < batch.size(); ++index)
             require(finish(calculator).value.result == "14", "Bounded result queue drains the full batch");
@@ -48,6 +48,31 @@ int main() {
         calculator.request(replacement, {0, 1});
         require(finish(calculator).value.result == "14" && !calculator.take(),
                 "Cancelling a potentially full queue wakes its producer and rejects queued stale results");
+        std::string reference_source = "2,\"=SUM(";
+        for (std::size_t range = 0; range < 8; ++range) {
+            if (range)
+                reference_source += ',';
+            reference_source += "A1:A10000";
+        }
+        reference_source += ")\"";
+        for (std::size_t row = 1; row < 10000; ++row)
+            reference_source += "\n2";
+        const std::shared_ptr<const swiftedit::Csv> reference_table =
+            std::make_shared<const swiftedit::Csv>(reference_source);
+        const std::vector<swiftedit::CellAddress> reference_batch(20, swiftedit::CellAddress{0, 1});
+        calculator.request(reference_table, reference_batch);
+        for (std::size_t index = 0; index < reference_batch.size(); ++index) {
+            const swiftedit::CsvCalculated value = finish(calculator);
+            require(!value.failed && value.value.result == "160000" &&
+                    value.value.references.size() == 80000,
+                    "Reference-heavy results drain beyond the queued reference budget");
+        }
+        calculator.request(reference_table, reference_batch);
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        calculator.cancel();
+        calculator.request(replacement, {0, 1});
+        require(finish(calculator).value.result == "14" && !calculator.take(),
+                "Reference-budget cancellation clears accounting and permits a fresh request");
         for (std::size_t index = 0; index < 32; ++index) {
             calculator.request(slow, {0, 1});
             calculator.cancel();

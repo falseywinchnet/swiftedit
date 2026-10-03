@@ -31,6 +31,7 @@ void CsvCalculator::request(std::shared_ptr<const Csv> table, std::vector<CellAd
         cancellation_ = std::move(next);
         pending_ = Request{std::move(table), std::move(addresses), cancellation_.get_token()};
         completed_.clear();
+        queued_references_ = 0;
         failure_ = {};
     }
     changed_.notify_one();
@@ -41,6 +42,7 @@ void CsvCalculator::cancel() {
         cancellation_.request_stop();
         pending_.reset();
         completed_.clear();
+        queued_references_ = 0;
         failure_ = {};
     }
     changed_.notify_one();
@@ -53,6 +55,7 @@ std::optional<CsvCompletion> CsvCalculator::take() {
         failure = std::exchange(failure_, {});
         if (!completed_.empty()) {
             result = std::move(completed_.front());
+            queued_references_ -= (*(*result).result).value.references.size();
             completed_.pop_front();
         }
     }
@@ -66,7 +69,9 @@ bool CsvCalculator::Ready::operator()() const {
     return ready;
 }
 bool CsvCalculator::Space::operator()() const {
-    const bool ready = (*owner).stopping_ || cancellation.stop_requested() || (*owner).completed_.size() < 8;
+    const bool space = (*owner).completed_.size() < 64 &&
+        references <= 800000 - (*owner).queued_references_;
+    const bool ready = (*owner).stopping_ || cancellation.stop_requested() || space;
     return ready;
 }
 void CsvCalculator::run(CsvCalculator *owner) noexcept {
@@ -111,10 +116,16 @@ void CsvCalculator::run(CsvCalculator *owner) noexcept {
                         previous = result;
                     }
                 }
+                const std::size_t references = (*result).value.references.size();
+                if (references > 800000)
+                    throw std::runtime_error("CSV result exceeds the queued reference budget.");
                 {
-                    std::lock_guard<std::mutex> lock(work.mutex_);
-                    if (!work.stopping_ && !request.cancellation.stop_requested())
-                        work.completed_.push_back(CsvCompletion{address, std::move(result)});
+                    std::unique_lock<std::mutex> lock(work.mutex_);
+                    work.changed_.wait(lock, Space{owner, request.cancellation, references});
+                    if (work.stopping_ || request.cancellation.stop_requested())
+                        break;
+                    work.completed_.push_back(CsvCompletion{address, std::move(result)});
+                    work.queued_references_ += references;
                 }
             }
         } catch (...) {

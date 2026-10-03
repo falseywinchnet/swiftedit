@@ -17,7 +17,10 @@ struct CsvCompletion {
     CellAddress address{};
     std::shared_ptr<const CsvCalculated> result{};
 };
-// One worker, one replaceable batch and at most eight queued results. No UI callbacks or borrowed
+// One worker, one replaceable batch, at most 64 queued results and 800000 queued
+// references (the former eight-result worst case). Shared results count once per
+// queue entry, conservatively. These are logical counts, not allocator byte caps.
+// No UI callbacks or borrowed
 // source survive submission. The caller serializes request/cancel/take; worker
 // communication is protected by mutex_. Destruction requests stop and joins.
 // All aliases must leave submitted Csv objects immutable until work retires.
@@ -44,6 +47,7 @@ private:
     struct Space {
         CsvCalculator *owner{};
         std::stop_token cancellation{};
+        std::size_t references{};
         bool operator()() const;
     };
     static void run(CsvCalculator *) noexcept;
@@ -51,6 +55,7 @@ private:
     std::condition_variable changed_{};
     std::optional<Request> pending_{};
     std::deque<CsvCompletion> completed_{};
+    std::size_t queued_references_{};
     std::exception_ptr failure_{};
     std::stop_source cancellation_{};
     bool stopping_{};
