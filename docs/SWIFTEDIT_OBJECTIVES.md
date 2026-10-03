@@ -83,9 +83,11 @@ with indexed visible drawing and shared word metrics/URLs. Native rendering,
 settled-idle and pending-work close checks pass on all three platforms; these
 do not establish the full physical dogfood or responsiveness audit.
 
-v0.3.5 is published and independently verified. v0.3.6 is tagged at
-8b7382392d6e32b9cf5fe9fa321e25a1a9b24914; release run 37099319083 remains in
-progress at this checkpoint. Tagging is not publication. The private GUI.Forms
+v0.3.6 is published and independently verified at
+8b7382392d6e32b9cf5fe9fa321e25a1a9b24914; release run 37099319083 passed all
+three native jobs and publication. Download verification checked all three
+archive hashes, source/SDK identities, 44 Windows files, 98 Linux files and
+three macOS executables. See docs/releases/v0.3.6-verification.json. The private GUI.Forms
 prepared-window input proof is checkpointed by its owner as 6ffc81c in draft
 PR #14, not a public controller or SDK update. Full GUI Session/encoding
 migration, paged mapped editing, multiselection and native print/Markdown preview
