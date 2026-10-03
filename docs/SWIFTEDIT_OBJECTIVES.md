@@ -96,6 +96,11 @@ prepared-window input proof is checkpointed by its owner as 6ffc81c in draft
 PR #14, not a public controller or SDK update. Full GUI Session/encoding
 migration, paged mapped editing, multiselection and native print/Markdown preview
 remain primary implementation work. SwiftEdit continues to use frozen aaca5d0.
+The explicit Session decoded-open path now retains UTF-8 BOM/UTF-16 output
+encoding, preserves valid controls, and keeps encoded conflict snapshots separate
+from logical UTF-8 edit offsets. Default terminal/CLI raw opening remains
+unchanged. This is migration groundwork, not a GUI switch or paged UTF-16
+implementation; see ENCODED_SESSION.md.
 
 2026-10-01 resumed checkpoint: the separate Word Count tool is implemented with
 an explicit whitespace-run policy, shared by GUI and CLI. It does not mutate

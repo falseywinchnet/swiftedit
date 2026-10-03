@@ -8,12 +8,16 @@
 namespace notepad {
 constexpr std::size_t maximum_bytes = 16 * 1024 * 1024;
 enum class Encoding { utf8, utf8_bom, utf16_le, utf16_be };
+enum class TextControls { legacy_gui, preserve };
 struct Decoded {
     std::string text{};
     Encoding encoding{Encoding::utf8};
 };
-[[nodiscard]] Decoded decode(std::string_view bytes);
-[[nodiscard]] std::string encode(std::string_view text, Encoding encoding);
+// The current GUI retains its control-character restrictions. Mapped Session
+// consumers explicitly preserve every valid scalar, including NUL and controls.
+[[nodiscard]] Decoded decode(std::string_view bytes, TextControls = TextControls::legacy_gui);
+[[nodiscard]] std::string encode(std::string_view text, Encoding encoding,
+                                 TextControls = TextControls::legacy_gui);
 [[nodiscard]] std::string encoding_name(Encoding encoding);
 // New files use the host convention; existing endings are never converted implicitly.
 [[nodiscard]] std::string native_newline();

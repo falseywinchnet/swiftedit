@@ -66,6 +66,18 @@ void budget(std::size_t n) {
     if (!n || n > maximum_page)
         throw std::runtime_error("Page budget must be 1..65536 bytes.");
 }
+notepad::FileSnapshot write_session_text(const std::filesystem::path &path,
+    const std::string_view text, const notepad::Encoding encoding,
+    const notepad::FileSnapshot &expected) {
+    std::string encoded{};
+    std::string_view bytes = text;
+    if (encoding != notepad::Encoding::utf8) {
+        encoded = notepad::encode(text, encoding, notepad::TextControls::preserve);
+        bytes = encoded;
+    }
+    notepad::FileSnapshot written = notepad::write_file(path, bytes, expected);
+    return written;
+}
 } // namespace
 std::string text_copy(std::string_view s, std::size_t *invalid) {
     std::string out{};
@@ -123,6 +135,7 @@ void Session::reset() {
     large_.reset();
     path_.clear();
     snapshot_ = {};
+    encoding_ = notepad::Encoding::utf8;
     text_.clear();
     saved_.clear();
     opened_.clear();
@@ -131,6 +144,28 @@ void Session::reset() {
     previews_.clear();
     ++revision_.value;
     identity_ = next_identity;
+}
+void Session::open_decoded(const std::filesystem::path &source) {
+    std::filesystem::path path = std::filesystem::absolute(source);
+    notepad::FileSnapshot snapshot = notepad::read_file(path);
+    if (!snapshot.exists)
+        throw std::runtime_error("File no longer exists.");
+    if (snapshot.bytes.size() >= editable_limit)
+        throw std::runtime_error("Decoded open requires a file below 16 MiB; paged decoding is not available.");
+    notepad::Decoded decoded = notepad::decode(snapshot.bytes, notepad::TextControls::preserve);
+    if (decoded.text.size() >= editable_limit)
+        throw std::runtime_error("Decoded text exceeds the editable budget. No file was changed.");
+    // Complete all decoding and baseline allocations before replacing the
+    // current session. snapshot keeps the actual encoded bytes for race checks.
+    std::string saved = decoded.text;
+    std::string opened = decoded.text;
+    reset();
+    path_ = std::move(path);
+    snapshot_ = std::move(snapshot);
+    encoding_ = decoded.encoding;
+    text_ = std::move(decoded.text);
+    saved_ = std::move(saved);
+    opened_ = std::move(opened);
 }
 void Session::editable() const {
     if (large_)
@@ -405,7 +440,7 @@ void Session::save() {
         throw std::runtime_error("Illegal UTF-8 bytes remain. Edit them or use Save Text Copy.");
     std::filesystem::path destination = path_;
     std::string saved = text_;
-    notepad::FileSnapshot written = notepad::write_file(destination, text_, snapshot_);
+    notepad::FileSnapshot written = write_session_text(destination, text_, encoding_, snapshot_);
     published(std::move(destination), std::move(saved), std::move(written));
 }
 void Session::save_as(const std::filesystem::path &target) {
@@ -414,7 +449,7 @@ void Session::save_as(const std::filesystem::path &target) {
         throw std::runtime_error("Illegal UTF-8 bytes remain. Edit them or use Save Text Copy.");
     std::filesystem::path path = std::filesystem::absolute(target);
     std::string saved = text_;
-    notepad::FileSnapshot written = notepad::write_file(path, text_, {});
+    notepad::FileSnapshot written = write_session_text(path, text_, encoding_, {});
     published(std::move(path), std::move(saved), std::move(written));
 }
 void Session::save_text_copy(const std::filesystem::path &target) const {

@@ -14,7 +14,9 @@ std::size_t word_count(std::string_view text) {
     return result;
 }
 namespace {
-void check_text(std::string_view text) {
+void check_text(std::string_view text, const TextControls controls = TextControls::legacy_gui) {
+    if (controls != TextControls::legacy_gui && controls != TextControls::preserve)
+        throw std::runtime_error("Unsupported text control policy.");
     if (text.size() > maximum_bytes)
         throw std::runtime_error("This build supports text up to 16 MiB.");
     const gui_forms::Utf8ValidationResult valid = gui_forms::validate_utf8(text);
@@ -23,6 +25,8 @@ void check_text(std::string_view text) {
                                  std::to_string(valid.error_offset.value()) +
                                  ". No text was replaced. Legacy encodings require explicit "
                                  "conversion in another tool.");
+    if (controls == TextControls::preserve)
+        return;
     for (unsigned char ch : text) {
         if (ch < 32 && ch != '\r' && ch != '\n' && ch != '\t')
             throw std::runtime_error("Binary-looking control characters are unsupported. The "
@@ -80,7 +84,7 @@ void emit_big_unit(std::string &output, unsigned unit) {
 }
 
 } // namespace
-Decoded decode(std::string_view bytes) {
+Decoded decode(std::string_view bytes, const TextControls controls) {
     if (bytes.size() > maximum_bytes)
         throw std::runtime_error("This build opens files up to 16 MiB.");
     Decoded d{};
@@ -113,14 +117,14 @@ Decoded decode(std::string_view bytes) {
         }
     } else
         d.text = bytes;
-    check_text(d.text);
+    check_text(d.text, controls);
     return d;
 }
-std::string encode(std::string_view text, Encoding encoding) {
+std::string encode(std::string_view text, Encoding encoding, const TextControls controls) {
     if (encoding != Encoding::utf8 && encoding != Encoding::utf8_bom &&
         encoding != Encoding::utf16_le && encoding != Encoding::utf16_be)
         throw std::runtime_error("Unsupported text encoding.");
-    check_text(text);
+    check_text(text, controls);
     if (encoding == Encoding::utf8) {
         const std::string result(text);
         return result;

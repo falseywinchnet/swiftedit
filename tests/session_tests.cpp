@@ -2,6 +2,7 @@
 #include "new_file_writer.hpp"
 #include "session_text_copy.hpp"
 #include "text_copy_stream.hpp"
+#include <array>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -19,6 +20,127 @@ void check(bool b, const char *s) {
 void raw(const std::filesystem::path &p, std::string_view s) {
     std::ofstream f(p, std::ios::binary);
     f.write(s.data(), s.size());
+}
+void verify_decoded_sessions(const std::filesystem::path &dir) {
+    const std::array<notepad::Encoding, 4> encodings{notepad::Encoding::utf8,
+        notepad::Encoding::utf8_bom, notepad::Encoding::utf16_le, notepad::Encoding::utf16_be};
+    std::string original = "A\r\nB\rC\n\t\xc3\xa9\xf0\x9f\x98\x80";
+    original.push_back('\0');
+    original.push_back('\x01');
+    for (std::size_t index = 0; index < encodings.size(); ++index) {
+        const notepad::Encoding encoding = encodings[index];
+        const std::filesystem::path source = dir / ("encoded-" + std::to_string(index));
+        const std::filesystem::path copy = dir / ("encoded-copy-" + std::to_string(index));
+        const std::string bytes = notepad::encode(original, encoding, notepad::TextControls::preserve);
+        raw(source, bytes);
+        swiftedit::Session session{};
+        session.open_decoded(source);
+        check(session.text() == original && session.encoding() == encoding && !session.dirty(),
+              "Decoded Session retains controls, mixed endings, non-BMP Unicode and encoding");
+        const swiftedit::SourceClipboard clipboard =
+            session.copy_range({0, original.size()}, session.stamp());
+        check(clipboard.bytes() == original, "Decoded clipboard retains logical UTF-8 source bytes");
+        const std::filesystem::path text_copy = dir / ("utf8-copy-" + std::to_string(index));
+        session.save_text_copy(text_copy);
+        check(notepad::read_file(text_copy).bytes == original && session.encoding() == encoding &&
+                  session.path() == source && !session.dirty(),
+              "Explicit text copy is UTF-8 and does not change decoded source encoding or baseline");
+        swiftedit::Session raw_session{};
+        raw_session.open(source);
+        check(raw_session.text() == bytes && raw_session.encoding() == notepad::Encoding::utf8,
+              "Default Session open remains byte-faithful with no BOM decoding");
+        bool legacy_refused = false;
+        try { static_cast<void>(notepad::decode(bytes)); }
+        catch (const std::exception &) { legacy_refused = true; }
+        check(legacy_refused, "Existing GUI decoder still refuses invisible legacy controls");
+        session.replace_ranges({{0, 1}}, "Changed", session.stamp());
+        const std::string changed = "Changed" + original.substr(1);
+        check(session.undo() && session.text() == original, "Decoded edit undo uses UTF-8 source offsets");
+        check(session.redo() && session.text() == changed, "Decoded edit redo retains source");
+        session.save();
+        check(notepad::read_file(source).bytes ==
+                  notepad::encode(changed, encoding, notepad::TextControls::preserve) &&
+                  !session.dirty() && !session.undo(),
+              "Save preserves BOM/byte order and establishes the decoded undo baseline");
+        session.restore_opened();
+        check(session.text() == original && session.dirty(), "Decoded as-opened baseline survives save");
+        check(session.undo() && session.text() == changed, "Restore-opened is undoable after save");
+        session.restore_opened();
+        session.save_as(copy);
+        check(notepad::read_file(copy).bytes == bytes && session.path() == copy && !session.dirty(),
+              "Decoded Save As preserves encoding and exact original bytes");
+        session.replace_ranges({{0, 1}}, "New", session.stamp());
+        const swiftedit::DocumentStamp before_failure = session.stamp();
+        bool collision_refused = false;
+        try { session.save_as(source); }
+        catch (const std::exception &) { collision_refused = true; }
+        check(collision_refused && session.path() == copy && session.encoding() == encoding &&
+                  session.stamp().identity == before_failure.identity &&
+                  session.stamp().revision == before_failure.revision && session.undo(),
+              "Failed encoded Save As preserves path, encoding, revision and undo");
+        session.replace_ranges({{0, 1}}, "Again", session.stamp());
+        raw(copy, "external");
+        bool conflict_refused = false;
+        try { session.save(); }
+        catch (const std::exception &) { conflict_refused = true; }
+        check(conflict_refused && notepad::read_file(copy).bytes == "external" &&
+                  session.encoding() == encoding && session.dirty() && session.undo(),
+              "Encoded save checks the original encoded snapshot and preserves undo on conflict");
+        const std::filesystem::path malformed = dir / ("malformed-" + std::to_string(index));
+        raw(malformed, std::string_view("\xff\xfe\x00\xd8", 4));
+        const swiftedit::DocumentStamp before_open = session.stamp();
+        bool malformed_refused = false;
+        try { session.open_decoded(malformed); }
+        catch (const std::exception &) { malformed_refused = true; }
+        check(malformed_refused && session.path() == copy && session.text() == original &&
+                  session.encoding() == encoding && session.stamp().identity == before_open.identity &&
+                  session.stamp().revision == before_open.revision,
+              "Failed decoding leaves the existing document lifetime and all baselines intact");
+        session.open(malformed);
+        check(session.encoding() == notepad::Encoding::utf8 && session.text().size() == 4 &&
+                  session.illegal_bytes() != 0,
+              "Explicit raw reopen preserves malformed encoded bytes and resets the output codec");
+    }
+    swiftedit::Session retained{};
+    retained.replace_ranges({{0, 0}}, "Keep", retained.stamp());
+    const swiftedit::DocumentStamp stamp = retained.stamp();
+    const std::filesystem::path threshold = dir / "decoded-threshold";
+    raw(threshold, std::string(swiftedit::editable_limit, 'x'));
+    bool threshold_refused = false;
+    try { retained.open_decoded(threshold); }
+    catch (const std::exception &) { threshold_refused = true; }
+    check(threshold_refused && retained.text() == "Keep" && retained.stamp().identity == stamp.identity &&
+              retained.stamp().revision == stamp.revision,
+          "Decoded open refuses read-only source size without discarding current edits");
+    // CJK expands from two UTF-16 bytes to three UTF-8 bytes. One ASCII scalar
+    // makes the decoded result exactly the read-only threshold, while the file
+    // itself remains below it. The boundary is checked before baseline copies.
+    std::string expanded = "\xff\xfe";
+    expanded += 'a';
+    expanded += '\0';
+    for (std::size_t index = 0; index < swiftedit::editable_limit / 3; ++index) {
+        expanded += '\0';
+        expanded += '\x4e';
+    }
+    raw(threshold, expanded);
+    bool expansion_refused = false;
+    try { retained.open_decoded(threshold); }
+    catch (const std::exception &) { expansion_refused = true; }
+    check(expansion_refused && retained.text() == "Keep" && retained.stamp().identity == stamp.identity &&
+              retained.stamp().revision == stamp.revision && retained.undo(),
+          "Decoded size expansion refuses before changing document identity, text or undo");
+    const std::string small_utf16 = notepad::encode("A", notepad::Encoding::utf16_le);
+    raw(threshold, small_utf16);
+    retained.open_decoded(threshold);
+    retained.replace_ranges({{0, 1}}, std::string(swiftedit::editable_limit / 2, 'x'), retained.stamp());
+    const swiftedit::DocumentStamp before_save = retained.stamp();
+    bool output_refused = false;
+    try { retained.save(); }
+    catch (const std::exception &) { output_refused = true; }
+    check(output_refused && notepad::read_file(threshold).bytes == small_utf16 &&
+              retained.encoding() == notepad::Encoding::utf16_le && retained.dirty() &&
+              retained.stamp().revision == before_save.revision && retained.undo() && retained.text() == "A",
+          "Encoded output overflow preserves disk bytes, save baseline, encoding and undo");
 }
 int main() {
     try {
@@ -416,6 +538,7 @@ int main() {
             }
             check(refused, "Expected refusal");
         }
+        verify_decoded_sessions(dir);
         std::cout << "Session tests passed: exact previews, stale guard, ambiguity, save undo "
                      "boundary, original restore, malformed bytes, copy safety, escaped transport, "
                      "version names, bounded large pages.\n";

@@ -59,13 +59,19 @@ private:
     std::string bytes_{};
 };
 // Byte-faithful command model. Malformed input remains editable; publication
-// requires valid UTF-8 or an explicitly requested sanitized text copy.
+// requires valid UTF-8 or an explicitly requested sanitized text copy. Explicit
+// decoded opens use UTF-8 logical source with a separate output codec.
 class Session {
 public:
     Session();
     Session(const Session &) = delete;
     Session &operator=(const Session &) = delete;
     void open(const std::filesystem::path &);
+    // Explicit compatibility path for decoded GUI documents. Uses the existing
+    // BOM-aware decoder, refuses malformed input and oversized decoded text,
+    // and preserves the detected encoding on save. The default open remains
+    // byte-faithful; offsets here describe decoded UTF-8, not encoded file bytes.
+    void open_decoded(const std::filesystem::path &);
     void reset();
     [[nodiscard]] Page page(std::uint64_t offset = 0, std::size_t budget = 4096) const;
     [[nodiscard]] std::vector<std::size_t> find(std::string_view query,
@@ -114,6 +120,8 @@ public:
     }
     const std::filesystem::path &path() const { return path_; }
     const std::string &text() const { return text_; }
+    // Output codec; raw open always uses utf8 and keeps any BOM in source bytes.
+    [[nodiscard]] notepad::Encoding encoding() const { return encoding_; }
     [[nodiscard]] std::size_t illegal_bytes() const;
 
 private:
@@ -123,6 +131,7 @@ private:
     std::filesystem::path path_{};
     std::unique_ptr<PagedFile> large_{};
     notepad::FileSnapshot snapshot_{};
+    notepad::Encoding encoding_{notepad::Encoding::utf8};
     std::string text_{}, saved_{}, opened_{};
     std::vector<std::string> undo_{}, redo_{};
     std::vector<Preview> previews_{};
