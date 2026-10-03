@@ -1,4 +1,5 @@
 #include "document_projection.hpp"
+#include "selection_set.hpp"
 #include <chrono>
 #include <fstream>
 #include <iostream>
@@ -63,16 +64,59 @@ void verify_decoded_projection(const std::filesystem::path &directory) {
         const gf::DisplayMappingResult inverse = view.display_position(token, gf::SourceByteOffset(9));
         check(inverse.position.has_value() && (*inverse.position).value == 10,
               "Decoded source position round trips through public view mapping");
-        const se::DocumentStamp observed = session.stamp();
-        const se::SourceRange selected{static_cast<std::size_t>((*begin.position).value),
-                                     static_cast<std::size_t>((*end.position).value - (*begin.position).value)};
-        const se::SourceClipboard copied = session.copy_range(selected, observed);
-        check(copied.bytes() == std::string_view("\0", 1), "Mapped copy returns source NUL, never its label");
-        session.replace_ranges({selected}, "X", observed);
+        bool refused = false;
+        try {
+            const se::SelectionSet split(session, view, token,
+                {{gf::DisplayByteOffset(10), gf::DisplayByteOffset(11)}});
+        } catch (const std::runtime_error &) {
+            refused = true;
+        }
+        check(refused, "Scalar-valid projected position cannot split combining source grapheme");
+        refused = false;
+        try {
+            const se::SelectionSet split_label(session, view, token,
+                {{gf::DisplayByteOffset(3), gf::DisplayByteOffset(10)}});
+        } catch (const std::runtime_error &) {
+            refused = true;
+        }
+        check(refused, "Projected selection refuses generated label interior");
+        const se::SelectionSet parallel(session, view, token,
+            {{gf::DisplayByteOffset(0), gf::DisplayByteOffset(2)},
+             {gf::DisplayByteOffset(10), gf::DisplayByteOffset(13)}});
+        check(parallel.can_rewrite(), "Different byte lengths with equal source grapheme counts can rewrite");
+        const std::vector<se::SourceClipboard> parts = parallel.copy(session);
+        check(parts.size() == 2 && parts[0].bytes() == "\xc3\xa9" && parts[1].bytes() == "e\xcc\x81",
+              "Projected discontiguous copy preserves separate original Unicode parts");
+        const se::SelectionSet unequal(session, view, token,
+            {{gf::DisplayByteOffset(0), gf::DisplayByteOffset(2)},
+             {gf::DisplayByteOffset(10), gf::DisplayByteOffset(17)}});
+        check(!unequal.can_rewrite(), "Unequal projected grapheme counts remain copy-only");
+        refused = false;
+        try {
+            unequal.rewrite(session, "X");
+        } catch (const std::runtime_error &) {
+            refused = true;
+        }
+        check(refused && session.text() == source && !session.dirty(),
+              "Refused projected rewrite preserves source and saved state");
+        const se::SelectionSet selected(session, view, token,
+            {{gf::DisplayByteOffset(2), gf::DisplayByteOffset(10)}});
+        const std::vector<se::SourceClipboard> copied = selected.copy(session);
+        check(copied.size() == 1 && copied[0].bytes() == std::string_view("\0", 1),
+              "Mapped copy returns source NUL, never its label");
+        selected.rewrite(session, "X");
         std::string expected = source;
         expected.replace(8, 1, "X");
         check(session.text() == expected && session.encoding() == encoding,
               "Mapped edit replaces only decoded source control and retains codec");
+        refused = false;
+        try {
+            const se::SelectionSet stale(session, view, token,
+                {{gf::DisplayByteOffset(2), gf::DisplayByteOffset(10)}});
+        } catch (const std::runtime_error &) {
+            refused = true;
+        }
+        check(refused, "Changed Session refuses stale selection even before view rebind");
         const se::DocumentStamp changed = session.stamp();
         check(view.bind({changed.identity.value, changed.revision.value}, gf::SourceByteOffset(session.size())) ==
                   gf::DocumentViewStatus::success, "Changed Session revision rebinds view");

@@ -4,6 +4,41 @@
 
 namespace swiftedit {
 namespace gf = gui_forms;
+namespace {
+std::vector<SourceRange> map_selections(const Session &session, const gf::DocumentViewState &view,
+                                      const gf::DocumentPageRequest &token,
+                                      const std::vector<DisplaySelection> &selections) {
+    const DocumentStamp current = session.stamp();
+    if (token.revision.document != current.identity.value || token.revision.revision != current.revision.value)
+        throw std::runtime_error("Display selections belong to an older or different document.");
+    if (session.read_only())
+        throw std::runtime_error("Interactive multi-selection metadata requires an editable document.");
+    if (selections.empty() || selections.size() > 1000)
+        throw std::runtime_error("Select between 1 and 1000 display ranges.");
+    std::vector<SourceRange> ranges{};
+    ranges.reserve(selections.size());
+    for (const DisplaySelection &selection : selections) {
+        if (selection.begin.value > selection.end.value)
+            throw std::runtime_error("Display selection endpoints must be ordered.");
+        const gf::SourceMappingResult begin = view.source_position(token, selection.begin);
+        const gf::SourceMappingResult end = view.source_position(token, selection.end);
+        if (begin.status != gf::DocumentViewStatus::success || end.status != gf::DocumentViewStatus::success ||
+            !begin.position || !end.position)
+            throw std::runtime_error("Display selection is stale or splits a character or control label.");
+        const std::uint64_t first = (*begin.position).value;
+        const std::uint64_t last = (*end.position).value;
+        if (first > last || last > session.size())
+            throw std::runtime_error("Mapped selection exceeds document.");
+        // Editable Session size is below 16 MiB, so checked endpoints fit size_t.
+        ranges.push_back({static_cast<std::size_t>(first), static_cast<std::size_t>(last - first)});
+    }
+    return ranges;
+}
+}
+SelectionSet::SelectionSet(const Session &session, const gf::DocumentViewState &view,
+                           const gf::DocumentPageRequest &token,
+                           const std::vector<DisplaySelection> &selections)
+    : SelectionSet(session, map_selections(session, view, token, selections)) {}
 SelectionSet::SelectionSet(const Session &session, const std::vector<SourceRange> &ranges)
     : stamp_(session.stamp()) {
     if (session.read_only())

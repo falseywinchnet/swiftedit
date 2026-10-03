@@ -97,5 +97,21 @@ original encoded bytes, including BOM and byte order.
 Local projection integration passed in 0.24 seconds, with zero spelling audit
 findings across 148 files. This checks existing model contracts, not native
 selection gestures or a new edit controller. D1 mapping establishes scalar and
-token boundaries; a future controller must additionally enforce complete
-grapheme boundaries and rebind the view whenever Session state changes.
+token boundaries, not complete grapheme legality.
+
+SelectionSet now accepts typed display selections with a public view and page
+token. It checks the token against the current Session before mapping, uses
+the view's exact token/endpoint validation, and then applies its existing source
+grapheme and ordered/disjoint-range checks. It owns only source ranges and the
+Session stamp after construction; it retains no view or page borrow. Copy and
+rewrite therefore retain the existing stale-document, equal-grapheme-count,
+undo and source-preservation rules. This does not itself rebind or invalidate a
+native view: the future UI controller still owns that lifecycle.
+
+Integration regressions reject combining-grapheme splits, generated-label
+interiors, and stale Session revisions even before view rebinding. Separate
+Unicode selections with equal grapheme counts remain editable; unequal counts
+are copy-only and rejected rewrites leave source unchanged. All 29 local suites
+passed in 23.82 seconds. The source-selection validator still builds whole
+editable-document segmentation metadata synchronously; this bridge is not a
+claim of bounded interactive selection latency or completed native gestures.
