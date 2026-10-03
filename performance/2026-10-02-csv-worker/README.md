@@ -178,3 +178,19 @@ replacement. The first heavy fixture was incorrectly unquoted CSV and failed;
 after quoting its comma-containing formula, the worker suite passed in 0.10 s.
 The other 27 local tests passed in the preceding full run. The spelling audit
 passes all 145 files; native test executables compile locally.
+
+Native run [37095512701](https://github.com/falseywinchnet/swiftedit/actions/runs/37095512701)
+at e885cc5 passed all three platforms and packaging. Exact diagnostics are retained
+in queue-native-*.txt. The following are single observations on independent CI
+hosts; fewer presentation frames corroborate the reduced handoffs, but these are
+not controlled before/after speed ratios or physical input-to-screen measurements.
+
+| Platform | Completion observed ms | Maximum timer gap ms | Close through owner release ms |
+|---|---:|---:|---:|
+| Windows x64 | 36.6861 | 13.3501 | 21.8953 |
+| Linux x64 | 61.2073 | 19.8858 | 17.9626 |
+| macOS arm64 | 37.6588 | 20.2878 | 14.4845 |
+
+Mac and Linux each presented three stress frames, compared with twelve in the
+preceding diagnostic run. Settled-idle scheduling checks and all exact-result,
+navigation, pending-close and deferred-conversion tests passed on every platform.
