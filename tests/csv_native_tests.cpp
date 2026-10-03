@@ -127,6 +127,7 @@ private:
             }
 #endif
             stress_started_ = gf::FrameClock::now();
+            (*window_).reset_activity_metrics();
             (*view_).set_source(stress_source_);
             const std::chrono::duration<double, std::milli> prepared = gf::FrameClock::now() - stress_started_;
             std::cout << "CSV native stress source preparation ms: " << prepared.count() << '\n';
@@ -148,6 +149,13 @@ private:
             if (!down || !up || (*view_).selected().row != 0)
                 throw std::runtime_error("Native CSV routed navigation failed during calculation.");
             const std::chrono::duration<double, std::milli> elapsed = now - stress_started_;
+            const gf::MetricsSnapshot activity = (*window_).metrics().snapshot();
+            if (gap.count() > 50) {
+                std::cout << "CSV delayed observation at ms: " << elapsed.count()
+                          << "; gap ms: " << gap.count()
+                          << "; pending: " << (*view_).calculations_pending()
+                          << "; native metrics: " << activity.to_json() << '\n';
+            }
             if (!(*view_).calculations_pending()) {
                 CsvResultProbe probe{};
                 (*view_).on_paint(probe, (*view_).arranged_bounds());
@@ -156,6 +164,7 @@ private:
                 std::cout << "CSV native stress completion observed ms: " << elapsed.count()
                           << "; maximum timer gap ms: " << maximum_gap_ms_
                           << "; maximum routed Down/Up ms: " << maximum_input_ms_ << '\n';
+                std::cout << "CSV stress native metrics: " << activity.to_json() << '\n';
                 (*view_).cancel_calculations();
                 (*view_).set_source(stress_source_);
                 if (!(*view_).calculations_pending())

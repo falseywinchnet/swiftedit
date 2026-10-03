@@ -28,8 +28,9 @@ Queue bounds count results, not allocator bytes. Each result can retain up to th
 existing 100000-reference evaluation limit; the active calculation, last reused
 result, queued results and UI-consumed result may coexist. Allocation, reference
 metadata preparation, source parsing, queue cleanup and joining are not guaranteed
-to meet a wall-clock deadline. Convert to Value still computes synchronously;
-this change moves viewport evaluation only.
+to meet a wall-clock deadline. Convert to Value now reuses a current successful
+cell's exact result (2525a2f), preserving the original source elsewhere. Pending
+or uncached conversions still compute synchronously.
 
 ## Measurements and rejected first attempt
 
@@ -62,7 +63,9 @@ with potentially queued results, 32 rapid cancellation/replacement cycles,
 formula-error recovery and destruction with active work. View tests cover stale
 source/viewport rejection, pending hover updates, duplicate formula reuse and
 zero extra scheduling/dirty marks after completion. The C++ spelling audit passed
-145 files; native execution remains pending CI for this checkpoint.
+145 files. Native run 36998142520 at 3f7c96f passed all three platforms and
+packaging. After restart, all 28 local tests including cached conversion passed
+in 28.90 seconds; the spelling audit remains clean at 145 files.
 
 ## Native measurement extension
 
@@ -78,5 +81,27 @@ not physical key-to-screen or raster/compositor latency.
 After completion, the test restarts pending work and requests window close. It
 records time through Application::run return and retained test-owner release,
 including worker teardown. No hard latency threshold is imposed from one CI run;
-five seconds is a readiness watchdog. The Windows executable compiles locally;
-native execution and measured values remain pending the next CI revision.
+five seconds is a readiness watchdog.
+
+Native run [36998730463](https://github.com/falseywinchnet/swiftedit/actions/runs/36998730463)
+at 5801fc7 passed all three platforms and packaging. The retained native-*.txt
+files are exact CSV diagnostic lines from each uploaded LastTest.log.
+
+| Platform | Source preparation ms | Completion observed ms | Maximum timer gap ms | Maximum Down/Up callback ms | Close through owner release ms |
+|---|---:|---:|---:|---:|---:|
+| Windows x64 | 4.3873 | 107.715 | 17.4862 | 0.0299 | 16.2634 |
+| Linux x64 | 3.13981 | 168.581 | 14.9136 | 0.005899 | 13.9812 |
+| macOS arm64 | 5.42792 | 615.349 | 265.452 | 0.110209 | 33.0789 |
+
+These are single CI observations on different hosts, not controlled platform
+comparisons. The Mac delay needs investigation despite functional success. A
+quick routed callback does not establish prompt input delivery or presentation.
+Settled-idle frame deadlines and scheduled requests were zero on every platform.
+
+The next test revision resets activity metrics before the stress fixture and
+prints public native counters at completion and observation gaps above 50 ms.
+Presentation count, cumulative/worst presentation time, paint count and frame
+scheduling counters can help locate the delay. Logging a delayed observation can
+itself influence subsequent timing; these remain diagnostic observations, not
+performance acceptance thresholds. This extension compiles locally; its native
+results remain pending.
