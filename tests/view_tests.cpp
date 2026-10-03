@@ -15,14 +15,21 @@ public:
     std::vector<gf::Point> origins{};
     bool tall_metrics{};
     std::size_t reference_outlines{};
+    std::size_t tall_rules{};
+    std::size_t tall_borders{};
     bool fail_measurement{};
     gf::Point translation{};
     void save() override {}
     void restore() override {}
     void translate(gf::Point point) override { translation = point; }
     void clip_rect(gf::Rect) override {}
-    void fill_rect(gf::Rect, gf::Color) override {}
-    void stroke_rect(gf::Rect, gf::Color, const double width) override {
+    void fill_rect(gf::Rect bounds, gf::Color) override {
+        if (bounds.width == 2 && bounds.height > 1000)
+            ++tall_rules;
+    }
+    void stroke_rect(gf::Rect bounds, gf::Color, const double width) override {
+        if (bounds.height > 1000)
+            ++tall_borders;
         if (width == 2)
             ++reference_outlines;
     }
@@ -328,6 +335,57 @@ void verify_csv_page_navigation() {
     (*grid).on_key(key);
     check((*grid).selected().row == 0 && (*grid).selected().column == 0, "Ctrl Home reaches the first cell");
 }
+void verify_tall_markdown_visibility() {
+    const std::shared_ptr<notepad::MarkdownView> view =
+        gf::make_control<notepad::MarkdownView>(gf::StableId("tall.markdown"));
+    gf::Window window(view, {640, 140});
+    window.perform_layout();
+    std::string source = "> ";
+    for (std::size_t word = 0; word < 10000; ++word)
+        source += "word ";
+    source += "[tail](https://example.invalid/tail)";
+    (*view).set_source(source);
+    ObservingPainter initial{};
+    (*view).on_paint(initial, {0, 0, 640, 140});
+    const std::shared_ptr<gf::VScrollBar> scroll =
+        std::dynamic_pointer_cast<gf::VScrollBar>(window.find("markdown.vertical"));
+    check(static_cast<bool>(scroll), "Tall Markdown has a scrollbar");
+    (*scroll).set_value(3000);
+    ObservingPainter middle{};
+    (*view).on_paint(middle, {0, 0, 640, 140});
+    check(middle.texts < 200 && middle.tall_rules == 1,
+          "Tall quote preserves its intersecting rule without submitting off-screen text");
+    gf::KeyEvent end{};
+    end.physical_key = gf::PhysicalKey::end;
+    end.modifiers = gf::Modifier::control;
+    (*view).on_key(end);
+    ObservingPainter bottom{};
+    (*view).on_paint(bottom, {0, 0, 640, 140});
+    bool found_tail = false;
+    for (std::size_t index = 0; index < bottom.labels.size(); ++index) {
+        if (bottom.labels[index] != "tail")
+            continue;
+        gf::PointerEvent hover{};
+        hover.action = gf::PointerAction::move;
+        hover.position = {bottom.origins[index].x + bottom.translation.x + 1,
+                          bottom.origins[index].y + bottom.translation.y - 2};
+        (*view).on_pointer(hover);
+        found_tail = (*view).hovered_url() == "https://example.invalid/tail";
+    }
+    check(found_tail && bottom.texts < 200, "Indexed tail remains painted and link hover remains exact");
+    source = "> | ";
+    for (std::size_t word = 0; word < 10000; ++word)
+        source += "word ";
+    source += "|\n> | --- |\n";
+    (*view).set_source(source);
+    ObservingPainter table_initial{};
+    (*view).on_paint(table_initial, {0, 0, 640, 140});
+    (*scroll).set_value(3000);
+    ObservingPainter table_middle{};
+    (*view).on_paint(table_middle, {0, 0, 640, 140});
+    check(table_middle.texts < 200 && table_middle.tall_borders == 1 && table_middle.tall_rules == 1,
+          "Tall table retains both overlapping decorations while pruning off-screen text");
+}
 int main() {
     try {
         verify_csv_page_navigation();
@@ -335,6 +393,7 @@ int main() {
         verify_duplicate_formulas();
         verify_cooperative_formulas();
         verify_cached_conversion();
+        verify_tall_markdown_visibility();
         const std::shared_ptr<notepad::CsvView> grid =
             gf::make_control<notepad::CsvView>(gf::StableId("test.csv"));
         gf::Window grid_window(grid, {800, 600});

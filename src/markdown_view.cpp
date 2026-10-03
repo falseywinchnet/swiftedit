@@ -2,6 +2,7 @@
 #include "display.hpp"
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 
 namespace notepad {
@@ -27,6 +28,31 @@ MarkdownView::MarkdownView(gf::StableId id) : Control(std::move(id)) { set_focus
 bool MarkdownView::RunOrder::operator()(const Run &left, const Run &right) const {
     const bool before = left.bounds.y < right.bounds.y;
     return before;
+}
+MarkdownView::VisibleRuns::VisibleRuns(const MarkdownView &owner, double top, double bottom)
+    : owner_(owner), top_(top), bottom_(bottom) {
+    if (!owner_.runs_.empty()) {
+        pending_[0] = {1, 0, owner_.run_leaves_};
+        count_ = 1;
+    }
+}
+std::optional<std::size_t> MarkdownView::VisibleRuns::next() {
+    while (count_) {
+        const Branch branch = pending_[--count_];
+        if (branch.first >= owner_.runs_.size() ||
+            owner_.runs_[branch.first].bounds.y > bottom_ ||
+            owner_.run_bottoms_[branch.node] < top_)
+            continue;
+        if (branch.last - branch.first == 1) {
+            const std::optional<std::size_t> result = branch.first;
+            return result;
+        }
+        const std::size_t middle = branch.first + (branch.last - branch.first) / 2;
+        // Right first on the stack preserves the existing stable paint order.
+        pending_[count_++] = {branch.node * 2 + 1, middle, branch.last};
+        pending_[count_++] = {branch.node * 2, branch.first, middle};
+    }
+    return std::nullopt;
 }
 void MarkdownView::ScrollListener::operator()(const double &) const {
     const std::shared_ptr<MarkdownView> self = owner.lock();
@@ -86,7 +112,7 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
     next.reserve(std::min<std::size_t>(source_.size() / 4 + 1, 250000));
     std::size_t retained_bytes = 0;
     constexpr std::size_t storage_limit = 32 * 1024 * 1024;
-    double y = page_margin, maximum_x = width - 18, maximum_height = 32;
+    double y = page_margin, maximum_x = width - 18;
     for (const swiftedit::MarkdownBlock &block : blocks_) {
         if (next.size() >= 250000 || block.columns > 250000 - next.size())
             throw std::runtime_error("Markdown layout exceeds display run budget.");
@@ -203,16 +229,25 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
         }
         y = bottom + (table ? 4 : 12);
     }
-    for (const Run &run : next)
-        maximum_height = std::max(maximum_height, run.bounds.height);
     std::stable_sort(next.begin(), next.end(), RunOrder{});
+    // Each subtree records its greatest bottom. Together with sorted starting
+    // positions, this prunes off-screen text even beneath a very tall quote.
+    std::size_t leaves = 1;
+    while (leaves < next.size())
+        leaves *= 2;
+    std::vector<double> bottoms(leaves * 2, std::numeric_limits<double>::lowest());
+    for (std::size_t index = 0; index < next.size(); ++index)
+        bottoms[leaves + index] = next[index].bounds.y + next[index].bounds.height;
+    for (std::size_t index = leaves - 1; index > 0; --index)
+        bottoms[index] = std::max(bottoms[index * 2], bottoms[index * 2 + 1]);
     const gf::FontSpec ruler_font{gf::FontRole::content, 11, 400, false};
     const gf::ResolvedTextLayout ruler_metrics = painter.resolve_text_layout_utf8("0", ruler_font);
     runs_ = std::move(next);
+    run_bottoms_ = std::move(bottoms);
+    run_leaves_ = leaves;
     ruler_baseline_ = 3 + ruler_metrics.ascent;
     content_height_ = y + page_margin;
     content_width_ = maximum_x;
-    maximum_run_height_ = maximum_height;
     layout_width_ = width;
     layout_dirty_ = false;
     update_scroll_ranges();
@@ -254,12 +289,9 @@ void MarkdownView::on_paint(gf::Painter &painter, gf::Rect) {
     painter.clip_rect({0, ruler_height, std::max(0.0, bounds.width - 18),
                        std::max(0.0, bounds.height - ruler_height - 18)});
     painter.translate({-left, ruler_height - top});
-    Run beginning{};
-    beginning.bounds.y = top - maximum_run_height_;
-    std::vector<Run>::const_iterator run =
-        std::lower_bound(runs_.begin(), runs_.end(), beginning, RunOrder{});
-    for (; run != runs_.end() && (*run).bounds.y <= top + bounds.height; ++run) {
-        const Run &item = *run;
+    VisibleRuns visible(*this, top, top + std::max(0.0, bounds.height - ruler_height - 18));
+    for (std::optional<std::size_t> index = visible.next(); index; index = visible.next()) {
+        const Run &item = runs_[*index];
         if (item.border) {
             painter.stroke_rect(item.bounds, style.border, 1);
             continue;
@@ -351,13 +383,10 @@ void MarkdownView::on_pointer(gf::PointerEvent &event) {
     std::string url{};
     if (event.action == gf::PointerAction::move && content.contains(event.position) &&
         !layout_dirty_ && layout_error_.empty()) {
-        Run beginning{};
-        beginning.bounds.y = point.y - maximum_run_height_;
-        std::vector<Run>::const_iterator run =
-            std::lower_bound(runs_.begin(), runs_.end(), beginning, RunOrder{});
-        for (; run != runs_.end() && (*run).bounds.y <= point.y; ++run)
-            if (!(*run).url.empty() && (*run).bounds.contains(point)) {
-                url = (*run).url;
+        VisibleRuns visible(*this, point.y, point.y);
+        for (std::optional<std::size_t> index = visible.next(); index; index = visible.next())
+            if (!runs_[*index].url.empty() && runs_[*index].bounds.contains(point)) {
+                url = runs_[*index].url;
                 break;
             }
     }
