@@ -225,3 +225,20 @@ jobs. Windows measured 4.16 ms synchronous layout, 25.38 ms worst presentation,
 27.63 ms maximum observer gap and 38.78 ms to observed completed paint. The full
 raw lines for all platforms are preserved in layout-native-*.txt. These are the
 baseline before shared run URLs and space-only text-draw elision.
+
+## Drawing checkpoint and release preparation
+
+Run 37098988259 at d12b9ed passed native tests and packaging on all three
+platforms. Raw lines are preserved in drawing-native-*.txt. Windows/Linux/macOS
+first completed paints were observed at 27.79/84.60/131.36 ms; worst presentations
+were 12.47/67.85/50.54 ms and synchronous layouts were 4.51/4.08/6.47 ms. All
+three reported zero paints and preparation scheduling during settled idle.
+The Windows sample improved while the Mac sample worsened; differing CI runs
+do not establish causation or a cross-platform speedup. The native Mac capture
+was inspected after the change and retains visible spacing, code backgrounds,
+link decoration, table, quote and heading presentation.
+
+Version 0.3.6 preparation passed the full 29-test local headless suite in
+19.15 seconds and the 148-file spelling audit. Release-tag native validation and
+independent archive verification remain separate requirements before claiming
+the new release is available.
