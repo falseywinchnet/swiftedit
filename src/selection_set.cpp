@@ -58,9 +58,20 @@ SelectionSet::SelectionSet(const Session &session, const std::vector<SourceRange
         previous_end = range.offset + range.length;
         previous_length = range.length;
     }
+    // LF ends all grapheme context, including CRLF and regional-indicator
+    // parity. Keep complete LF-delimited context around the selected interval;
+    // never cut at a guessed scalar or a fixed look-behind distance.
+    std::size_t context_begin = 0;
+    if (ranges.front().offset) {
+        const std::size_t previous_lf = source.rfind('\n', ranges.front().offset - 1);
+        if (previous_lf != std::string::npos)
+            context_begin = previous_lf + 1;
+    }
+    const std::size_t next_lf = source.find('\n', previous_end);
+    const std::size_t context_end = next_lf == std::string::npos ? source.size() : next_lf + 1;
     // Metadata placeholders force a grapheme break around each illegal byte.
     // Their byte lengths match source; they are never copied or published.
-    std::string metadata = source;
+    std::string metadata = source.substr(context_begin, context_end - context_begin);
     for (std::size_t offset = 0; offset < metadata.size();) {
         const std::size_t length = utf8_sequence_length(metadata, offset);
         if (length)
@@ -74,8 +85,8 @@ SelectionSet::SelectionSet(const Session &session, const std::vector<SourceRange
     std::size_t first_count = 0;
     for (std::size_t index = 0; index < ranges.size(); ++index) {
         const SourceRange &range = ranges[index];
-        const gf::Utf8Offset start(range.offset);
-        const gf::Utf8Offset end(range.offset + range.length);
+        const gf::Utf8Offset start(range.offset - context_begin);
+        const gf::Utf8Offset end(range.offset + range.length - context_begin);
         if (!text.is_grapheme_boundary(start) || !text.is_grapheme_boundary(end))
             throw std::runtime_error("Selection splits a source grapheme or line ending.");
         const std::size_t count = text.grapheme_index(end).value() - text.grapheme_index(start).value();

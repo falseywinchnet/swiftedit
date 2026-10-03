@@ -1,5 +1,6 @@
 #include "selection_set.hpp"
 #include "platform.hpp"
+#include <gui_forms/text.hpp>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -17,6 +18,33 @@ void refused_selection(const swiftedit::Session &session,
         refused = true;
     }
     require(refused, "Invalid source selection refused");
+}
+void verify_context_boundaries(const swiftedit::Session &session) {
+    std::string metadata = session.text();
+    for (std::size_t offset = 0; offset < metadata.size();) {
+        const std::size_t length = swiftedit::utf8_sequence_length(metadata, offset);
+        if (length)
+            offset += length;
+        else {
+            metadata[offset] = '\x01';
+            ++offset;
+        }
+    }
+    const gui_forms::TextStore whole(metadata);
+    for (std::size_t begin = 0; begin <= metadata.size(); ++begin) {
+        for (std::size_t end = begin; end <= metadata.size(); ++end) {
+            const bool expected = whole.is_grapheme_boundary(gui_forms::Utf8Offset(begin)) &&
+                                  whole.is_grapheme_boundary(gui_forms::Utf8Offset(end));
+            bool accepted = false;
+            try {
+                const swiftedit::SelectionSet selection(session, {{begin, end - begin}});
+                accepted = selection.can_rewrite();
+            } catch (const std::runtime_error &) {
+                accepted = false;
+            }
+            require(accepted == expected, "Line-context selection matches full-document segmentation at every byte pair");
+        }
+    }
 }
 int main() {
     try {
@@ -103,6 +131,18 @@ int main() {
         controls.rewrite(session, "Q");
         require(session.text() == "Q Q" && session.undo() && session.text() == bytes,
                 "Replacing invalid bytes is undoable without metadata leaking into source");
+        const std::string boundary_source = std::string("\n\r\ne\xcc\x81\r\n\xcc\x81\xff") +
+            "\xf0\x9f\x87\xa6\xf0\x9f\x87\xa7\xf0\x9f\x87\xa8\n" +
+            "\xf0\x9f\x91\xa9\xe2\x80\x8d\xf0\x9f\x92\xbb\rZ\n";
+        {
+            std::ofstream output(path, std::ios::binary | std::ios::trunc);
+            output.write(boundary_source.data(), static_cast<std::streamsize>(boundary_source.size()));
+            output.close();
+            require(static_cast<bool>(output), "Write boundary-context fixture");
+        }
+        session.open(path);
+        verify_context_boundaries(session);
+        require(session.text() == boundary_source && !session.dirty(), "Boundary checks preserve source");
         std::cout << "Interactive selection policy tests passed\n";
         return 0;
     } catch (const std::exception &failure) {

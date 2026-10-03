@@ -112,6 +112,9 @@ Integration regressions reject combining-grapheme splits, generated-label
 interiors, and stale Session revisions even before view rebinding. Separate
 Unicode selections with equal grapheme counts remain editable; unequal counts
 are copy-only and rejected rewrites leave source unchanged. All 29 local suites
-passed in 23.82 seconds. The source-selection validator still builds whole
-editable-document segmentation metadata synchronously; this bridge is not a
-claim of bounded interactive selection latency or completed native gestures.
+passed in 23.82 seconds. The subsequent selection optimization limits synchronous
+segmentation to complete LF-delimited context enclosing the selections. Very
+long lines or widely separated selections can still span most of the document;
+this is not a hard latency bound or completed native gestures. See
+`performance/2026-10-03-selection-context/README.md` for measured before/after
+component evidence and boundary regression coverage.
