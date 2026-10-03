@@ -219,3 +219,9 @@ The tall-document test now rejects space-only text submissions, while existing
 navigation, hover and geometry tests continue to pass. Four focused suites passed
 in 2.24 seconds and the 148-file spelling audit passed. Native timing and visual
 verification of this change remain pending; no speedup is claimed yet.
+
+Run 37098620036 subsequently passed Windows as well, completing all three native
+jobs. Windows measured 4.16 ms synchronous layout, 25.38 ms worst presentation,
+27.63 ms maximum observer gap and 38.78 ms to observed completed paint. The full
+raw lines for all platforms are preserved in layout-native-*.txt. These are the
+baseline before shared run URLs and space-only text-draw elision.
