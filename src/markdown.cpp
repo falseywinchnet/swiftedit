@@ -12,6 +12,10 @@ extern "C" {
 
 namespace swiftedit {
 namespace {
+void check_cancelled(const std::stop_token &cancellation) {
+    if (cancellation.stop_requested())
+        throw MarkdownCancelled();
+}
 void append_scalar(std::string &text, unsigned scalar) {
     if (!scalar || scalar > 0x10ffff || (scalar >= 0xd800 && scalar <= 0xdfff))
         scalar = 0xfffd;
@@ -64,11 +68,12 @@ struct ListState {
 };
 // MD4C owns the attribute slices for the duration of its callback. Copy the
 // decoded destination into our model; never retain the borrowed slice pointers.
-std::string attribute_text(const MD_ATTRIBUTE &attribute) {
+std::string attribute_text(const MD_ATTRIBUTE &attribute, const std::stop_token &cancellation) {
     std::string result{};
     std::size_t index = 0;
     MD_OFFSET offset = 0;
     while (offset < attribute.size) {
+        check_cancelled(cancellation);
         const MD_OFFSET end = attribute.substr_offsets[index + 1];
         const std::string_view part(attribute.text + offset, end - offset);
         if (attribute.substr_types[index] == MD_TEXT_ENTITY) {
@@ -84,6 +89,7 @@ std::string attribute_text(const MD_ATTRIBUTE &attribute) {
     return result;
 }
 struct MarkdownParser {
+    std::stop_token cancellation{};
     std::vector<MarkdownBlock> blocks{};
     std::optional<std::size_t> current{};
     std::vector<ListState> lists{};
@@ -111,6 +117,7 @@ struct MarkdownParser {
         }
     }
     void append(std::string_view text) {
+        check_cancelled(cancellation);
         if (text.empty())
             return;
         if (!current)
@@ -216,7 +223,7 @@ struct MarkdownParser {
             ++strike;
         else if (type == MD_SPAN_A) {
             const MD_SPAN_A_DETAIL &link = *static_cast<MD_SPAN_A_DETAIL *>(detail);
-            std::string destination = attribute_text(link.href);
+            std::string destination = attribute_text(link.href, cancellation);
             links.push_back(std::move(destination));
         } else if (type == MD_SPAN_IMG)
             append("[Image: ");
@@ -238,6 +245,7 @@ struct MarkdownParser {
     static int block_start(MD_BLOCKTYPE type, void *detail, void *context) noexcept {
         MarkdownParser &parser = *static_cast<MarkdownParser *>(context);
         try {
+            check_cancelled(parser.cancellation);
             parser.enter_block(type, detail);
             return 0;
         } catch (...) {
@@ -248,6 +256,7 @@ struct MarkdownParser {
     static int block_end(MD_BLOCKTYPE type, void *, void *context) noexcept {
         MarkdownParser &parser = *static_cast<MarkdownParser *>(context);
         try {
+            check_cancelled(parser.cancellation);
             parser.leave_block(type);
             return 0;
         } catch (...) {
@@ -258,6 +267,7 @@ struct MarkdownParser {
     static int span_start(MD_SPANTYPE type, void *detail, void *context) noexcept {
         MarkdownParser &parser = *static_cast<MarkdownParser *>(context);
         try {
+            check_cancelled(parser.cancellation);
             parser.enter_span(type, detail);
             return 0;
         } catch (...) {
@@ -268,6 +278,7 @@ struct MarkdownParser {
     static int span_end(MD_SPANTYPE type, void *, void *context) noexcept {
         MarkdownParser &parser = *static_cast<MarkdownParser *>(context);
         try {
+            check_cancelled(parser.cancellation);
             parser.leave_span(type);
             return 0;
         } catch (...) {
@@ -278,6 +289,7 @@ struct MarkdownParser {
     static int text(MD_TEXTTYPE type, const MD_CHAR *data, MD_SIZE size, void *context) noexcept {
         MarkdownParser &parser = *static_cast<MarkdownParser *>(context);
         try {
+            check_cancelled(parser.cancellation);
             if (type == MD_TEXT_SOFTBR)
                 parser.append(" ");
             else if (type == MD_TEXT_BR)
@@ -297,13 +309,16 @@ struct MarkdownParser {
     }
 };
 } // namespace
-std::vector<MarkdownBlock> parse_markdown(std::string_view source) {
+std::vector<MarkdownBlock> parse_markdown(std::string_view source, std::stop_token cancellation) {
+    check_cancelled(cancellation);
     if (source.size() >= editable_limit)
         throw std::runtime_error("Markdown rendering requires an editable-size document.");
     const gui_forms::Utf8ValidationResult valid = gui_forms::validate_utf8(source);
+    check_cancelled(cancellation);
     if (!valid.valid())
         throw std::runtime_error("Markdown rendering requires valid UTF-8 source.");
     MarkdownParser state{};
+    state.cancellation = cancellation;
     MD_PARSER parser{};
     parser.flags = MD_FLAG_TABLES | MD_FLAG_TASKLISTS | MD_FLAG_STRIKETHROUGH | MD_FLAG_NOHTML;
     parser.enter_block = MarkdownParser::block_start;
@@ -313,6 +328,7 @@ std::vector<MarkdownBlock> parse_markdown(std::string_view source) {
     parser.text = MarkdownParser::text;
     const int result =
         md_parse(source.data(), static_cast<MD_SIZE>(source.size()), &parser, &state);
+    check_cancelled(cancellation);
     if (state.failure)
         std::rethrow_exception(state.failure);
     if (result)

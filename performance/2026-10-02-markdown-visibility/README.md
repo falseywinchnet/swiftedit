@@ -60,3 +60,41 @@ that the resulting viewport contains between 1 and 2000 stress words rather than
 a layout error or the entire document. The five-second readiness limit is not a
 latency threshold. The native executable compiles; measured native results remain
 pending. Initial parse/layout is still synchronous and not yet interruptible.
+
+Native run 37096824234 at decb372 passed all three platforms and packaging.
+Exact first-paint diagnostics are retained in native-*.txt. Single observations:
+
+| Platform | First paint observed ms | Presented duration ms | Visible stress words |
+|---|---:|---:|---:|
+| Windows x64 | 21.6673 | 21.0547 | 396 |
+| Linux x64 | 87.0944 | 86.827551 | 408 |
+| macOS arm64 | 70.7535 | 60.649167 | 324 |
+
+These include layout and native presentation work under uncontrolled CI host
+conditions. The observation timer adds delivery latency. Different native font
+metrics/window sizes affect visible word counts. No before/after native speed
+ratio is claimed. These durations leave initial-layout responsiveness unfinished.
+
+## Cancellable parsing worker foundation
+
+`parse_markdown` now accepts a stop token and throws `MarkdownCancelled` without
+publishing a partial model. Checks bracket validation, run at each MD4C callback,
+run during attribute decoding, and precede final publication. Exceptions stay
+inside callback boundaries until MD4C returns. Validation, library work between
+callbacks, allocations and cleanup remain noninterruptible within those calls.
+
+`MarkdownPreparation` owns one worker, one replaceable source request and one
+completed model. It owns source bytes by value, publishes only while its request
+token remains current under the publication mutex, transfers failures through
+an exception pointer, and sleeps when idle. Replacement/cancellation clears old
+results. Shutdown requests stop and joins. It never retains a UI callback, painter
+or native window handle. Caller operations are serialized on the owning executor.
+The active source/model may coexist with one pending source and a completed model;
+source copying and cancelled-model cleanup are not hard-latency bounded.
+
+All 29 local suites passed in 19.97 seconds, including owned source lifetime,
+32 rapid cancellation/replacement cycles, invalid UTF-8 error/recovery, empty
+completion, one-time adoption and active-work destruction. Precancellation tests
+cover empty, valid and invalid UTF-8 sources. These do not measure mid-library-call
+cancellation latency. The spelling audit passes 148 files. The worker is not yet
+connected to MarkdownView; that integration and native validation remain next.

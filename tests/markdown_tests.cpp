@@ -8,6 +8,18 @@ void check(bool condition, const char *message) {
 }
 int main() {
     try {
+        std::stop_source cancelled{};
+        cancelled.request_stop();
+        for (const std::string sample : {std::string{}, std::string("# Preserved\r\n"), std::string("\xff")}) {
+            std::vector<swiftedit::MarkdownBlock> output{};
+            bool stopped = false;
+            try {
+                output = swiftedit::parse_markdown(sample, cancelled.get_token());
+            } catch (const swiftedit::MarkdownCancelled &) {
+                stopped = true;
+            }
+            check(stopped && output.empty(), "Cancellation is typed and publishes no presentation");
+        }
         const std::string source =
             "# Heading\n\nA **bold** and *soft* [link](https://example.com).\n\n"
             "- [x] Done\n- [ ] Later\n\n> Quoted\n\n"
