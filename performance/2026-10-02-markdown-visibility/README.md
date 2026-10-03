@@ -270,3 +270,21 @@ unchanged so its 21-sample results still describe the same cache-friendly source
 Both native cases have a 15-second timeout; passing that timeout is not an
 interactive latency acceptance threshold. This added executable path compiles
 locally and passes the spelling audit; native execution remains pending.
+
+## Repeated-word native results
+
+Run 37100001524 at d46151b passed native tests and packaging on all platforms.
+The repeated-native-*.txt files retain every sample, aggregate percentiles,
+settled idle and close observations. These precede the distinct-word fixture.
+
+| Platform | Completion p50 / p95 / max ms | Layout p50 / p95 / max ms | Worst presentation per sample p50 / p95 / max ms |
+|---|---|---|---|
+| Windows | 23.78 / 36.39 / 36.65 | 2.65 / 2.89 / 3.00 | 10.13 / 10.41 / 10.45 |
+| Linux | 62.42 / 64.41 / 65.26 | 1.62 / 2.26 / 2.42 | 43.17 / 44.25 / 44.56 |
+| macOS | 66.76 / 162.22 / 182.78 | 3.77 / 12.70 / 19.62 | 35.64 / 82.42 / 150.11 |
+
+The Mac tail is materially wider than its median. Host scheduling and CI
+contention are not controlled, so this is an observed result requiring further
+investigation, not proof of a specific provider defect. No full responsiveness
+acceptance follows from this run. Closing with work pending took 22.26 ms on
+Windows, 20.60 ms on Linux and 19.11 ms on macOS.
