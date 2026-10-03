@@ -626,3 +626,24 @@ Run 36853053157: Windows 17/17, macOS ARM64 16/16, Linux 16/16 including owned
 native save/dialog/shutdown. Packaged Mac startup, loader paths, ad-hoc signature,
 archive/executable hashes and published asset digest verified. Full evidence and
 scope limits: DOGFOOD_2026-10-01.md. Suite times do not establish UI latency.
+# Independent release download verification
+
+After all nine release assets are downloaded into one directory, run:
+
+```text
+python tools/Verify-Release-Downloads.py --downloads <directory> --revision <full-source-SHA> --provider <full-SDK-provider-SHA>
+```
+
+The tool reads archives without extracting or executing them. It requires all
+three platform archives and their sidecars/manifests, exact source and provider
+identity, and the GUI, terminal and CLI executables. It verifies every
+manifest-listed Windows/Linux file and the three executable hashes recorded by
+the macOS manifest. Unlisted bundle files are not independently hash-certified
+by this check. A successful all-platform check writes independent-verification.json;
+failure does not replace an existing receipt. Always use the process exit status
+and confirm the receipt revision, rather than treating an old receipt as success.
+
+The tool was checked against downloaded v0.3.5 archives (44 Windows files,
+98 Linux files and 3 macOS executables). A deliberately wrong provider revision
+was rejected and left the successful receipt unchanged. It does not replace
+native startup, visual, signing, or physical-device tests.
