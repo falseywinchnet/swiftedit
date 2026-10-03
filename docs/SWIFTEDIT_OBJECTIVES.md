@@ -74,6 +74,23 @@ precedence. The previous DECISIONS.md is historical implementation evidence.
 
 ## Next development order
 
+Current checkpoint, 2026-10-03: the entries below retain historical states.
+GUI Find/Replace already advances in cancellable steps and rejects changed
+query/selection state (editor tests cover both). CSV evaluation now runs on an
+owned cancellable worker; both Convert to Value commands use its current exact
+result. Markdown parsing/display preparation also runs on an owned worker,
+with indexed visible drawing and shared word metrics/URLs. Native rendering,
+settled-idle and pending-work close checks pass on all three platforms; these
+do not establish the full physical dogfood or responsiveness audit.
+
+v0.3.5 is published and independently verified. v0.3.6 is tagged at
+8b7382392d6e32b9cf5fe9fa321e25a1a9b24914; release run 37099319083 remains in
+progress at this checkpoint. Tagging is not publication. The private GUI.Forms
+prepared-window input proof is checkpointed by its owner as 6ffc81c in draft
+PR #14, not a public controller or SDK update. Full GUI Session/encoding
+migration, paged mapped editing, multiselection and native print/Markdown preview
+remain primary implementation work. SwiftEdit continues to use frozen aaca5d0.
+
 2026-10-01 resumed checkpoint: the separate Word Count tool is implemented with
 an explicit whitespace-run policy, shared by GUI and CLI. It does not mutate
 content, selection, revision or history. Language-specific segmentation remains
