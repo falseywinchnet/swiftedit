@@ -74,9 +74,14 @@ private:
         std::weak_ptr<MarkdownView> owner{};
         void operator()(const double &) const;
     };
+    struct PreparationTick {
+        std::weak_ptr<MarkdownView> owner{};
+        void operator()(gf::FrameTime) const;
+    };
     struct LayoutWork;
     std::unique_ptr<LayoutWork> layout_work_{};
-    void layout(gf::Painter &, double width);
+    void advance_layout(gf::TextMetricsProvider &);
+    void layout(gf::TextMetricsProvider &, double width);
     void update_scroll_ranges();
     void clear_hover();
     void schedule_preparation();

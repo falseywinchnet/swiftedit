@@ -347,3 +347,14 @@ A further regression failed when metrics invalidation erased a worker parse
 failure and published an empty successful view. Keeping source readiness false
 and separate from layout readiness fixes it; editor/view tests passed 2/2 in
 2.45 seconds and style audit remained clean.
+
+The follow-up uses an owned/revocable UI timer with a weak named callback.
+Each layout callback borrows the current window metrics service only for the
+call. Pending measure/arrange invalidation yields to a paint/layout pass first.
+The token is disconnected before each callback and on completion/cancellation;
+no persistent idle timer is retained. An unfinished timer slice does not mark
+paint dirty. The headless regression verifies that property with slow metrics.
+The step ceiling is now 32768; the 8 ms clock target still applies. This avoids
+forcing a cache-friendly 10000-word paragraph through 11 presentations.
+Editor/view tests passed 2/2 in 2.65 seconds after this refinement; the spelling
+audit passed all 148 files. New native measurements remain pending.

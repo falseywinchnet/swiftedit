@@ -478,9 +478,10 @@ void verify_markdown_layout_slices() {
     const std::shared_ptr<notepad::MarkdownView> view =
         gf::make_control<notepad::MarkdownView>(gf::StableId("sliced.markdown"));
     gf::Window window(view, {640, 200});
+    window.set_text_metrics_provider(&slow);
     window.perform_layout();
     std::string source{};
-    for (std::size_t index = 0; index < 5000; ++index)
+    for (std::size_t index = 0; index < 20000; ++index)
         source += "word" + std::to_string(index) + " ";
     (*view).set_source(source);
     settle_markdown(*view);
@@ -490,6 +491,10 @@ void verify_markdown_layout_slices() {
     check(slow.drawn.find("Laying out Markdown") != std::string::npos &&
               slow.drawn.find("word0") == std::string::npos,
           "Partial layout never publishes incomplete document geometry");
+    window.reset_activity_metrics();
+    (*view).on_frame(gf::FrameClock::now());
+    check((*view).layout_pending() && window.metrics().snapshot().dirty_marks == 0,
+          "UI timer advances unfinished layout without repainting its unchanged placeholder");
     gf::KeyEvent escape{};
     escape.physical_key = gf::PhysicalKey::escape;
     (*view).on_key(escape);

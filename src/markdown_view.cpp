@@ -16,7 +16,7 @@ struct WordMetrics {
 // discards the entire work owner. No Painter is retained between slices.
 class MarkdownMeasurements final {
 public:
-    WordMetrics measure(gf::Painter &painter, const std::string &text, const gf::FontSpec font) {
+    WordMetrics measure(gf::TextMetricsProvider &painter, const std::string &text, const gf::FontSpec font) {
         if (!font_ || !(*font_ == font)) {
             values_.clear();
             retained_bytes_ = 0;
@@ -130,10 +130,18 @@ void MarkdownView::set_source(std::string_view source) {
     schedule_preparation();
     invalidate(gf::Dirty::paint);
 }
+void MarkdownView::PreparationTick::operator()(const gf::FrameTime now) const {
+    const std::shared_ptr<MarkdownView> target = owner.lock();
+    if (target)
+        (*target).on_frame(now);
+}
 void MarkdownView::schedule_preparation() {
     if ((preparation_pending_ || layout_pending()) && window() && !preparation_frame_.connected()) {
         const gf::FrameTime deadline = gf::FrameClock::now() + std::chrono::milliseconds(1);
-        preparation_frame_ = (*window()).schedule_paint(shared_from_this(), deadline);
+        const std::shared_ptr<MarkdownView> self =
+            std::static_pointer_cast<MarkdownView>(shared_from_this());
+        preparation_frame_ = (*window()).schedule_ui_timer(
+            *this, gf::minimum_ui_timer_interval, deadline, PreparationTick{self});
     }
 }
 void MarkdownView::cancel_preparation() {
@@ -148,8 +156,20 @@ void MarkdownView::cancel_preparation() {
 void MarkdownView::on_frame(gf::FrameTime) {
     preparation_frame_.disconnect();
     if (!preparation_pending_) {
-        if (layout_pending())
+        if (!layout_pending())
+            return;
+        // Read the current service only for this UI callback. Let pending
+        // measure/arrange passes revoke geometry before doing more work.
+        gf::TextMetricsProvider *provider = window() ? (*window()).text_metrics_provider() : nullptr;
+        if (provider && !gf::has_dirty(dirty(), gf::Dirty::measure | gf::Dirty::arrange)) {
+            advance_layout(*provider);
+            if (layout_pending())
+                schedule_preparation();
+            else
+                invalidate(gf::Dirty::paint);
+        } else {
             invalidate(gf::Dirty::paint);
+        }
         return;
     }
     try {
@@ -195,7 +215,7 @@ void MarkdownView::arrange(gf::Rect bounds) {
         update_scroll_ranges();
     schedule_preparation();
 }
-void MarkdownView::layout(gf::Painter &painter, double width) {
+void MarkdownView::layout(gf::TextMetricsProvider &painter, double width) {
     if (!layout_work_) {
         layout_work_ = std::make_unique<LayoutWork>();
         (*layout_work_).next.reserve(std::min<std::size_t>(source_.size() / 4 + 1, 250000));
@@ -214,7 +234,7 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
     const gf::FrameTime deadline = gf::FrameClock::now() + std::chrono::milliseconds(8);
     std::size_t steps = 0;
     for (; work.block_index < blocks_.size(); ++work.block_index) {
-        if (steps >= 2048 || gf::FrameClock::now() >= deadline)
+        if (steps >= 32768 || gf::FrameClock::now() >= deadline)
             return;
         ++steps;
         const swiftedit::MarkdownBlock &block = blocks_[work.block_index];
@@ -248,7 +268,7 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
             work.block_started = true;
         }
         for (; work.span_index < block.spans.size(); ++work.span_index) {
-            if (steps >= 2048 || gf::FrameClock::now() >= deadline)
+            if (steps >= 32768 || gf::FrameClock::now() >= deadline)
                 return;
             ++steps;
             const swiftedit::MarkdownSpan &span = block.spans[work.span_index];
@@ -268,7 +288,7 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
             const std::string &safe = span.text;
             std::size_t &offset = work.offset;
             for (; offset < safe.size();) {
-                if (steps >= 2048 || gf::FrameClock::now() >= deadline)
+                if (steps >= 32768 || gf::FrameClock::now() >= deadline)
                     return;
                 ++steps;
                 if (safe[offset] == '\n' || safe[offset] == '\r') {
@@ -389,6 +409,21 @@ void MarkdownView::update_scroll_ranges() {
     if (!horizontal_extent)
         (*horizontal_).set_value(0);
 }
+void MarkdownView::advance_layout(gf::TextMetricsProvider &provider) {
+    const gf::FrameTime layout_start = gf::FrameClock::now();
+    try {
+        layout(provider, arranged_bounds().width);
+        layout_error_.clear();
+    } catch (const std::exception &failure) {
+        layout_error_ = failure.what();
+        layout_work_.reset();
+        layout_dirty_ = false;
+    }
+    const std::chrono::nanoseconds elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        gf::FrameClock::now() - layout_start);
+    layout_duration_ += elapsed;
+    longest_layout_slice_ = std::max(longest_layout_slice_, elapsed);
+}
 void MarkdownView::on_paint(gf::Painter &painter, gf::Rect) {
     const gf::Rect bounds = arranged_bounds();
     const gf::BasicControlStyle &style = effective_theme().basic_style();
@@ -401,21 +436,8 @@ void MarkdownView::on_paint(gf::Painter &painter, gf::Rect) {
         painter.draw_text_utf8({24, 48}, message, font, style.text);
         return;
     }
-    if (layout_pending()) {
-        const gf::FrameTime layout_start = gf::FrameClock::now();
-        try {
-            layout(painter, bounds.width);
-            layout_error_.clear();
-        } catch (const std::exception &failure) {
-            layout_error_ = failure.what();
-            layout_work_.reset();
-            layout_dirty_ = false;
-        }
-        const std::chrono::nanoseconds elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            gf::FrameClock::now() - layout_start);
-        layout_duration_ += elapsed;
-        longest_layout_slice_ = std::max(longest_layout_slice_, elapsed);
-    }
+    if (layout_pending())
+        advance_layout(painter);
     if (layout_pending()) {
         schedule_preparation();
         const gf::FontSpec font{gf::FontRole::content, 14, 400, false};
