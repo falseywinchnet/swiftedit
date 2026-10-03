@@ -32,3 +32,31 @@ compile locally; native validation of this change remains pending.
 
 This evidence concerns submitted drawing work and hit correctness, not measured
 wall-clock speed, raster output, physical input latency or all Markdown behavior.
+
+Native run 37096500201 at 6b0d1a8 passed Windows, Linux and macOS tests and
+packaging. That validates the extent-index checkpoint, before the metrics-cache
+and native stress-measurement follow-up below.
+
+## Initial layout measurement reuse
+
+A follow-up regression showed that initial layout resolves the same repeated
+word and space thousands of times. Layout now owns a temporary metrics cache
+for its current font. It retains only size/ascent/descent, at most 1024 entries
+and 65536 text bytes; tokens longer than 256 bytes are measured without caching.
+Map-node overhead is separate from the text-byte budget. Any FontSpec change
+clears the cache, and no cache survives the synchronous layout call. This avoids
+reusing metrics across font styles, painters, provider changes or later rebuilds.
+
+The repeated-word measurement regression failed before the change and now
+requires fewer than ten measurements for the 10000-word fixture. A separate
+check verifies that identical italic, bold and code words each receive their
+requested font measurements. Editor/views passed in 2.11 seconds; the expanded
+view suite subsequently passed in 0.11 seconds. The spelling audit is clean.
+
+The native Markdown test retains its styled-content capture and then loads a
+10000-word stress quote. It observes the first native paint through a requested
+10 ms timer and reports public presentation counters. A counting painter checks
+that the resulting viewport contains between 1 and 2000 stress words rather than
+a layout error or the entire document. The five-second readiness limit is not a
+latency threshold. The native executable compiles; measured native results remain
+pending. Initial parse/layout is still synchronous and not yet interruptible.

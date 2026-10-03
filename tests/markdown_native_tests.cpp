@@ -8,6 +8,22 @@
 #endif
 
 namespace gf = gui_forms;
+class MarkdownProbe final : public gf::Painter {
+public:
+    std::size_t words{};
+    void save() override {}
+    void restore() override {}
+    void translate(gf::Point) override {}
+    void clip_rect(gf::Rect) override {}
+    void fill_rect(gf::Rect, gf::Color) override {}
+    void stroke_rect(gf::Rect, gf::Color, double) override {}
+    void draw_line(gf::Point, gf::Point, gf::Color, double) override {}
+    void draw_image(gf::ImageId, gf::Rect, double) override {}
+    void draw_text_utf8(gf::Point, std::string_view text, gf::FontSpec, gf::Color) override {
+        if (text == "stressword")
+            ++words;
+    }
+};
 // Synchronous Application::run owns the host. Named callbacks borrow this stack
 // owner until shutdown; no native handle or timer survives run().
 class MarkdownNative final {
@@ -23,6 +39,9 @@ public:
         void operator()() const { (*owner).tick(); }
     };
     void run() {
+        stress_source_ = "> ";
+        for (std::size_t word = 0; word < 10000; ++word)
+            stress_source_ += "stressword ";
         view_ = gf::make_control<notepad::MarkdownView>(gf::StableId("native.markdown"));
         (*view_).set_source(
             "# SwiftEdit Markdown\n\n"
@@ -50,7 +69,7 @@ public:
             std::rethrow_exception(result.callback_exception);
         if (failure_)
             std::rethrow_exception(failure_);
-        if (!result.accepted() || !passed_)
+        if (!result.accepted() || !passed_ || !stress_passed_)
             throw std::runtime_error("Native Markdown did not complete a visible paint.");
     }
 
@@ -66,6 +85,24 @@ private:
     void tick() {
         ++ticks_;
         const gf::MetricsSnapshot metrics = (*window_).metrics().snapshot();
+        if (stress_started_ != gf::FrameTime{}) {
+            const std::chrono::duration<double, std::milli> elapsed = gf::FrameClock::now() - stress_started_;
+            if (metrics.paint_passes == 0) {
+                if (elapsed.count() < 5000)
+                    return;
+                throw std::runtime_error("Native Markdown stress paint readiness timeout.");
+            }
+            MarkdownProbe probe{};
+            (*view_).on_paint(probe, (*view_).arranged_bounds());
+            if (!probe.words || probe.words > 2000)
+                throw std::runtime_error("Native Markdown stress viewport did not retain bounded text.");
+            std::cout << "Markdown stress first paint observed ms: " << elapsed.count()
+                      << "; visible words: " << probe.words << "; metrics: " << metrics.to_json() << '\n';
+            stress_passed_ = true;
+            (*timer_).stop();
+            static_cast<void>(handle_.request_close());
+            return;
+        }
         if ((*window_).occluded() || metrics.paint_passes == 0) {
             if (ticks_ < 100)
                 return;
@@ -76,6 +113,11 @@ private:
 #endif
                 passed_ = true;
                 std::cout << "Native Markdown observed paint: " << metrics.to_json() << '\n';
+                (*window_).reset_activity_metrics();
+                stress_started_ = gf::FrameClock::now();
+                (*view_).set_source(stress_source_);
+                (*timer_).set_interval(std::chrono::milliseconds(10));
+                return;
             } catch (...) {
                 failure_ = std::current_exception();
             }
@@ -90,7 +132,9 @@ private:
     gf::SubscriptionToken subscription_{};
     std::exception_ptr failure_{};
     std::size_t ticks_{};
-    bool passed_{};
+    bool passed_{}, stress_passed_{};
+    std::string stress_source_{};
+    gf::FrameTime stress_started_{};
 };
 int main() {
     try {

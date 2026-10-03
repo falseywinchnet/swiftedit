@@ -3,11 +3,44 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <map>
 #include <stdexcept>
 
 namespace notepad {
 namespace {
 constexpr double ruler_height = 28, page_margin = 24;
+struct WordMetrics {
+    gf::Size size{};
+    double ascent{}, descent{};
+};
+// One synchronous layout owns this cache. Font changes discard it; metrics
+// cannot survive a painter/provider change. Long tokens are never retained.
+class MarkdownMeasurements final {
+public:
+    explicit MarkdownMeasurements(gf::Painter &painter) : painter_(painter) {}
+    WordMetrics measure(const std::string &text, gf::FontSpec font) {
+        if (!font_ || !(*font_ == font)) {
+            values_.clear();
+            retained_bytes_ = 0;
+            font_ = font;
+        }
+        const std::map<std::string, WordMetrics>::const_iterator found = values_.find(text);
+        if (found != values_.end())
+            return (*found).second;
+        const gf::ResolvedTextLayout resolved = painter_.resolve_text_layout_utf8(text, font);
+        const WordMetrics result{resolved.logical_size, resolved.ascent, resolved.descent};
+        if (text.size() <= 256 && values_.size() < 1024 && text.size() <= 65536 - retained_bytes_) {
+            values_.emplace(text, result);
+            retained_bytes_ += text.size();
+        }
+        return result;
+    }
+private:
+    gf::Painter &painter_;
+    std::optional<gf::FontSpec> font_{};
+    std::map<std::string, WordMetrics> values_{};
+    std::size_t retained_bytes_{};
+};
 std::string inert_text(std::string_view source) {
     std::string result{};
     std::size_t begin = 0;
@@ -108,6 +141,7 @@ void MarkdownView::arrange(gf::Rect bounds) {
         update_scroll_ranges();
 }
 void MarkdownView::layout(gf::Painter &painter, double width) {
+    MarkdownMeasurements measurements(painter);
     std::vector<Run> next{};
     next.reserve(std::min<std::size_t>(source_.size() / 4 + 1, 250000));
     std::size_t retained_bytes = 0;
@@ -175,8 +209,8 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
                     throw std::runtime_error("Markdown layout exceeds display storage budget.");
                 if (next.size() >= 250000)
                     throw std::runtime_error("Markdown layout exceeds display run budget.");
-                const gf::ResolvedTextLayout metrics = painter.resolve_text_layout_utf8(word, font);
-                const gf::Size measured = metrics.logical_size;
+                const WordMetrics metrics = measurements.measure(word, font);
+                const gf::Size measured = metrics.size;
                 const double height = std::max(20.0, std::max(measured.height,
                     metrics.ascent + metrics.descent) + 4);
                 if (block.kind != swiftedit::MarkdownKind::code && x[column] > left &&

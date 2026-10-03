@@ -13,6 +13,7 @@ public:
     std::string drawn{};
     std::vector<std::string> labels{};
     std::vector<gf::Point> origins{};
+    std::vector<gf::FontSpec> measured_fonts{};
     bool tall_metrics{};
     std::size_t reference_outlines{};
     std::size_t tall_rules{};
@@ -45,6 +46,7 @@ public:
     }
     gf::Size measure_text_utf8(std::string_view text, gf::FontSpec font) override {
         ++measurements;
+        measured_fonts.push_back(font);
         if (fail_measurement)
             throw std::runtime_error("Injected measurement failure");
         const gf::Size result = gf::Painter::measure_text_utf8(text, font);
@@ -347,6 +349,8 @@ void verify_tall_markdown_visibility() {
     (*view).set_source(source);
     ObservingPainter initial{};
     (*view).on_paint(initial, {0, 0, 640, 140});
+    check(initial.measurements < 10,
+          "Repeated Markdown words share metrics within one font and layout rebuild");
     const std::shared_ptr<gf::VScrollBar> scroll =
         std::dynamic_pointer_cast<gf::VScrollBar>(window.find("markdown.vertical"));
     check(static_cast<bool>(scroll), "Tall Markdown has a scrollbar");
@@ -385,6 +389,17 @@ void verify_tall_markdown_visibility() {
     (*view).on_paint(table_middle, {0, 0, 640, 140});
     check(table_middle.texts < 200 && table_middle.tall_borders == 1 && table_middle.tall_rules == 1,
           "Tall table retains both overlapping decorations while pruning off-screen text");
+    (*view).set_source("*word* **word** `word` word");
+    ObservingPainter styles{};
+    (*view).on_paint(styles, {0, 0, 640, 140});
+    bool italic = false, bold = false, monospace = false;
+    for (const gf::FontSpec font : styles.measured_fonts) {
+        italic = italic || font.italic;
+        bold = bold || font.weight == 700;
+        monospace = monospace || font.role == gf::FontRole::monospace;
+    }
+    check(italic && bold && monospace,
+          "Identical Markdown words are measured separately when font style changes");
 }
 int main() {
     try {
