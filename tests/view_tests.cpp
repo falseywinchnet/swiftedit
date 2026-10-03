@@ -513,6 +513,24 @@ void verify_markdown_layout_slices() {
         }
     }
     check(first_word, "Restarted layout retains the first word");
+    ObservingPainter before_resize{};
+    before_resize.tall_metrics = true;
+    (*view).on_paint(before_resize, {0, 0, 400, 200});
+    (*view).arrange({0, 0, 640, 200});
+    (*view).on_paint(replacement, {0, 0, 640, 200});
+    check((*view).layout_pending(), "Resize fixture has partial geometry at the wider width");
+    (*view).arrange({0, 0, 400, 200});
+    paint_markdown(*view, replacement, {0, 0, 400, 200});
+    ObservingPainter after_resize{};
+    after_resize.tall_metrics = true;
+    (*view).on_paint(after_resize, {0, 0, 400, 200});
+    check(before_resize.labels == after_resize.labels &&
+              before_resize.origins.size() == after_resize.origins.size(),
+          "Returning to the published width discards an unfinished wider layout");
+    for (std::size_t index = 0; index < before_resize.origins.size(); ++index)
+        check(before_resize.origins[index].x == after_resize.origins[index].x &&
+                  before_resize.origins[index].y == after_resize.origins[index].y,
+              "Width reversal reproduces the original complete geometry");
     (*view).set_source(source + " old");
     settle_markdown(*view);
     (*view).on_paint(first, {0, 0, 400, 200});

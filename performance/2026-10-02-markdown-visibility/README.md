@@ -332,4 +332,5 @@ work, and replacing a partly laid-out source. All 29 local suites passed in
 22.04 seconds before the final width-reversal and run-budget guard review;
 focused verification follows those adjustments. The spelling audit found zero
 findings in 148 files. No local desktop was launched.
-`nFinal focused editor/view verification passed 2/2 in 2.84 seconds; the style audit remained clean.
+
+Final focused editor/view verification passed 2/2 in 2.84 seconds; the style audit remained clean.
