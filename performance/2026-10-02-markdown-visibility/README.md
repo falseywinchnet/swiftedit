@@ -125,3 +125,12 @@ Existing layout tests explicitly await model adoption before testing geometry.
 Native tests now await completed presentation, verify settled-idle scheduling and
 close with a replacement still pending, measuring through owner release. The
 native executables compile locally; execution of this integration is pending CI.
+
+Native run 37097550906 built all three platforms, but the Markdown probe timed
+out after its stress paint. The observer changed its own timer interval after
+resetting activity counters, contaminating the zero-request assertion. Its timer
+callback also lacked a failure boundary that closed the window. The probe now
+begins measurement on the following tick and captures exceptions before closing.
+This preserves the settled-idle assertion rather than relaxing it. The corrected
+native probe compiles locally; four focused headless suites passed in 2.12 seconds
+and the spelling audit passed across 148 files. Native revalidation is pending.

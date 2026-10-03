@@ -36,7 +36,7 @@ public:
     };
     struct Tick {
         MarkdownNative *owner{};
-        void operator()() const { (*owner).tick(); }
+        void operator()() const { (*owner).observe(); }
     };
     void run() {
         stress_source_ = "> ";
@@ -77,6 +77,15 @@ public:
     }
 
 private:
+    void observe() {
+        try {
+            tick();
+        } catch (...) {
+            failure_ = std::current_exception();
+            (*timer_).stop();
+            static_cast<void>(handle_.request_close());
+        }
+    }
     void ready(gf::Window &window, gf::ApplicationWindowHandle handle) {
         require_native_fonts(window);
         window_ = &window;
@@ -89,6 +98,13 @@ private:
         ++ticks_;
         const gf::MetricsSnapshot metrics = (*window_).metrics().snapshot();
         if (stress_passed_) {
+            if (!idle_started_) {
+                // Exclude the observer's interval change and the completing
+                // scheduler callback before measuring a settled interval.
+                (*window_).reset_activity_metrics();
+                idle_started_ = true;
+                return;
+            }
             std::cout << "Markdown settled idle: " << metrics.to_json() << '\n';
             if (metrics.scheduled_frame_requests || metrics.frame_deadlines_fired)
                 throw std::runtime_error("Completed Markdown retained calculation scheduling.");
@@ -114,7 +130,6 @@ private:
             std::cout << "Markdown stress first paint observed ms: " << elapsed.count()
                       << "; visible words: " << probe.words << "; metrics: " << metrics.to_json() << '\n';
             stress_passed_ = true;
-            (*window_).reset_activity_metrics();
             (*timer_).set_interval(std::chrono::milliseconds(200));
             return;
         }
@@ -149,7 +164,7 @@ private:
     gf::SubscriptionToken subscription_{};
     std::exception_ptr failure_{};
     std::size_t ticks_{};
-    bool passed_{}, stress_passed_{};
+    bool passed_{}, stress_passed_{}, idle_started_{};
     std::string stress_source_{};
     gf::FrameTime stress_started_{};
     gf::FrameTime close_started_{};
