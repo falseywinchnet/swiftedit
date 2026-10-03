@@ -40,7 +40,7 @@ This API is synchronous and currently accepts only encoded files and decoded
 text below the 16 MiB editable threshold. A smaller UTF-16 file can expand past
 that threshold in UTF-8; that open is refused without replacing the current
 document. Paged UTF-16 decoding, cancellable GUI opening, native mapped editing,
-encoding selection in the reviewed-save flow, and actual GUI Session adoption
+GUI wiring of encoding selection in the reviewed-save flow, and actual GUI Session adoption
 remain unfinished. The foundation does not establish those features.
 
 Regression coverage in `tests/session_tests.cpp` includes all four encodings,
@@ -55,3 +55,29 @@ Local validation: all 29 suites passed in 22.96 seconds. After adding the
 encoded-output overflow assertion, the Session suite passed again in 1.28
 seconds. The C++ spelling audit passed all 148 files. Native cross-platform
 validation of this foundation remains pending.
+
+## Reviewed Session publication
+
+SaveReview now has a Session overload. It reads the current Session source and
+stamp itself, consumes readiness before attempting publication, and uses the
+same two-stage choice/review and observed-destination race checks as the existing
+GUI Document path. Only this review class can call the private Session operation
+that accepts a freshly observed overwrite snapshot; normal Save/Save As remain
+unchanged.
+
+On success the Session adopts normalized text, requested output encoding,
+destination and save baseline together, clears undo to the new save boundary,
+and retains its independent as-opened text. Failure leaves Session state and
+history unchanged and requires a new review before retrying. Illegal bytes and
+read-only sessions cannot bypass their publication restrictions through review.
+Prepared logical text and encoded output must both remain below the 16 MiB
+editable threshold. An exact-threshold UTF-16 output regression failed before
+the encoded-size guard and passed after it.
+
+The initial encoding foundation at 491dc93 passed cross-platform core and native
+build/test/package validation (native run 37103664522). The reviewed-publication
+extension passed all 29 local suites in 23.28 seconds before the final boundary
+repair and extra read-only/expansion assertions; the five relevant suites then
+passed in 5.08 seconds. The 148-file spelling audit is clean. Cross-platform
+validation of this follow-up remains pending. No existing GUI has switched its
+model, and these changes do not complete mapped editing or paged decoding.

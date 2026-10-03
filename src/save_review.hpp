@@ -12,6 +12,7 @@ public:
     void choose(ConflictChoice);
     void review(const std::filesystem::path &, notepad::Encoding, SaveEndings);
     void publish(notepad::Document &, std::string_view source, DocumentStamp current);
+    void publish(Session &);
     const std::filesystem::path &target() const { return target_; }
     const notepad::FileSnapshot &observed() const { return observed_; }
     notepad::Encoding encoding() const { return encoding_; }
@@ -20,6 +21,8 @@ public:
     bool ready() const { return ready_; }
 
 private:
+    void authorize(DocumentStamp);
+    [[nodiscard]] std::string prepare(std::string_view) const;
     std::filesystem::path original_{}, target_{};
     DocumentStamp stamp_{};
     notepad::FileSnapshot observed_{};

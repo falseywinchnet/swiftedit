@@ -45,14 +45,15 @@ void SaveReview::review(const std::filesystem::path &target, notepad::Encoding e
     endings_ = endings;
     ready_ = true;
 }
-void SaveReview::publish(notepad::Document &document, std::string_view source,
-                         DocumentStamp current) {
+void SaveReview::authorize(const DocumentStamp current) {
     if (!ready_ || consumed_)
         throw std::runtime_error("Review the destination and confirm Save before writing.");
     ready_ = false;
     if (current.identity != stamp_.identity || current.revision != stamp_.revision)
         throw std::runtime_error(
             "The document changed during save review. Review the new version.");
+}
+std::string SaveReview::prepare(const std::string_view source) const {
     std::string prepared{};
     switch (endings_) {
     case SaveEndings::preserve:
@@ -70,7 +71,19 @@ void SaveReview::publish(notepad::Document &document, std::string_view source,
     default:
         throw std::runtime_error("Unknown line-ending choice.");
     }
+    return prepared;
+}
+void SaveReview::publish(notepad::Document &document, std::string_view source,
+                         DocumentStamp current) {
+    authorize(current);
+    const std::string prepared = prepare(source);
     document.save_encoded(target_, prepared, observed_, encoding_);
+    consumed_ = true;
+}
+void SaveReview::publish(Session &session) {
+    authorize(session.stamp());
+    std::string prepared = prepare(session.text());
+    session.save_reviewed(target_, std::move(prepared), observed_, encoding_);
     consumed_ = true;
 }
 } // namespace swiftedit

@@ -8,6 +8,7 @@ namespace swiftedit {
 class SearchPattern;
 class SessionReplacement;
 class SessionCopy;
+class SaveReview;
 constexpr std::size_t editable_limit = 16 * 1024 * 1024;
 constexpr std::size_t paste_confirmation_bytes = 500000;
 // Session-local identities are deliberately distinct from byte offsets and
@@ -125,6 +126,11 @@ public:
     [[nodiscard]] std::size_t illegal_bytes() const;
 
 private:
+    friend class SaveReview;
+    // Only the authorized review path can supply a freshly observed overwrite
+    // snapshot. All replacement state is allocated before publication.
+    void save_reviewed(const std::filesystem::path &, std::string prepared,
+                       const notepad::FileSnapshot &, notepad::Encoding);
     void editable() const;
     void change(std::string);
     void published(std::filesystem::path, std::string, notepad::FileSnapshot);

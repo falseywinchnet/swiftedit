@@ -99,7 +99,9 @@ remain primary implementation work. SwiftEdit continues to use frozen aaca5d0.
 The explicit Session decoded-open path now retains UTF-8 BOM/UTF-16 output
 encoding, preserves valid controls, and keeps encoded conflict snapshots separate
 from logical UTF-8 edit offsets. Default terminal/CLI raw opening remains
-unchanged. This is migration groundwork, not a GUI switch or paged UTF-16
+unchanged. SaveReview can now publish that Session model with stamped source,
+reviewed destination checks, encoding/ending conversion and preserved save/undo
+boundaries. These are migration foundations, not a GUI switch or paged UTF-16
 implementation; see ENCODED_SESSION.md.
 
 2026-10-01 resumed checkpoint: the separate Word Count tool is implemented with

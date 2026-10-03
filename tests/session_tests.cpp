@@ -132,7 +132,7 @@ void verify_decoded_sessions(const std::filesystem::path &dir) {
     const std::string small_utf16 = notepad::encode("A", notepad::Encoding::utf16_le);
     raw(threshold, small_utf16);
     retained.open_decoded(threshold);
-    retained.replace_ranges({{0, 1}}, std::string(swiftedit::editable_limit / 2, 'x'), retained.stamp());
+    retained.replace_ranges({{0, 1}}, std::string(swiftedit::editable_limit / 2 - 1, 'x'), retained.stamp());
     const swiftedit::DocumentStamp before_save = retained.stamp();
     bool output_refused = false;
     try { retained.save(); }
@@ -140,7 +140,7 @@ void verify_decoded_sessions(const std::filesystem::path &dir) {
     check(output_refused && notepad::read_file(threshold).bytes == small_utf16 &&
               retained.encoding() == notepad::Encoding::utf16_le && retained.dirty() &&
               retained.stamp().revision == before_save.revision && retained.undo() && retained.text() == "A",
-          "Encoded output overflow preserves disk bytes, save baseline, encoding and undo");
+          "Encoded output at the read-only threshold preserves disk bytes, baseline, encoding and undo");
 }
 int main() {
     try {

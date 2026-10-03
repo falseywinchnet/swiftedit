@@ -75,6 +75,8 @@ notepad::FileSnapshot write_session_text(const std::filesystem::path &path,
         encoded = notepad::encode(text, encoding, notepad::TextControls::preserve);
         bytes = encoded;
     }
+    if (bytes.size() >= editable_limit)
+        throw std::runtime_error("Encoded output reaches the read-only file threshold. No file was changed.");
     notepad::FileSnapshot written = notepad::write_file(path, bytes, expected);
     return written;
 }
@@ -456,6 +458,20 @@ void Session::save_text_copy(const std::filesystem::path &target) const {
     SessionTextCopy copy(*this, target);
     while (!copy.step(*this)) {}
     copy.publish(*this);
+}
+void Session::save_reviewed(const std::filesystem::path &target, std::string prepared,
+    const notepad::FileSnapshot &expected, const notepad::Encoding encoding) {
+    editable();
+    if (illegal_bytes())
+        throw std::runtime_error("Illegal UTF-8 bytes remain. Edit them or use Save Text Copy.");
+    if (prepared.size() >= editable_limit)
+        throw std::runtime_error("Reviewed text exceeds the editable budget. No file was changed.");
+    std::filesystem::path path = target;
+    std::string saved = prepared;
+    notepad::FileSnapshot written = write_session_text(path, prepared, encoding, expected);
+    text_ = std::move(prepared);
+    encoding_ = encoding;
+    published(std::move(path), std::move(saved), std::move(written));
 }
 std::string normalize_newlines(std::string_view s, std::string_view ending) {
     if (ending != "\n" && ending != "\r" && ending != "\r\n")
