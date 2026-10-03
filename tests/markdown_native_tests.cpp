@@ -157,7 +157,7 @@ private:
             last_stress_tick_ = now;
             const std::chrono::duration<double, std::milli> elapsed = now - stress_started_;
             if (metrics.paint_passes == 0 || !(*view_).presentation_ready()) {
-                if (elapsed.count() < 5000)
+                if (elapsed.count() < 15000)
                     return;
                 throw std::runtime_error("Native Markdown stress paint readiness timeout.");
             }
@@ -168,8 +168,10 @@ private:
             std::cout << "Markdown stress first paint observed ms: " << elapsed.count()
                       << "; visible words: " << probe.words << "; metrics: " << metrics.to_json() << '\n';
             const std::chrono::duration<double, std::milli> layout = (*view_).last_layout_duration();
-            std::cout << "Markdown stress synchronous layout ms: " << layout.count()
+            std::cout << "Markdown stress cumulative layout ms: " << layout.count()
                       << "; maximum observer gap ms: " << maximum_tick_gap_ms_ << '\n';
+            const std::chrono::duration<double, std::milli> slice = (*view_).longest_layout_slice();
+            std::cout << "Markdown longest layout slice ms: " << slice.count() << '\n';
             completion_samples_.push_back(elapsed.count());
             layout_samples_.push_back(layout.count());
             presentation_samples_.push_back(
@@ -181,7 +183,7 @@ private:
             }
             if (!distinct_words_) {
                 report_samples("observed completion", completion_samples_);
-                report_samples("synchronous layout", layout_samples_);
+                report_samples("cumulative layout", layout_samples_);
                 report_samples("worst presentation per sample", presentation_samples_);
                 report_samples("maximum observer gap per sample", gap_samples_);
             }

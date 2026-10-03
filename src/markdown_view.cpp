@@ -12,12 +12,11 @@ struct WordMetrics {
     gf::Size size{};
     double ascent{}, descent{};
 };
-// One synchronous layout owns this cache. Font changes discard it; metrics
-// cannot survive a painter/provider change. Long tokens are never retained.
+// One layout owns this cache. Font changes discard it; measurement invalidation
+// discards the entire work owner. No Painter is retained between slices.
 class MarkdownMeasurements final {
 public:
-    explicit MarkdownMeasurements(gf::Painter &painter) : painter_(painter) {}
-    WordMetrics measure(const std::string &text, gf::FontSpec font) {
+    WordMetrics measure(gf::Painter &painter, const std::string &text, const gf::FontSpec font) {
         if (!font_ || !(*font_ == font)) {
             values_.clear();
             retained_bytes_ = 0;
@@ -26,7 +25,7 @@ public:
         const std::map<std::string, WordMetrics>::const_iterator found = values_.find(text);
         if (found != values_.end())
             return (*found).second;
-        const gf::ResolvedTextLayout resolved = painter_.resolve_text_layout_utf8(text, font);
+        const gf::ResolvedTextLayout resolved = painter.resolve_text_layout_utf8(text, font);
         const WordMetrics result{resolved.logical_size, resolved.ascent, resolved.descent};
         if (text.size() <= 256 && values_.size() < 1024 && text.size() <= 65536 - retained_bytes_) {
             values_.emplace(text, result);
@@ -35,12 +34,22 @@ public:
         return result;
     }
 private:
-    gf::Painter &painter_;
     std::optional<gf::FontSpec> font_{};
     std::map<std::string, WordMetrics> values_{};
     std::size_t retained_bytes_{};
 };
 } // namespace
+// UI-owned partial geometry. URL borrows remain valid until this work is reset,
+// before replacement of blocks_. No Painter or host handle survives a slice.
+struct MarkdownView::LayoutWork {
+    MarkdownMeasurements measurements{};
+    std::vector<Run> next{};
+    std::size_t retained_bytes{}, block_index{}, span_index{}, offset{};
+    double y{page_margin}, maximum_x{}, width{};
+    bool block_started{};
+    std::vector<double> x{}, row_y{}, line_height{};
+};
+MarkdownView::~MarkdownView() = default;
 MarkdownView::MarkdownView(gf::StableId id) : Control(std::move(id)) { set_focusable(true); }
 bool MarkdownView::RunOrder::operator()(const Run &left, const Run &right) const {
     const bool before = left.bounds.y < right.bounds.y;
@@ -110,6 +119,7 @@ void MarkdownView::set_source(std::string_view source) {
     preparation_frame_.disconnect();
     preparation_pending_ = true;
     source_prepared_ = false;
+    layout_work_.reset();
     runs_.clear();
     run_bottoms_.clear();
     blocks_.clear();
@@ -121,7 +131,7 @@ void MarkdownView::set_source(std::string_view source) {
     invalidate(gf::Dirty::paint);
 }
 void MarkdownView::schedule_preparation() {
-    if (preparation_pending_ && window() && !preparation_frame_.connected()) {
+    if ((preparation_pending_ || layout_pending()) && window() && !preparation_frame_.connected()) {
         const gf::FrameTime deadline = gf::FrameClock::now() + std::chrono::milliseconds(1);
         preparation_frame_ = (*window()).schedule_paint(shared_from_this(), deadline);
     }
@@ -130,12 +140,18 @@ void MarkdownView::cancel_preparation() {
     if (preparation_)
         (*preparation_).cancel();
     preparation_frame_.disconnect();
+    if (layout_dirty_)
+        source_prepared_ = false;
+    layout_work_.reset();
     preparation_pending_ = false;
 }
 void MarkdownView::on_frame(gf::FrameTime) {
     preparation_frame_.disconnect();
-    if (!preparation_pending_)
+    if (!preparation_pending_) {
+        if (layout_pending())
+            invalidate(gf::Dirty::paint);
         return;
+    }
     try {
         std::optional<swiftedit::PreparedMarkdown> completed = (*preparation_).take();
         if (!completed) {
@@ -157,6 +173,7 @@ void MarkdownView::on_frame(gf::FrameTime) {
 gf::Size MarkdownView::measure(const gf::Size available) {
     // Window provider/theme changes invalidate measurement even when width
     // stays fixed. Geometry must not retain metrics from the preceding pass.
+    layout_work_.reset();
     layout_dirty_ = true;
     const gf::Size desired = Control::measure(available);
     return desired;
@@ -170,6 +187,8 @@ void MarkdownView::arrange(gf::Rect bounds) {
                      {0, std::max(0.0, bounds.height - 18), std::max(0.0, bounds.width - 18), 18});
     (*vertical_).set_large_change(std::max(32.0, bounds.height - ruler_height - 18));
     (*horizontal_).set_large_change(std::max(32.0, bounds.width - 18));
+    if (layout_work_ && (*layout_work_).width != bounds.width)
+        layout_work_.reset();
     if (layout_width_ != bounds.width)
         layout_dirty_ = true;
     if (!layout_dirty_)
@@ -177,14 +196,30 @@ void MarkdownView::arrange(gf::Rect bounds) {
     schedule_preparation();
 }
 void MarkdownView::layout(gf::Painter &painter, double width) {
-    MarkdownMeasurements measurements(painter);
-    std::vector<Run> next{};
-    next.reserve(std::min<std::size_t>(source_.size() / 4 + 1, 250000));
-    std::size_t retained_bytes = 0;
+    if (!layout_work_) {
+        layout_work_ = std::make_unique<LayoutWork>();
+        (*layout_work_).next.reserve(std::min<std::size_t>(source_.size() / 4 + 1, 250000));
+        (*layout_work_).width = width;
+        (*layout_work_).maximum_x = width - 18;
+        layout_duration_ = std::chrono::nanoseconds::zero();
+        longest_layout_slice_ = std::chrono::nanoseconds::zero();
+    }
+    LayoutWork &work = *layout_work_;
+    std::vector<Run> &next = work.next;
+    std::size_t &retained_bytes = work.retained_bytes;
+    double &y = work.y;
+    double &maximum_x = work.maximum_x;
+    MarkdownMeasurements &measurements = work.measurements;
     constexpr std::size_t storage_limit = 32 * 1024 * 1024;
-    double y = page_margin, maximum_x = width - 18;
-    for (const swiftedit::MarkdownBlock &block : blocks_) {
-        if (next.size() >= 250000 || block.columns > 250000 - next.size())
+    const gf::FrameTime deadline = gf::FrameClock::now() + std::chrono::milliseconds(8);
+    std::size_t steps = 0;
+    for (; work.block_index < blocks_.size(); ++work.block_index) {
+        if (steps >= 2048 || gf::FrameClock::now() >= deadline)
+            return;
+        ++steps;
+        const swiftedit::MarkdownBlock &block = blocks_[work.block_index];
+        if (!work.block_started &&
+            (next.size() >= 250000 || block.columns > 250000 - next.size()))
             throw std::runtime_error("Markdown layout exceeds display run budget.");
         const double indent = static_cast<double>(std::min<std::size_t>(block.indent, 12)) * 20;
         const double start = page_margin + indent + (block.quoted ? 16 : 0);
@@ -201,11 +236,22 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
         const std::size_t columns = table ? std::max<std::size_t>(1, block.columns) : 1;
         const double column_width =
             table ? std::max(96.0, available / static_cast<double>(columns)) : available;
-        std::vector<double> x(columns, 0), row_y(columns, y);
-        std::vector<double> line_height(columns, 20);
-        for (std::size_t column = 0; column < columns; ++column)
-            x[column] = start + static_cast<double>(column) * column_width + (table ? 6 : 0);
-        for (const swiftedit::MarkdownSpan &span : block.spans) {
+        std::vector<double> &x = work.x;
+        std::vector<double> &row_y = work.row_y;
+        std::vector<double> &line_height = work.line_height;
+        if (!work.block_started) {
+            x.assign(columns, 0);
+            row_y.assign(columns, y);
+            line_height.assign(columns, 20);
+            for (std::size_t column = 0; column < columns; ++column)
+                x[column] = start + static_cast<double>(column) * column_width + (table ? 6 : 0);
+            work.block_started = true;
+        }
+        for (; work.span_index < block.spans.size(); ++work.span_index) {
+            if (steps >= 2048 || gf::FrameClock::now() >= deadline)
+                return;
+            ++steps;
+            const swiftedit::MarkdownSpan &span = block.spans[work.span_index];
             const std::size_t column = table ? std::min(span.column, columns - 1) : 0;
             const double left =
                 start + static_cast<double>(column) * column_width + (table ? 6 : 0);
@@ -220,7 +266,11 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
             if (block.kind == swiftedit::MarkdownKind::heading)
                 font.size = 30 - static_cast<double>(std::min<std::size_t>(block.level, 6)) * 2;
             const std::string &safe = span.text;
-            for (std::size_t offset = 0; offset < safe.size();) {
+            std::size_t &offset = work.offset;
+            for (; offset < safe.size();) {
+                if (steps >= 2048 || gf::FrameClock::now() >= deadline)
+                    return;
+                ++steps;
                 if (safe[offset] == '\n' || safe[offset] == '\r') {
                     x[column] = left;
                     row_y[column] += line_height[column];
@@ -243,7 +293,7 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
                 const std::size_t text_total = retained_bytes + word.size();
                 if (next.size() >= 250000)
                     throw std::runtime_error("Markdown layout exceeds display run budget.");
-                const WordMetrics metrics = measurements.measure(word, font);
+                const WordMetrics metrics = measurements.measure(painter, word, font);
                 const gf::Size measured = metrics.size;
                 const double height = std::max(20.0, std::max(measured.height,
                     metrics.ascent + metrics.descent) + 4);
@@ -270,6 +320,7 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
                 maximum_x = std::max(maximum_x, x[column] + page_margin);
                 offset = end;
             }
+            work.offset = 0;
         }
         double bottom = y + 20;
         for (std::size_t column = 0; column < columns; ++column)
@@ -296,6 +347,8 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
             next.push_back(std::move(quote));
         }
         y = bottom + (table ? 4 : 12);
+        work.block_started = false;
+        work.span_index = 0;
     }
     std::stable_sort(next.begin(), next.end(), RunOrder{});
     // Each subtree records its greatest bottom. Together with sorted starting
@@ -318,6 +371,8 @@ void MarkdownView::layout(gf::Painter &painter, double width) {
     content_width_ = maximum_x;
     layout_width_ = width;
     layout_dirty_ = false;
+    layout_work_.reset();
+    preparation_frame_.disconnect();
     update_scroll_ranges();
 }
 void MarkdownView::update_scroll_ranges() {
@@ -353,10 +408,19 @@ void MarkdownView::on_paint(gf::Painter &painter, gf::Rect) {
             layout_error_.clear();
         } catch (const std::exception &failure) {
             layout_error_ = failure.what();
+            layout_work_.reset();
             layout_dirty_ = false;
         }
-        layout_duration_ = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        const std::chrono::nanoseconds elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
             gf::FrameClock::now() - layout_start);
+        layout_duration_ += elapsed;
+        longest_layout_slice_ = std::max(longest_layout_slice_, elapsed);
+    }
+    if (layout_pending()) {
+        schedule_preparation();
+        const gf::FontSpec font{gf::FontRole::content, 14, 400, false};
+        painter.draw_text_utf8({24, 48}, "Laying out Markdown. Escape cancels.", font, style.text);
+        return;
     }
     if (!layout_error_.empty()) {
         const gf::FontSpec font{gf::FontRole::content, 14, 400, false};
@@ -410,7 +474,7 @@ void MarkdownView::clear_hover() {
 }
 void MarkdownView::on_key(gf::KeyEvent &event) {
     if (event.phase == gf::EventPhase::target && event.action == gf::KeyAction::down &&
-        event.physical_key == gf::PhysicalKey::escape && preparation_pending_) {
+        event.physical_key == gf::PhysicalKey::escape && (preparation_pending_ || layout_pending())) {
         cancel_preparation();
         invalidate(gf::Dirty::paint);
         event.handled = true;

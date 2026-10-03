@@ -11,16 +11,22 @@ class MarkdownView final : public gf::Control {
 public:
     static constexpr bool initialize_tree_after_construction = true;
     explicit MarkdownView(gf::StableId);
+    ~MarkdownView() override;
     void initialize_control_tree();
     void set_source(std::string_view);
     void cancel_preparation();
     [[nodiscard]] bool preparation_pending() const { return preparation_pending_; }
-    // Last synchronous layout attempt, including native text measurement and
-    // index construction. Excludes worker preparation and paint submission.
+    // Cumulative UI layout work across slices, including index construction.
+    // Excludes waiting between frames, worker preparation and paint submission.
     [[nodiscard]] std::chrono::nanoseconds last_layout_duration() const { return layout_duration_; }
+    [[nodiscard]] std::chrono::nanoseconds longest_layout_slice() const { return longest_layout_slice_; }
     [[nodiscard]] bool presentation_ready() const {
         const bool ready = !preparation_pending_ && source_prepared_ && !layout_dirty_ && layout_error_.empty();
         return ready;
+    }
+    [[nodiscard]] bool layout_pending() const {
+        const bool pending = source_prepared_ && layout_dirty_;
+        return pending;
     }
     void on_frame(gf::FrameTime) override;
     gf::Size measure(gf::Size) override;
@@ -68,6 +74,8 @@ private:
         std::weak_ptr<MarkdownView> owner{};
         void operator()(const double &) const;
     };
+    struct LayoutWork;
+    std::unique_ptr<LayoutWork> layout_work_{};
     void layout(gf::Painter &, double width);
     void update_scroll_ranges();
     void clear_hover();
@@ -86,7 +94,7 @@ private:
     std::unique_ptr<gf::ToolTip> tooltip_{};
     double layout_width_{}, content_height_{}, content_width_{};
     double ruler_baseline_{};
-    std::chrono::nanoseconds layout_duration_{};
+    std::chrono::nanoseconds layout_duration_{}, longest_layout_slice_{};
     bool layout_dirty_{true};
     std::string hovered_url_{};
     std::string layout_error_{};

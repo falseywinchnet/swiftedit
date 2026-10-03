@@ -305,3 +305,31 @@ requested control measurement pass. The test failed before the repair and passes
 after it, also checking that subsequent stable paints reuse the rebuilt geometry.
 Editor and view tests passed 2/2 in 3.05 seconds; the 148-file spelling audit
 passed. This repair does not address the distinct-word stall.
+
+## Resumable UI layout checkpoint
+
+The UI now retains private partial geometry and advances native measurement in
+slices targeting 8 ms or 2048 traversal steps, whichever comes first. The clock
+is checked between tokens/spans/blocks. Font metrics remain cached within one
+layout; no Painter or native handle is retained between callbacks. Complete
+geometry is published atomically. Source replacement, width changes and control
+measurement invalidation discard partial work. Escape and hiding cancel it;
+reopening cancelled source starts again. Scheduling exists only while pending.
+
+The 8 ms target is not a hard deadline: a single native measurement, allocation,
+block-column initialization/finalization, final sort/index construction, and
+retirement can exceed it. The native harness now logs cumulative work and the
+longest individual layout slice separately from completion and observer gaps.
+Completion can take longer because frames and input run between slices. Its
+readiness timeout is now 15 seconds; the distinct test timeout is 30 seconds and
+the 21-sample test timeout is 60 seconds. These are test-hang guards, not latency
+acceptance thresholds. Native results for this change remain pending.
+
+Headless regressions cover yielding with deliberately slow metrics, yielding
+with a fast large source, no partial text publication, Escape, idle after
+cancellation, restarting the same source, metrics/width invalidation during
+work, and replacing a partly laid-out source. All 29 local suites passed in
+22.04 seconds before the final width-reversal and run-budget guard review;
+focused verification follows those adjustments. The spelling audit found zero
+findings in 148 files. No local desktop was launched.
+`nFinal focused editor/view verification passed 2/2 in 2.84 seconds; the style audit remained clean.

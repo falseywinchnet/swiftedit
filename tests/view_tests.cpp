@@ -14,7 +14,7 @@ public:
     std::vector<std::string> labels{};
     std::vector<gf::Point> origins{};
     std::vector<gf::FontSpec> measured_fonts{};
-    bool tall_metrics{};
+    bool tall_metrics{}, slow_metrics{};
     std::size_t reference_outlines{};
     std::size_t tall_rules{};
     std::size_t tall_borders{};
@@ -45,6 +45,8 @@ public:
         origins.push_back(origin);
     }
     gf::Size measure_text_utf8(std::string_view text, gf::FontSpec font) override {
+        if (slow_metrics)
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
         ++measurements;
         measured_fonts.push_back(font);
         if (fail_measurement)
@@ -77,7 +79,11 @@ void settle_markdown(notepad::MarkdownView &view) {
 }
 void paint_markdown(notepad::MarkdownView &view, gf::Painter &painter, gf::Rect bounds) {
     settle_markdown(view);
-    view.on_paint(painter, bounds);
+    const gf::FrameTime deadline = gf::FrameClock::now() + std::chrono::seconds(5);
+    do {
+        view.on_paint(painter, bounds);
+        check(gf::FrameClock::now() < deadline, "Markdown layout readiness timeout");
+    } while (view.layout_pending());
 }
 void verify_text_baselines() {
     ObservingPainter painter{};
@@ -459,6 +465,65 @@ void verify_tall_markdown_visibility() {
     check(italic && bold && monospace,
           "Identical Markdown words are measured separately when font style changes");
 }
+void verify_markdown_layout_slices() {
+    ObservingPainter slow{};
+    slow.slow_metrics = true;
+    const std::shared_ptr<notepad::MarkdownView> view =
+        gf::make_control<notepad::MarkdownView>(gf::StableId("sliced.markdown"));
+    gf::Window window(view, {640, 200});
+    window.perform_layout();
+    std::string source{};
+    for (std::size_t index = 0; index < 5000; ++index)
+        source += "word" + std::to_string(index) + " ";
+    (*view).set_source(source);
+    settle_markdown(*view);
+    (*view).on_paint(slow, {0, 0, 640, 200});
+    check((*view).layout_pending() && !(*view).presentation_ready() && slow.measurements < 10,
+          "Slow native measurements yield before exhausting the word quota");
+    check(slow.drawn.find("Laying out Markdown") != std::string::npos &&
+              slow.drawn.find("word0") == std::string::npos,
+          "Partial layout never publishes incomplete document geometry");
+    gf::KeyEvent escape{};
+    escape.physical_key = gf::PhysicalKey::escape;
+    (*view).on_key(escape);
+    check(escape.handled && !(*view).layout_pending(), "Escape revokes partial layout");
+    window.reset_activity_metrics();
+    (*view).on_frame(gf::FrameClock::now());
+    check(window.metrics().snapshot().scheduled_frame_requests == 0,
+          "Cancelled layout does not restart its scheduler");
+    (*view).set_source(source);
+    settle_markdown(*view);
+    ObservingPainter first{};
+    (*view).on_paint(first, {0, 0, 640, 200});
+    check((*view).layout_pending(), "A large fast layout also yields at its work quota");
+    ObservingPainter replacement{};
+    replacement.tall_metrics = true;
+    window.set_text_metrics_provider(&replacement);
+    window.perform_layout();
+    (*view).arrange({0, 0, 400, 200});
+    paint_markdown(*view, replacement, {0, 0, 400, 200});
+    check((*view).presentation_ready() && !replacement.origins.empty(),
+          "Provider and width changes restart unfinished layout successfully");
+    bool first_word = false;
+    for (std::size_t index = 0; index < replacement.labels.size(); ++index) {
+        if (replacement.labels[index] == "word0") {
+            first_word = true;
+            check(replacement.origins[index].y == 44,
+                  "Restarted geometry uses the new metrics even for its first word");
+        }
+    }
+    check(first_word, "Restarted layout retains the first word");
+    (*view).set_source(source + " old");
+    settle_markdown(*view);
+    (*view).on_paint(first, {0, 0, 400, 200});
+    check((*view).layout_pending(), "Source replacement fixture has unfinished layout");
+    (*view).set_source("Current");
+    ObservingPainter current{};
+    paint_markdown(*view, current, {0, 0, 400, 200});
+    check(current.drawn.find("Current") != std::string::npos &&
+              current.drawn.find("word0") == std::string::npos,
+          "Source replacement discards all partial runs and borrowed links");
+}
 void verify_markdown_metric_invalidation() {
     ObservingPainter original{};
     ObservingPainter replacement{};
@@ -485,6 +550,7 @@ void verify_markdown_metric_invalidation() {
 }
 int main() {
     try {
+        verify_markdown_layout_slices();
         verify_markdown_metric_invalidation();
         verify_csv_page_navigation();
         verify_text_baselines();
