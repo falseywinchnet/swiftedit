@@ -54,7 +54,7 @@ CLI/terminal suites exercise unchanged byte-faithful operation.
 Local validation: all 29 suites passed in 22.96 seconds. After adding the
 encoded-output overflow assertion, the Session suite passed again in 1.28
 seconds. The C++ spelling audit passed all 148 files. Native cross-platform
-validation of this foundation remains pending.
+validation subsequently passed at 491dc93 (run 37103664522).
 
 ## Reviewed Session publication
 
@@ -79,5 +79,23 @@ build/test/package validation (native run 37103664522). The reviewed-publication
 extension passed all 29 local suites in 23.28 seconds before the final boundary
 repair and extra read-only/expansion assertions; the five relevant suites then
 passed in 5.08 seconds. The 148-file spelling audit is clean. Cross-platform
-validation of this follow-up remains pending. No existing GUI has switched its
+core run 37104088781 and native build/test/package run 37104088785 subsequently
+passed at 6872916 on Windows, Linux and macOS. No existing GUI has switched its
 model, and these changes do not complete mapped editing or paged decoding.
+
+## Decoded projection integration
+
+The document-projection suite now exercises all four codecs through decoded
+Session opening, a nonzero-offset DocumentProjection page, and the installed
+public DocumentViewState. It verifies absolute logical UTF-8 mapping for an
+inert NUL label after a multibyte character, rejects label-interior positions,
+and checks the inverse mapping. Copy returns the real NUL; a mapped replacement
+changes that source character only. Rebinding the view to the changed Session
+revision revokes the old page positions. Undo followed by save reproduces the
+original encoded bytes, including BOM and byte order.
+
+Local projection integration passed in 0.24 seconds, with zero spelling audit
+findings across 148 files. This checks existing model contracts, not native
+selection gestures or a new edit controller. D1 mapping establishes scalar and
+token boundaries; a future controller must additionally enforce complete
+grapheme boundaries and rebind the view whenever Session state changes.

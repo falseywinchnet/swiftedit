@@ -28,6 +28,64 @@ void write(const std::filesystem::path &path, std::string_view bytes) {
     file.close();
     check(static_cast<bool>(file), "Fixture write failed");
 }
+void verify_decoded_projection(const std::filesystem::path &directory) {
+    const std::string prefix = "head\r\n";
+    const std::string suffix = std::string("\xc3\xa9\0", 3) + "e\xcc\x81\xf0\x9f\x98\x80\r\n";
+    const std::string source = prefix + suffix;
+    const notepad::Encoding encodings[] = {notepad::Encoding::utf8, notepad::Encoding::utf8_bom,
+        notepad::Encoding::utf16_le, notepad::Encoding::utf16_be};
+    const std::filesystem::path path = directory / "decoded.txt";
+    for (const notepad::Encoding encoding : encodings) {
+        write(path, notepad::encode(source, encoding, notepad::TextControls::preserve));
+        se::Session session{};
+        session.open_decoded(path);
+        gf::DocumentViewState view{};
+        const gf::DocumentPageRequest initial = request(session, prefix.size(), session.size());
+        check(view.bind(initial.revision, gf::SourceByteOffset(session.size())) == gf::DocumentViewStatus::success,
+              "Decoded view binds logical UTF-8 size");
+        const gf::DocumentRequestResult issued = view.request_page(initial.viewport, initial.permitted);
+        check(issued.request.has_value(), "Decoded page request issued");
+        const gf::DocumentPageRequest token = *issued.request;
+        se::DocumentProjection producer(session, token);
+        finish(producer, session);
+        gf::DocumentPage page{};
+        check(producer.publish(session, page), "Decoded page prepared");
+        check(page.display_utf8 == "\xc3\xa9[U+0000]e\xcc\x81\xf0\x9f\x98\x80\r\n",
+              "Decoded controls project without BOM or encoded-file offsets");
+        check(view.publish(std::move(page)) == gf::DocumentViewStatus::success, "Decoded page adopted");
+        const gf::SourceMappingResult begin = view.source_position(token, gf::DisplayByteOffset(2));
+        const gf::SourceMappingResult end = view.source_position(token, gf::DisplayByteOffset(10));
+        check(begin.position.has_value() && end.position.has_value() &&
+                  (*begin.position).value == 8 && (*end.position).value == 9,
+              "Generated NUL label endpoints map to absolute logical source bytes");
+        const gf::SourceMappingResult interior = view.source_position(token, gf::DisplayByteOffset(3));
+        check(!interior.position.has_value(), "Generated label interior cannot become source caret");
+        const gf::DisplayMappingResult inverse = view.display_position(token, gf::SourceByteOffset(9));
+        check(inverse.position.has_value() && (*inverse.position).value == 10,
+              "Decoded source position round trips through public view mapping");
+        const se::DocumentStamp observed = session.stamp();
+        const se::SourceRange selected{static_cast<std::size_t>((*begin.position).value),
+                                     static_cast<std::size_t>((*end.position).value - (*begin.position).value)};
+        const se::SourceClipboard copied = session.copy_range(selected, observed);
+        check(copied.bytes() == std::string_view("\0", 1), "Mapped copy returns source NUL, never its label");
+        session.replace_ranges({selected}, "X", observed);
+        std::string expected = source;
+        expected.replace(8, 1, "X");
+        check(session.text() == expected && session.encoding() == encoding,
+              "Mapped edit replaces only decoded source control and retains codec");
+        const se::DocumentStamp changed = session.stamp();
+        check(view.bind({changed.identity.value, changed.revision.value}, gf::SourceByteOffset(session.size())) ==
+                  gf::DocumentViewStatus::success, "Changed Session revision rebinds view");
+        check(!view.source_position(token, gf::DisplayByteOffset(2)).position.has_value(),
+              "Rebound view refuses old projected position");
+        check(session.undo() && session.text() == source, "Mapped replacement is one undoable edit");
+        session.save();
+        std::ifstream saved(path, std::ios::binary);
+        const std::string bytes((std::istreambuf_iterator<char>(saved)), std::istreambuf_iterator<char>());
+        check(bytes == notepad::encode(source, encoding, notepad::TextControls::preserve),
+              "Projection/edit/undo/save preserves original encoded bytes");
+    }
+}
 int main() {
     try {
         const std::filesystem::path directory = std::filesystem::temp_directory_path() /
@@ -143,6 +201,7 @@ int main() {
               "Read-only Session supplies exact bounded document pages");
         se::DocumentProjection too_large(session, request(session, 0, 65537));
         check(too_large.state() == se::ProjectionState::budget_exceeded, "Projection enforces installed source budget");
+        verify_decoded_projection(directory);
         std::cout << "Session document projection tests passed\n";
         return 0;
     } catch (const std::exception &failure) {
