@@ -4,6 +4,22 @@
 
 namespace swiftedit {
 namespace gf = gui_forms;
+namespace {
+// DisplayPage units are ordered, contiguous source/display coverage. Identity
+// spans may contain many graphemes; source selection still validates grapheme
+// boundaries separately. Each generated label must retain its own atomic span.
+std::size_t mapping_count(const std::vector<DisplayUnit> &units) {
+    std::size_t count = 0;
+    bool identity = false;
+    for (const DisplayUnit &unit : units) {
+        const bool text = unit.kind == DisplayKind::text;
+        if (!text || !identity)
+            ++count;
+        identity = text;
+    }
+    return count;
+}
+}
 DocumentProjection::DocumentProjection(const Session &session, gf::DocumentPageRequest request)
     : request_(request), stamp_(session.stamp()), size_(session.size()) {
     if (request.revision.document != stamp_.identity.value || request.revision.revision != stamp_.revision.value) {
@@ -87,8 +103,9 @@ ProjectionState DocumentProjection::step(const Session &session) {
         return state_;
     }
     const DisplayPage display(source_);
+    const std::size_t mappings = mapping_count(display.units());
     if (display.text().size() > gf::DocumentViewLimits::display_capacity ||
-        display.units().size() > gf::DocumentViewLimits::mapping_capacity) {
+        mappings > gf::DocumentViewLimits::mapping_capacity) {
         cancel();
         state_ = ProjectionState::budget_exceeded;
         return state_;
@@ -97,7 +114,7 @@ ProjectionState DocumentProjection::step(const Session &session) {
     next.request = request_;
     next.covered = request_.permitted;
     next.display_utf8 = display.text();
-    next.mapping.reserve(display.units().size());
+    next.mapping.reserve(mappings);
     for (const DisplayUnit &unit : display.units()) {
         gf::DocumentMapSpan map{};
         map.source = {gf::SourceByteOffset(begin + unit.source.offset),
@@ -105,7 +122,13 @@ ProjectionState DocumentProjection::step(const Session &session) {
         map.begin = gf::DisplayByteOffset(static_cast<std::uint32_t>(unit.display.offset));
         map.end = gf::DisplayByteOffset(static_cast<std::uint32_t>(unit.display.offset + unit.display.length));
         map.kind = unit.kind == DisplayKind::text ? gf::DocumentMapKind::identity_utf8 : gf::DocumentMapKind::atomic_token;
-        next.mapping.push_back(map);
+        if (map.kind == gf::DocumentMapKind::identity_utf8 && !next.mapping.empty() &&
+            next.mapping.back().kind == gf::DocumentMapKind::identity_utf8) {
+            gf::DocumentMapSpan &previous = next.mapping.back();
+            previous.source.end = map.source.end;
+            previous.end = map.end;
+        } else
+            next.mapping.push_back(map);
     }
     prepared_.swap(next);
     std::string empty_source{};

@@ -6,6 +6,29 @@
 
 namespace se = swiftedit;
 namespace gf = gui_forms;
+bool mapping_matches(const gf::DocumentPage &page, const se::DisplayPage &expected) {
+    std::size_t index = 0;
+    for (const se::DisplayUnit &unit : expected.units()) {
+        while (index < page.mapping.size() && page.mapping[index].end.value <= unit.display.offset)
+            ++index;
+        if (index == page.mapping.size())
+            return false;
+        const gf::DocumentMapSpan &map = page.mapping[index];
+        if (map.begin.value > unit.display.offset || map.end.value < unit.display.offset + unit.display.length)
+            return false;
+        if (unit.kind == se::DisplayKind::text) {
+            if (map.kind != gf::DocumentMapKind::identity_utf8 ||
+                map.source.begin.value + unit.display.offset - map.begin.value != unit.source.offset ||
+                map.source.end.value - map.source.begin.value != map.end.value - map.begin.value)
+                return false;
+        } else if (map.kind != gf::DocumentMapKind::atomic_token ||
+            map.begin.value != unit.display.offset || map.end.value != unit.display.offset + unit.display.length ||
+            map.source.begin.value != unit.source.offset || map.source.end.value != unit.source.offset + unit.source.length)
+            return false;
+    }
+    const bool complete = expected.units().empty() ? page.mapping.empty() : index + 1 == page.mapping.size();
+    return complete;
+}
 void measure(std::ofstream &output, const std::filesystem::path &path,
              const std::string &name, const std::string &bytes) {
     {
@@ -52,7 +75,7 @@ void measure(std::ofstream &output, const std::filesystem::path &path,
         if (trial >= 5)
             output << name << ',' << trial - 5 << ',' << step << ",publish," << publication.count() << '\n';
         if (!published || page.display_utf8 != expected.text() ||
-            page.mapping.size() != expected.units().size() || session.text() != bytes || session.dirty())
+            !mapping_matches(page, expected) || session.text() != bytes || session.dirty())
             throw std::runtime_error("Projection benchmark correctness failed.");
     }
     std::sort(samples.begin(), samples.end());

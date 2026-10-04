@@ -10,6 +10,8 @@ enum class ProjectionState { pending, complete, published, context_required, sta
 // Each read step copies <=8 KiB, plus at most two two-byte boundary probes on
 // the first step; final bounded projection is a separate step.
 // This is not a layout engine or support for arbitrarily long paragraphs.
+// Adjacent unchanged text shares identity mappings; generated labels retain
+// separate atomic mappings. Mapping spans do not certify grapheme boundaries.
 class DocumentProjection final {
 public:
     DocumentProjection(const Session &, gui_forms::DocumentPageRequest);

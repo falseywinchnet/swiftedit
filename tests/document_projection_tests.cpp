@@ -130,6 +130,31 @@ void verify_decoded_projection(const std::filesystem::path &directory) {
               "Projection/edit/undo/save preserves original encoded bytes");
     }
 }
+void verify_dense_labels(const std::filesystem::path &directory) {
+    const std::filesystem::path path = directory / "dense-controls.txt";
+    const std::string source(65536, '\0');
+    write(path, source);
+    se::Session session{};
+    session.open(path);
+    gf::DocumentViewState view{};
+    const gf::DocumentPageRequest initial = request(session, 0, session.size());
+    check(view.bind(initial.revision, gf::SourceByteOffset(session.size())) == gf::DocumentViewStatus::success,
+          "Dense-label view binds");
+    const gf::DocumentRequestResult issued = view.request_page(initial.viewport, initial.permitted);
+    check(issued.request.has_value(), "Dense-label request issued");
+    se::DocumentProjection producer(session, *issued.request);
+    finish(producer, session);
+    gf::DocumentPage page{};
+    check(producer.publish(session, page) && page.mapping.size() == source.size(),
+          "Every dense control keeps its own atomic mapping at the mapping limit");
+    check(view.publish(std::move(page)) == gf::DocumentViewStatus::success,
+          "Installed provider accepts complete dense-label mapping");
+    const gf::SourceMappingResult boundary = view.source_position(*issued.request, gf::DisplayByteOffset(262144));
+    const gf::SourceMappingResult interior = view.source_position(*issued.request, gf::DisplayByteOffset(262145));
+    check(boundary.position.has_value() && (*boundary.position).value == 32768 && !interior.position.has_value(),
+          "Adjacent identical labels keep independent boundaries and refuse label interiors");
+    check(session.text() == source && !session.dirty(), "Dense-label projection preserves every source byte");
+}
 int main() {
     try {
         const std::filesystem::path directory = std::filesystem::temp_directory_path() /
@@ -160,11 +185,18 @@ int main() {
         check(producer.publish(session, page), "Complete current projection publishes");
         check(page.display_utf8 == "[U+0000][U+0000][BYTE FF]\r\ne\xcc\x81\nlast",
               "Literal label collisions, invalid bytes, controls and combining source are preserved");
-        check(page.mapping[0].kind == gf::DocumentMapKind::identity_utf8 &&
-                  page.mapping[8].kind == gf::DocumentMapKind::atomic_token,
+        check(page.mapping.size() == 4 && page.mapping[0].kind == gf::DocumentMapKind::identity_utf8 &&
+                  page.mapping[0].source.end.value == 8 &&
+                  page.mapping[1].kind == gf::DocumentMapKind::atomic_token &&
+                  page.mapping[2].kind == gf::DocumentMapKind::atomic_token,
               "Literal label source differs from generated atomic control label");
         check(view.publish(std::move(page)) == gf::DocumentViewStatus::success,
               "Installed public D1 accepts produced payload");
+        const gf::SourceMappingResult literal_position = view.source_position(*issued.request, gf::DisplayByteOffset(4));
+        check(literal_position.position.has_value() && (*literal_position.position).value == 4,
+              "Coalesced literal label keeps interior source positions");
+        const gf::SourceMappingResult generated_position = view.source_position(*issued.request, gf::DisplayByteOffset(9));
+        check(!generated_position.position.has_value(), "Generated label interior stays atomic beside identity run");
         check(session.text() == source && !session.dirty(), "Projection never mutates document bytes");
         check(!producer.publish(session, page), "Projection publication is single use");
         se::DocumentProjection split(session, request(session, 0, 11));
@@ -243,9 +275,13 @@ int main() {
         gf::DocumentPage large_page{};
         check(large.publish(session, large_page) && large_page.display_utf8 == block && !session.dirty(),
               "Read-only Session supplies exact bounded document pages");
+        check(large_page.mapping.size() == 1 && large_page.mapping.front().source.begin.value == 0 &&
+                  large_page.mapping.front().source.end.value == block.size(),
+              "Full plain-text page uses one identity mapping without dropping source coverage");
         se::DocumentProjection too_large(session, request(session, 0, 65537));
         check(too_large.state() == se::ProjectionState::budget_exceeded, "Projection enforces installed source budget");
         verify_decoded_projection(directory);
+        verify_dense_labels(directory);
         std::cout << "Session document projection tests passed\n";
         return 0;
     } catch (const std::exception &failure) {
