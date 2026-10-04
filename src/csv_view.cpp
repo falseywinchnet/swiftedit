@@ -249,6 +249,13 @@ void CsvView::advance_view() {
             calculator_ = std::make_unique<swiftedit::CsvCalculator>();
         (*calculator_).request(table_, calculations_);
         calculation_requested_ = true;
+        // Adopt new work on a later frame, even when the worker finishes now.
+        // Input must retain its cancellation boundary before conversion commits.
+        if (window()) {
+            const gf::FrameTime deadline = gf::FrameClock::now() + std::chrono::milliseconds(1);
+            calculation_frame_ = (*window()).schedule_paint(shared_from_this(), deadline);
+        }
+        return;
     }
     // Formula evaluation runs against immutable owned source on one worker.
     // Only pending work schedules completion checks; idle retains no timer.
