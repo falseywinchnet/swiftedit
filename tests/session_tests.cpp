@@ -1,6 +1,7 @@
 #include "session.hpp"
 #include "new_file_writer.hpp"
 #include "session_text_copy.hpp"
+#include "session_copy.hpp"
 #include "text_copy_stream.hpp"
 #include <array>
 #include <fstream>
@@ -106,12 +107,40 @@ void verify_decoded_sessions(const std::filesystem::path &dir) {
     const swiftedit::DocumentStamp stamp = retained.stamp();
     const std::filesystem::path threshold = dir / "decoded-threshold";
     raw(threshold, std::string(swiftedit::editable_limit, 'x'));
-    bool threshold_refused = false;
-    try { retained.open_decoded(threshold); }
-    catch (const std::exception &) { threshold_refused = true; }
-    check(threshold_refused && retained.text() == "Keep" && retained.stamp().identity == stamp.identity &&
-              retained.stamp().revision == stamp.revision,
-          "Decoded open refuses read-only source size without discarding current edits");
+    std::unique_ptr<swiftedit::DecodedPagedFile> prepared = std::make_unique<swiftedit::DecodedPagedFile>(threshold);
+    (*prepared).step();
+    check((*prepared).state() == swiftedit::DecodedFileState::preparing && retained.text() == "Keep",
+          "Partial decoded preparation leaves the current document intact");
+    bool pending_refused = false;
+    try { retained.adopt_decoded_read_only(prepared, stamp); }
+    catch (const std::exception &) { pending_refused = true; }
+    check(pending_refused && prepared && retained.text() == "Keep",
+          "Pending source cannot replace the current Session");
+    while ((*prepared).state() == swiftedit::DecodedFileState::preparing)
+        (*prepared).step();
+    retained.replace_ranges({{0, 4}}, "Changed", retained.stamp());
+    bool stale_refused = false;
+    try { retained.adopt_decoded_read_only(prepared, stamp); }
+    catch (const std::exception &) { stale_refused = true; }
+    check(stale_refused && prepared && retained.text() == "Changed",
+          "Stale decoded adoption preserves prepared source and current edits");
+    retained.adopt_decoded_read_only(prepared, retained.stamp());
+    check(!prepared && retained.read_only() && retained.size() == swiftedit::editable_limit &&
+              retained.page(swiftedit::editable_limit - 3, 3).bytes == "xxx",
+          "Decoded threshold adopts a paged read-only source");
+    retained.reset();
+    std::string encoded_threshold(swiftedit::editable_limit, '\0');
+    encoded_threshold[0] = '\xfe';
+    encoded_threshold[1] = '\xff';
+    for (std::size_t index = 3; index < encoded_threshold.size(); index += 2)
+        encoded_threshold[index] = 'x';
+    raw(threshold, encoded_threshold);
+    retained.open_decoded(threshold);
+    check(retained.read_only() && retained.size() == swiftedit::editable_limit / 2 - 1 &&
+              retained.encoding() == notepad::Encoding::utf16_be &&
+              retained.page(retained.size() - 3, 3).bytes == "xxx",
+          "Encoded-size threshold stays read-only even when UTF-16 decodes to smaller text");
+    retained.reset();
     // CJK expands from two UTF-16 bytes to three UTF-8 bytes. One ASCII scalar
     // makes the decoded result exactly the read-only threshold, while the file
     // itself remains below it. The boundary is checked before baseline copies.
@@ -123,12 +152,22 @@ void verify_decoded_sessions(const std::filesystem::path &dir) {
         expanded += '\x4e';
     }
     raw(threshold, expanded);
-    bool expansion_refused = false;
-    try { retained.open_decoded(threshold); }
-    catch (const std::exception &) { expansion_refused = true; }
-    check(expansion_refused && retained.text() == "Keep" && retained.stamp().identity == stamp.identity &&
-              retained.stamp().revision == stamp.revision && retained.undo(),
-          "Decoded size expansion refuses before changing document identity, text or undo");
+    retained.open_decoded(threshold);
+    check(retained.read_only() && retained.size() == swiftedit::editable_limit &&
+              retained.encoding() == notepad::Encoding::utf16_le &&
+              retained.page(retained.size() - 3, 3).bytes == "\xe4\xb8\x80",
+          "UTF-16 expansion at the threshold opens logical UTF-8 pages read-only");
+    bool edit_refused = false;
+    try { retained.replace_ranges({{0, 1}}, "B", retained.stamp()); }
+    catch (const std::exception &) { edit_refused = true; }
+    check(edit_refused && !retained.dirty(), "Decoded read-only source refuses editing");
+    swiftedit::SessionCopy copied(retained, retained.size() - 6, 6);
+    while (copied.state() == swiftedit::CopyState::running)
+        copied.step(retained, 1);
+    const swiftedit::SourceClipboard decoded_clipboard = copied.take();
+    check(decoded_clipboard.bytes() == "\xe4\xb8\x80\xe4\xb8\x80",
+          "Read-only copy assembles logical Unicode across single-byte page boundaries");
+    retained.reset();
     const std::string small_utf16 = notepad::encode("A", notepad::Encoding::utf16_le);
     raw(threshold, small_utf16);
     retained.open_decoded(threshold);

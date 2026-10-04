@@ -36,12 +36,65 @@ Save Text Copy remains an explicit UTF-8 copy, preserving valid source scalars
 and replacing illegal bytes as before. It does not change the source document's
 codec, path or saved baseline.
 
-This API is synchronous and currently accepts only encoded files and decoded
-text below the 16 MiB editable threshold. A smaller UTF-16 file can expand past
-that threshold in UTF-8; that open is refused without replacing the current
-document. Paged UTF-16 decoding, cancellable GUI opening, native mapped editing,
-GUI wiring of encoding selection in the reviewed-save flow, and actual GUI Session adoption
-remain unfinished. The foundation does not establish those features.
+The initial implementation accepted only encoded files and decoded text below
+the 16 MiB editable threshold. The incremental paged path described below now
+handles the read-only threshold. Cancellable GUI opening, native mapped editing,
+GUI encoding selection in the reviewed-save flow and actual GUI Session adoption
+remain unfinished.
+
+## Incremental decoded read-only source
+
+`DecodedPagedFile` owns an ordinary PagedFile handle and prepares a sparse index
+in steps of at most 65,536 encoded bytes. Checkpoints retain encoded and logical
+UTF-8 offsets at complete scalar boundaries, including UTF-16 surrogate pairs.
+The index is proportional to encoded file size (one pair of uint64 offsets per
+block, plus vector capacity); the complete decoded text is never retained.
+Allocation failure fails preparation and releases its handle and index.
+
+UTF-8, UTF-8 BOM and both BOM-marked UTF-16 byte orders use the existing strict
+decoder with control preservation. An interior BOM remains content. Incomplete
+scalars at a block edge are reread on the next step; malformed EOF and complete
+invalid sequences fail instead of publishing the valid prefix. UTF-32 and
+malformed encoded input remain refusals in this explicit decoded API. Raw open
+still preserves arbitrary bytes unchanged.
+
+Ready sources serve arbitrary logical UTF-8 byte pages through the sparse index.
+As with raw page transport, a page may split a multibyte scalar; concatenation
+preserves its exact bytes. Each page decodes bounded blocks around its cursor,
+with no whole-file scan. There is no decoded-block cache yet. Native I/O and
+per-block validation/allocation are not hard time-bounded.
+
+Callers can cancel/destroy a pending source before adoption. Session adoption
+requires a ready source, an encoded or decoded size at least 16 MiB, and the
+original observed Session identity/revision. Rejection preserves both the pending
+owner and current Session. Successful adoption moves the file/index owner,
+retains its codec, establishes a new document identity, and enforces read-only
+editing/save behavior. Copy consumes logical UTF-8 pages. Reset releases the
+handle and returns to the default raw UTF-8 codec.
+
+`Session::open_decoded(path)` remains a synchronous convenience API: large input
+or UTF-16 expansion prepares this index and adopts read-only content. Future GUI
+opening must call incremental preparation and stamp-checked adoption instead of
+running that convenience loop on the UI thread. Small editable decoded sessions
+retain their existing save/undo/snapshot behavior. No GUI model has switched in
+this change, and no raw terminal/CLI open has changed its interpretation.
+
+Tests cover all four encodings, interior BOM/controls, scalars and surrogate
+pairs crossing 64 KiB boundaries, random decoded pages, one-byte transport,
+empty files, malformed UTF-16/UTF-8 endings, cancellation after a step, stale
+adoption, source and decoded-size threshold transitions, read-only edit refusal,
+and copied Unicode spanning one-byte page reads. Cross-platform validation is
+pending for this addition.
+
+Local validation: all 30 Windows suites passed in 32.78 seconds. After adding
+explicit pending-adoption and encoded-size/decoded-smaller assertions, the
+decoded-paging and Session suites passed again in 1.76 seconds. Source review
+covered the new decoder header/implementation/tests, Session integration and
+modified tests, plus CMake registration, against the complete house style.
+Reviewed concerns include scalar-boundary arithmetic, codec forcing, staged
+publication, owner transfer, cancellation/failure retirement, executor confinement,
+bounded read/decode buffers and sparse-index growth. This does not certify
+untouched decoder/file-adapter internals or establish a native latency bound.
 
 Regression coverage in `tests/session_tests.cpp` includes all four encodings,
 exact BOM/byte-order output, mixed endings, non-BMP Unicode, controls/NUL,

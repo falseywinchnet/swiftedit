@@ -74,6 +74,17 @@ precedence. The previous DECISIONS.md is historical implementation evidence.
 
 ## Next development order
 
+2026-10-03 decoded paging checkpoint: Session now supports read-only decoded
+UTF-8/BOM and UTF-16 LE/BE sources when encoded or logical size reaches 16 MiB.
+An incremental source owner builds scalar-boundary checkpoints using <=64 KiB
+encoded reads, supports cancellation before adoption, and serves logical UTF-8
+pages without retaining the whole decoded file. Adoption checks the original
+Session stamp and preserves both owners on refusal. The synchronous convenience
+open also uses this path; GUI opening must use incremental preparation instead.
+All 30 local suites passed, followed by focused threshold/adoption checks.
+Cross-platform validation is pending. This closes the shared model's paged
+decoding gap, not GUI Session adoption, the new renderer, or the final lag audit.
+
 Current checkpoint, 2026-10-03: the entries below retain historical states.
 GUI Find/Replace already advances in cancellable steps and rejects changed
 query/selection state (editor tests cover both). CSV evaluation now runs on an

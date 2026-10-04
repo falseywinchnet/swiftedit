@@ -135,6 +135,7 @@ void Session::open(const std::filesystem::path &source) {
 void Session::reset() {
     const DocumentIdentity next_identity = allocate_identity();
     large_.reset();
+    decoded_large_.reset();
     path_.clear();
     snapshot_ = {};
     encoding_ = notepad::Encoding::utf8;
@@ -149,14 +150,35 @@ void Session::reset() {
 }
 void Session::open_decoded(const std::filesystem::path &source) {
     std::filesystem::path path = std::filesystem::absolute(source);
+    bool needs_index = false;
+    {
+        const PagedFile probe(path);
+        const Page header = probe.page(0, 4);
+        const bool utf16 = header.bytes.starts_with("\xff\xfe") || header.bytes.starts_with("\xfe\xff");
+        needs_index = probe.size() >= editable_limit || (utf16 && probe.size() > (editable_limit / 3) * 2);
+    }
+    if (needs_index) {
+        std::unique_ptr<DecodedPagedFile> prepared = std::make_unique<DecodedPagedFile>(path);
+        while ((*prepared).state() == DecodedFileState::preparing)
+            (*prepared).step();
+        if ((*prepared).encoded_size() >= editable_limit || (*prepared).size() >= editable_limit) {
+            adopt_decoded_read_only(prepared, stamp());
+            return;
+        }
+    }
     notepad::FileSnapshot snapshot = notepad::read_file(path);
     if (!snapshot.exists)
         throw std::runtime_error("File no longer exists.");
     if (snapshot.bytes.size() >= editable_limit)
-        throw std::runtime_error("Decoded open requires a file below 16 MiB; paged decoding is not available.");
+        throw std::runtime_error("File grew while opening; reopen it to prepare read-only pages.");
     notepad::Decoded decoded = notepad::decode(snapshot.bytes, notepad::TextControls::preserve);
-    if (decoded.text.size() >= editable_limit)
-        throw std::runtime_error("Decoded text exceeds the editable budget. No file was changed.");
+    if (decoded.text.size() >= editable_limit) {
+        std::unique_ptr<DecodedPagedFile> prepared = std::make_unique<DecodedPagedFile>(path);
+        while ((*prepared).state() == DecodedFileState::preparing)
+            (*prepared).step();
+        adopt_decoded_read_only(prepared, stamp());
+        return;
+    }
     // Complete all decoding and baseline allocations before replacing the
     // current session. snapshot keeps the actual encoded bytes for race checks.
     std::string saved = decoded.text;
@@ -169,12 +191,33 @@ void Session::open_decoded(const std::filesystem::path &source) {
     saved_ = std::move(saved);
     opened_ = std::move(opened);
 }
+void Session::adopt_decoded_read_only(std::unique_ptr<DecodedPagedFile> &prepared, const DocumentStamp observed) {
+    if (!(observed.identity == identity_) || !(observed.revision == revision_))
+        throw std::runtime_error("The document changed while decoded opening was pending.");
+    if (!prepared || (*prepared).state() != DecodedFileState::ready ||
+        ((*prepared).encoded_size() < editable_limit && (*prepared).size() < editable_limit))
+        throw std::runtime_error("A complete large decoded source is required.");
+    std::filesystem::path path = (*prepared).path();
+    // Recheck the retained file before publication; POSIX detects changed
+    // metadata and Windows retains its deny-write-sharing handle.
+    const Page checked = (*prepared).page((*prepared).size(), 1);
+    static_cast<void>(checked);
+    const notepad::Encoding encoding = (*prepared).encoding();
+    reset();
+    path_ = std::move(path);
+    encoding_ = encoding;
+    decoded_large_ = std::move(prepared);
+}
 void Session::editable() const {
-    if (large_)
+    if (read_only())
         throw std::runtime_error("Files at or above 16 MiB are read-only.");
 }
 Page Session::page(std::uint64_t offset, std::size_t n) const {
     budget(n);
+    if (decoded_large_) {
+        Page result = (*decoded_large_).page(offset, n);
+        return result;
+    }
     if (large_) {
         Page result = (*large_).page(offset, n);
         return result;

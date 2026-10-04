@@ -1,6 +1,7 @@
 #pragma once
 #include "document.hpp"
 #include "paged_file.hpp"
+#include "decoded_paged_file.hpp"
 #include <memory>
 #include <vector>
 
@@ -69,10 +70,16 @@ public:
     Session &operator=(const Session &) = delete;
     void open(const std::filesystem::path &);
     // Explicit compatibility path for decoded GUI documents. Uses the existing
-    // BOM-aware decoder, refuses malformed input and oversized decoded text,
-    // and preserves the detected encoding on save. The default open remains
-    // byte-faithful; offsets here describe decoded UTF-8, not encoded file bytes.
+    // BOM-aware decoder, refuses malformed input, and preserves the detected
+    // encoding on save. Encoded or logical size >=16 MiB opens paged/read-only.
+    // This convenience call is synchronous. UI callers prepare DecodedPagedFile
+    // incrementally and adopt it instead. Default open remains byte-faithful;
+    // offsets here describe decoded UTF-8, not encoded file bytes.
     void open_decoded(const std::filesystem::path &);
+    // Adopt an incrementally prepared large decoded source only if this Session
+    // still matches the observed stamp. Refusal preserves both owners. The
+    // source must be ready and encoded or logical size must be >=16 MiB.
+    void adopt_decoded_read_only(std::unique_ptr<DecodedPagedFile> &, DocumentStamp);
     void reset();
     [[nodiscard]] Page page(std::uint64_t offset = 0, std::size_t budget = 4096) const;
     [[nodiscard]] std::vector<std::size_t> find(std::string_view query,
@@ -101,11 +108,11 @@ public:
     void save_as(const std::filesystem::path &);              // new target only
     void save_text_copy(const std::filesystem::path &) const; // new target only
     [[nodiscard]] bool dirty() const {
-        const bool changed = !large_ && text_ != saved_;
+        const bool changed = !large_ && !decoded_large_ && text_ != saved_;
         return changed;
     }
     [[nodiscard]] bool read_only() const {
-        const bool large_file = static_cast<bool>(large_);
+        const bool large_file = static_cast<bool>(large_) || static_cast<bool>(decoded_large_);
         return large_file;
     }
     [[nodiscard]] DocumentRevision revision() const { return revision_; }
@@ -115,6 +122,8 @@ public:
         return result;
     }
     [[nodiscard]] std::uint64_t size() const {
+        if (decoded_large_)
+            return (*decoded_large_).size();
         const std::uint64_t bytes =
             large_ ? (*large_).size() : static_cast<std::uint64_t>(text_.size());
         return bytes;
@@ -136,6 +145,7 @@ private:
     void published(std::filesystem::path, std::string, notepad::FileSnapshot);
     std::filesystem::path path_{};
     std::unique_ptr<PagedFile> large_{};
+    std::unique_ptr<DecodedPagedFile> decoded_large_{};
     notepad::FileSnapshot snapshot_{};
     notepad::Encoding encoding_{notepad::Encoding::utf8};
     std::string text_{}, saved_{}, opened_{};
