@@ -52,9 +52,9 @@ This is not a claim that the full expanded product is finished.
 Run `tools/Build-Windows.ps1` in PowerShell. Default compiler is the existing
 MinGW-w64 installation at `C:/Users/Shadow/plan-paint/build-deps/msys64/mingw64/bin`.
 The default matching SDK pair is extracted under
-`.build/provider-sdks/aaca5d0/windows-x64/installed/`: `gui-forms-sdk` and
+`.build/provider-sdks/6f5c854/windows-x64/installed/`: `gui-forms-sdk` and
 `picker-sdk`. The reviewed archives are on the provider's
-[sdk-aaca5d0 checkpoint](https://github.com/falseywinchnet/file_manager/releases/tag/sdk-aaca5d0).
+[sdk-6f5c854 checkpoint](https://github.com/falseywinchnet/file_manager/releases/tag/sdk-6f5c854).
 Verify them with `tools/Verify-Sdk-Archive.py`; all three platform archive hashes
 are pinned in `ci/native-sdk-lock.json`. CI downloads this exact pair automatically.
 Use `-GuiSdk` and `-PickerSdk` for another extraction of the same checkpoint.

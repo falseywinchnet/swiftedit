@@ -1,19 +1,19 @@
 {
   "repository": "falseywinchnet/file_manager",
-  "release": "sdk-aaca5d0",
-  "provider_revision": "aaca5d0bbbeb5f6454185996dfa6d8f1798a32c9",
+  "release": "sdk-6f5c854",
+  "provider_revision": "6f5c854e61612fadf38c35c18d06c447c5e49e4d",
   "archives": {
     "macos-arm64": {
-      "name": "gui-forms-picker-macos-arm64-aaca5d0bbbeb5f6454185996dfa6d8f1798a32c9.zip",
-      "sha256": "5a67c9309918824cae1857bec0a9bc9eecf318c96da8f47d65051d9f672c8d9d"
+      "name": "gui-forms-picker-macos-arm64-6f5c854e61612fadf38c35c18d06c447c5e49e4d.zip",
+      "sha256": "8adadcb0fdf54461462897d8c1aa4d927522dd8ba1208d68693e0d1657378748"
     },
     "windows-x64": {
-      "name": "gui-forms-picker-windows-x64-aaca5d0bbbeb5f6454185996dfa6d8f1798a32c9.zip",
-      "sha256": "74ea97952170f0ca03af47b6eb55b3dd8330d432ed3666815b2c6fc6c5f5ae93"
+      "name": "gui-forms-picker-windows-x64-6f5c854e61612fadf38c35c18d06c447c5e49e4d.zip",
+      "sha256": "51cf451785053ce5f36bc182fb4f6c39df8690dddf3b7b92784306d04f938709"
     },
     "linux-x64": {
-      "name": "gui-forms-picker-linux-x64-aaca5d0bbbeb5f6454185996dfa6d8f1798a32c9.zip",
-      "sha256": "de85367a75ee22324db9d1d0e22ad9e66742be2492ed3862e666715936b90039"
+      "name": "gui-forms-picker-linux-x64-6f5c854e61612fadf38c35c18d06c447c5e49e4d.zip",
+      "sha256": "00d1dc5b53a6b25d9e36cd8f53edc40d32c6356236526a37f004691b12d9b625"
     }
   }
 }
