@@ -9,6 +9,7 @@ from pathlib import Path
 import subprocess
 import sys
 from typing import BinaryIO, Protocol, TextIO
+from publication_version import project_version
 
 
 class Digest(Protocol):
@@ -37,6 +38,7 @@ def main() -> None:
     parser: argparse.ArgumentParser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--platform', choices=['macos-arm64', 'windows-x64', 'linux-x64'], required=True)
     parser.add_argument('--jobs', type=int, default=2)
+    parser.add_argument('--installers', action='store_true')
     phase: argparse._MutuallyExclusiveGroup = parser.add_mutually_exclusive_group()
     phase.add_argument('--build-only', action='store_true')
     phase.add_argument('--test-package-only', action='store_true')
@@ -63,6 +65,7 @@ def main() -> None:
     prefix: str = str(gui) + ';' + str(sdk / 'picker-sdk')
     if not arguments.test_package_only:
         run(['cmake', '-S', '.', '-B', str(build), '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
+             '-DSWIFTEDIT_RELEASE_VERSION=' + project_version(),
              '-DCMAKE_PREFIX_PATH=' + prefix, '-DNOTEPAD_NATIVE_TESTS=ON',
              '-DCMAKE_TOOLCHAIN_FILE=' + str(Path('gui_forms/cmake/llvm22.cmake').resolve()),
              '-DCMAKE_C_COMPILER_LAUNCHER=ccache', '-DCMAKE_CXX_COMPILER_LAUNCHER=ccache',
@@ -180,11 +183,13 @@ def main() -> None:
         raise
     finally:
         (navigation_evidence / 'receipt.json').write_text(json.dumps(navigation_receipt, indent=2) + '\n', encoding='utf-8')
-    if arguments.platform == 'macos-arm64':
-        run([sys.executable, '-B', 'tools/Package-Mac.py', '--build', str(build), '--sdk', str(sdk)])
-    else:
-        run([sys.executable, '-B', 'tools/Package-Desktop.py', '--build', str(build),
-             '--sdk', str(sdk), '--platform', arguments.platform])
+    package: list[str] = [sys.executable, '-B', 'tools/Package-Mac.py', '--build', str(build), '--sdk', str(sdk)]
+    if arguments.platform != 'macos-arm64':
+        package = [sys.executable, '-B', 'tools/Package-Desktop.py', '--build', str(build),
+                   '--sdk', str(sdk), '--platform', arguments.platform]
+    if arguments.installers:
+        package.append('--installer')
+    run(package)
 
 
 if __name__ == '__main__':

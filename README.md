@@ -5,14 +5,17 @@ Document Picker packages. Traditional dropdown menus, owned dialogs, plain-text
 clipboard, no ribbon, browser runtime or persistent recovery files.
 
 **Downloads:** [SwiftEdit releases](https://github.com/falseywinchnet/swiftedit/releases).
-Choose a versioned cross-platform release and download the archive for your
+Choose a versioned cross-platform release and download the installer for your
 platform. These are public downloads; GitHub sign-in is not required.
 
-| Platform | Archive | Launch after extracting completely |
+| Platform | Installer | Installation |
 |---|---|---|
-| Apple silicon, macOS 26 | `SwiftEdit-macos-arm64-*.zip` | Open `SwiftEdit.app` |
-| Windows x64 | `SwiftEdit-windows-x64-*.zip` | Open `SwiftEdit/SwiftEdit.exe` |
-| Linux x64, Ubuntu 24.04-compatible runtime, X11 | `SwiftEdit-linux-x64-*.tar.gz` | Run `SwiftEdit/SwiftEdit` |
+| Apple silicon, macOS 14+ (CI tests macOS 15) | `SwiftEdit-*-macos-arm64.pkg` | Installs `SwiftEdit.app` into Applications |
+| Windows x64 | `SwiftEdit-*-windows-x64-setup.exe` | Per-user installation, Start menu shortcut and uninstall entry |
+| Linux x64, Ubuntu 24.04-compatible runtime, X11 | `SwiftEdit-*-linux-amd64.deb` | Install with `sudo apt install ./SwiftEdit-*-linux-amd64.deb`; launch from the desktop menu or `swiftedit` |
+
+Portable ZIPs and Linux tarballs remain available. Extract the entire archive
+before launching the application. Releases through v0.3.10 contain portable archives only.
 
 Mac builds are ad-hoc signed and not notarized; Windows builds are unsigned.
 Each release includes SHA-256 checksums and source/SDK manifests. The terminal
@@ -20,12 +23,16 @@ editor is included on all three platforms. Builds after v0.3.0 also include the
 command-session CLI on Mac at `SwiftEdit.app/Contents/MacOS/swiftedit-cli`;
 v0.3.0 includes the CLI on Windows and Linux only.
 
-Native CI builds and tests Windows x64, macOS ARM64 and Linux x64 on every push.
+Native CI builds and tests Windows x64, macOS ARM64 and Linux x64 on code pushes.
 It builds matching public packages from the standalone source revisions in
 `ci/dependencies.json`, importing verified provider compiler caches. After all three native jobs and packaged startup checks
-pass for a `v<version>` tag matching the CMake project version, CI publishes one
-immutable release containing all three archives. Master pushes and pull requests
-build and test without publishing releases. Historical dogfood downloads remain available.
+and installer checks pass, master pushes automatically publish one immutable
+release containing all three installers and portable archives. Following
+PlaySuite, the version is selected before building: baseline major/minor plus
+baseline patch + workflow run number. Numbers can skip; reruns keep their version.
+Pull requests and ordinary manual runs build and test without publishing.
+Manual runs can request publication from master; explicit version tags remain
+supported. Documentation-only pushes are skipped. Historical downloads remain available.
 The
 [first release evidence](docs/DOGFOOD_2026-10-01.md) records the exact checks.
 
@@ -89,7 +96,11 @@ and `-StageDirectory` remain available. Running copies are protected.
 
 CI saves compiler objects immediately after a successful build, before testing
 and packaging. Renderer output is cached separately. All three platforms must
-pass before tag-triggered release publication. The packaging tools retain their
+pass before automatic release publication. CI's `Build-Native.py --installers`
+also checks installation, installed payload hashes and GUI/CLI startup; Windows
+checks reinstall and document-preserving uninstall, and Linux checks package removal.
+Installer installation tests run only on dedicated GitHub Actions runners.
+The packaging tools retain their
 runtime-closure checks, native launch checks, checksums and source manifests.
 
 Launch `dist/SwiftEdit/SwiftEdit.exe`, optionally with one quoted Unicode path.

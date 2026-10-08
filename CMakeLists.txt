@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.25)
 project(SwiftEdit VERSION 0.3.10 LANGUAGES C CXX)
+set(SWIFTEDIT_RELEASE_VERSION "${PROJECT_VERSION}" CACHE STRING "Tested publication version")
+if(NOT SWIFTEDIT_RELEASE_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
+  message(FATAL_ERROR "SWIFTEDIT_RELEASE_VERSION must be numeric major.minor.patch")
+endif()
+set(PROJECT_VERSION "${SWIFTEDIT_RELEASE_VERSION}")
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -328,7 +333,8 @@ if(NOTEPAD_BUILD_UI)
     set(swiftedit_package_options --platform ${swiftedit_platform})
   endif()
   add_custom_target(swiftedit-package
-    COMMAND ${Python3_EXECUTABLE} -B ${swiftedit_package_tool}
+    COMMAND ${CMAKE_COMMAND} -E env "SWIFTEDIT_RELEASE_VERSION=${PROJECT_VERSION}"
+      ${Python3_EXECUTABLE} -B ${swiftedit_package_tool}
       --build "${CMAKE_BINARY_DIR}" --sdk "${SWIFTEDIT_SDK_DIR}" ${swiftedit_package_options}
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     DEPENDS swiftedit-app

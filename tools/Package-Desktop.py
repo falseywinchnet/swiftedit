@@ -11,6 +11,8 @@ import subprocess
 import tarfile
 import tempfile
 import zipfile
+from publication_version import project_version, verify_build_version
+from installers import build_and_verify
 
 
 def run(arguments: list[str], environment: dict[str, str] | None = None) -> str:
@@ -107,8 +109,12 @@ def main() -> None:
     parser.add_argument('--sdk', type=Path, required=True)
     parser.add_argument('--platform', choices=['windows-x64', 'linux-x64'], required=True)
     parser.add_argument('--headless-only', action='store_true')
+    parser.add_argument('--installer', action='store_true')
     arguments: argparse.Namespace = parser.parse_args()
+    if arguments.installer and arguments.headless_only:
+        parser.error('Installer verification requires native startup checks')
     build: Path = arguments.build.resolve()
+    verify_build_version(build)
     sdk: Path = arguments.sdk.resolve()
     windows: bool = arguments.platform == 'windows-x64'
     revision: str = run(['git', 'rev-parse', 'HEAD']).strip()
@@ -190,6 +196,7 @@ def main() -> None:
                     child.terminate()
                     child.wait(timeout=10)
     manifest: dict[str, object] = {
+        'release_version': project_version(),
         'product': 'SwiftEdit', 'platform': arguments.platform, 'source_revision': revision,
         'sdk': json.loads((sdk / 'manifest.json').read_text(encoding='utf-8')),
         'startup': startup, 'terminal_cli': 'packaged help and command-session smoke passed',
@@ -221,7 +228,10 @@ def main() -> None:
         archive = output / ('SwiftEdit-' + arguments.platform + '-' + revision[:12] + '.tar.gz')
         with tarfile.open(archive, 'w:gz') as bundle:
             bundle.add(root, arcname='SwiftEdit')
-    shutil.copy2(root / 'manifest.json', output / (arguments.platform + '-manifest.json'))
+    if arguments.installer:
+        manifest['installer'] = build_and_verify(root, output, arguments.platform)
+    (output / (arguments.platform + '-manifest.json')).write_text(
+        json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
     archive.with_name(archive.name + '.sha256').write_text(digest(archive) + '  ' + archive.name + '\n', encoding='utf-8')
     print('Packaged ' + str(archive), flush=True)
 

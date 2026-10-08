@@ -13,6 +13,8 @@ import sys
 import tempfile
 import time
 from typing import BinaryIO, Protocol
+from publication_version import project_version, verify_build_version
+from installers import build_and_verify
 
 
 class Digest(Protocol):
@@ -147,10 +149,12 @@ def main() -> None:
     parser: argparse.ArgumentParser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--build', type=Path, required=True)
     parser.add_argument('--sdk', type=Path, required=True)
+    parser.add_argument('--installer', action='store_true')
     arguments: argparse.Namespace = parser.parse_args()
     if platform.system() != 'Darwin':
         raise RuntimeError('This packager requires a native macOS runner')
     build: Path = arguments.build.resolve(strict=True)
+    verify_build_version(build)
     sdk: Path = arguments.sdk.resolve(strict=True)
     revision: str = run(['git', 'rev-parse', 'HEAD']).strip()
     status: str = run(['git', 'status', '--porcelain'])
@@ -207,6 +211,7 @@ def main() -> None:
     if 'ready\tSwiftEdit\t1' not in response.stdout or 'ok\tquit' not in response.stdout:
         raise RuntimeError('Packaged CLI smoke failed: ' + response.stdout)
     manifest: dict[str, object] = {
+        'release_version': project_version(),
         'product': 'SwiftEdit', 'source_revision': revision,
         'platform': platform.platform(), 'architecture': platform.machine(),
         'signature': 'ad-hoc; not Developer ID signed or notarized',
@@ -240,6 +245,9 @@ def main() -> None:
     run(['ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', str(app), str(archive)])
     checksum: str = sha256(archive)
     archive.with_suffix('.zip.sha256').write_text(checksum + '  ' + archive.name + '\n', encoding='utf-8')
+    if arguments.installer:
+        manifest['installer'] = build_and_verify(app, output, 'macos-arm64')
+        (output / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
 
 
 if __name__ == '__main__':
