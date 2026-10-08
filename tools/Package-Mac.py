@@ -168,12 +168,13 @@ def main() -> None:
     resources: Path = app / 'Contents/Resources'
     shutil.copy2('docs/COMMAND_PROTOCOL.md', resources / 'COMMAND_PROTOCOL.md')
     notices: Path = resources / 'licenses'
+    runtime: Path = Path(os.environ['GUI_FORMS_LLVM_RUNTIME']).resolve()
     shutil.copytree(sdk / 'gui-forms-sdk/share/licenses', notices, dirs_exist_ok=True)
     shutil.copytree(sdk / 'picker-sdk/share/licenses', notices, dirs_exist_ok=True)
+    shutil.copytree(runtime / 'share/licenses', notices, dirs_exist_ok=True)
     shutil.copy2('third_party/md4c/LICENSE.md', notices / 'MD4C.md')
     shutil.copy2('third_party/unicode/LICENSE.txt', notices / 'Unicode.txt')
     fixup: Path = stage / 'fixup.cmake'
-    runtime: Path = Path(os.environ['GUI_FORMS_LLVM_RUNTIME']).resolve()
     fixup.write_text('include(BundleUtilities)\nfixup_bundle("' + app.as_posix() +
                      '" "' + terminal.as_posix() + ';' + cli.as_posix() + '" "' +
                      (sdk / 'gui-forms-sdk/lib').as_posix() + ';' +

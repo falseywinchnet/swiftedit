@@ -69,6 +69,18 @@ try {
     New-Item -ItemType Directory -Path $licenseStage -Force | Out-Null
     Copy-Item -LiteralPath "$repo/third_party/unicode/LICENSE.txt" -Destination (Join-Path $licenseStage 'Unicode.txt') -Force
     Copy-Item -LiteralPath "$repo/third_party/md4c/LICENSE.md" -Destination (Join-Path $licenseStage 'MD4C.md') -Force
+    foreach ($package in @($GuiSdk, $PickerSdk)) {
+        $noticeRoot = Join-Path $package 'share/licenses'
+        foreach ($notice in (Get-ChildItem -LiteralPath $noticeRoot -Directory)) {
+            Copy-Item -LiteralPath $notice.FullName -Destination $licenseStage -Recurse -Force
+        }
+    }
+    foreach ($component in @('libc++', 'libunwind', 'compiler-rt', 'crt', 'headers', 'libwinpthread')) {
+        $notice = Join-Path $Toolchain "../share/licenses/$component"
+        if (Test-Path -LiteralPath $notice) {
+            Copy-Item -LiteralPath $notice -Destination $licenseStage -Recurse -Force
+        }
+    }
     Copy-Item -LiteralPath "$GuiSdk/share/GUIForms/fonts" -Destination $stage -Recurse -Force
     $queue = [System.Collections.Generic.Queue[string]]::new()
     $queue.Enqueue("$stage/SwiftEdit.exe")

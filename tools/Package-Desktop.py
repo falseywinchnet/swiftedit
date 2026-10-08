@@ -155,7 +155,8 @@ def main() -> None:
         if compiler is None:
             raise RuntimeError('Compiler tools unavailable')
         license_root: Path = Path(compiler).parent.parent / 'share/licenses'
-        for component in ['gcc', 'libgcc', 'winpthreads', 'libwinpthread']:
+        for component in ['libc++', 'libunwind', 'compiler-rt', 'crt', 'headers',
+                          'gcc', 'libgcc', 'winpthreads', 'libwinpthread']:
             notices = license_root / component
             if notices.is_dir():
                 shutil.copytree(notices, root / 'licenses' / component)
