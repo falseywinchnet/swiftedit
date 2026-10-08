@@ -100,6 +100,11 @@ class PublicationTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 build_and_verify(Path('unused'), Path('unused'), 'windows-x64')
 
+    def test_nsis_converts_msys_forward_slash_paths(self) -> None:
+        script: str = windows_script(Path('D:/fixture/app'), Path('D:/fixture/setup.exe'), '0.3.50')
+        self.assertIn('File /r "D:\\fixture\\app\\*"', script)
+        self.assertIn('OutFile "D:\\fixture\\setup.exe"', script)
+
 
 if __name__ == '__main__':
     unittest.main()

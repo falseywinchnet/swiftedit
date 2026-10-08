@@ -71,7 +71,7 @@ def nsis_quote(value: str) -> str:
 def windows_script(bundle: Path, installer: Path, version: str) -> str:
     uninstall_key: str = 'Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\SwiftEdit'
     lines: list[str] = ['Unicode True', '!include "MUI2.nsh"', 'Name "SwiftEdit"',
-        'OutFile "' + nsis_quote(str(installer)) + '"',
+        'OutFile "' + nsis_quote(str(installer).replace('/', '\\')) + '"',
         'InstallDir "$LOCALAPPDATA\\Programs\\SwiftEdit"',
         'InstallDirRegKey HKCU "' + uninstall_key + '" "InstallLocation"',
         'RequestExecutionLevel user', 'VIProductVersion "' + version + '.0"',
@@ -83,7 +83,7 @@ def windows_script(bundle: Path, installer: Path, version: str) -> str:
         '!insertmacro MUI_UNPAGE_CONFIRM', '!insertmacro MUI_UNPAGE_INSTFILES',
         '!insertmacro MUI_LANGUAGE "English"', 'Section "SwiftEdit"',
         'SetShellVarContext current', 'SetOutPath "$INSTDIR"',
-        'File /r "' + nsis_quote(str(bundle / '*')) + '"',
+        'File /r "' + nsis_quote(str(bundle / '*').replace('/', '\\')) + '"',
         'CreateDirectory "$SMPROGRAMS\\SwiftEdit"',
         'CreateShortcut "$SMPROGRAMS\\SwiftEdit\\SwiftEdit.lnk" "$INSTDIR\\SwiftEdit.exe"',
         'WriteUninstaller "$INSTDIR\\Uninstall.exe"',
