@@ -343,5 +343,8 @@ foreach(swiftedit_target IN LISTS swiftedit_targets)
 endforeach()
 add_custom_target(swiftedit-check
   COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure --timeout 60
-  DEPENDS ${swiftedit_test_targets}
+  DEPENDS ${swiftedit_test_targets} swiftedit-cli swiftedit-terminal
   USES_TERMINAL)
+if(NOTEPAD_BUILD_UI)
+  add_dependencies(swiftedit-check swiftedit-app swiftedit-idle-probe)
+endif()
