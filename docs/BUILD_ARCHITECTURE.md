@@ -63,3 +63,33 @@ Windows x64, Clang 22.1.8, Release, two jobs, 2026-10-07:
 
 Native CI results must be recorded separately; local headless checks do not
 establish macOS/Linux packaging or physical input latency.
+
+## Final cross-platform CI validation
+
+Code revision `cee0affd7fc6f5e3124fbcec2b6f3be0eb8fd8ec` passed
+[run 37730789965](https://github.com/falseywinchnet/swiftedit/actions/runs/37730789965)
+on all three platforms. The run completed on 2026-10-08 UTC (2026-10-07 Pacific).
+
+| Platform | Native tests passed | Direct cache hits | Preprocessed hits | Cache misses |
+| --- | ---: | ---: | ---: | ---: |
+| Windows x64 | 39 | 332 | 0 | 0 |
+| Linux x64 | 39 | 449 | 0 | 1 |
+| macOS arm64 | 40 | 449 | 7 | 0 |
+
+These are cacheable compilation results from the final run, combining imported
+provider entries with retained consumer entries. They exclude uncacheable
+compiler probes. Native package startup and runtime dependency checks passed.
+The five Python cache-admission tests also passed; the local clean-output
+`swiftedit-check` and Windows staging wrapper each passed all 31 headless tests.
+
+Downloaded CI archives were independently checked against their SHA-256
+sidecars, exact source/toolkit/picker revisions, and manifest file hashes:
+52 Windows files, 101 Linux files, and the three macOS executables. The receipt
+is `BUILD_VALIDATION_2026-10-07.json`. This verification does not independently
+certify unlisted macOS bundle files. LLVM runtime license notices were also
+confirmed inside the Windows and macOS packages.
+
+All changes are on `master`; no open SwiftEdit pull requests remained at
+validation. These are CI artifacts, not a newly tagged GitHub release.
+Physical input latency and interactive desktop dogfooding were not measured
+as part of this build-system migration.
