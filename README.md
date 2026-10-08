@@ -21,8 +21,8 @@ command-session CLI on Mac at `SwiftEdit.app/Contents/MacOS/swiftedit-cli`;
 v0.3.0 includes the CLI on Windows and Linux only.
 
 Native CI builds and tests Windows x64, macOS ARM64 and Linux x64 on every push.
-It consumes the matching installed SDK archives pinned in
-`ci/native-sdk-lock.json`. After all three native jobs and packaged startup checks
+It builds matching public packages from the standalone source revisions in
+`ci/dependencies.json`, importing verified provider compiler caches. After all three native jobs and packaged startup checks
 pass for a `v<version>` tag matching the CMake project version, CI publishes one
 immutable release containing all three archives. Master pushes and pull requests
 build and test without publishing releases. Historical dogfood downloads remain available.
@@ -49,29 +49,49 @@ This is not a claim that the full expanded product is finished.
 
 ## Build and run
 
-Run `tools/Build-Windows.ps1` in PowerShell. Default compiler is the existing
-MinGW-w64 installation at `C:/Users/Shadow/plan-paint/build-deps/msys64/mingw64/bin`.
-The default matching SDK pair is extracted under
-`.build/provider-sdks/6f5c854/windows-x64/installed/`: `gui-forms-sdk` and
-`picker-sdk`. The reviewed archives are on the provider's
-[sdk-6f5c854 checkpoint](https://github.com/falseywinchnet/file_manager/releases/tag/sdk-6f5c854).
-Verify them with `tools/Verify-Sdk-Archive.py`; all three platform archive hashes
-are pinned in `ci/native-sdk-lock.json`. CI downloads this exact pair automatically.
-Use `-GuiSdk` and `-PickerSdk` for another extraction of the same checkpoint.
-Dynamic titles and pointer menu opening require this SDK; rebuild all consumers
-against its matching headers and libraries.
-Only installed public packages are consumed; no provider-private source is copied.
+SwiftEdit follows the standalone GUI.Forms / PlaySuite LLVM 22 build contract.
+The exact GUI.Forms and File Manager picker revisions and published compiler-cache
+hashes are recorded in `ci/dependencies.json`. The old `ci/native-sdk-lock.json`
+is retained only as historical release evidence; current CI does not use it.
 
-The script hashes SDK contents, cleans on any checkpoint change, compiles, tests,
-and stages `dist/SwiftEdit/SwiftEdit.exe`, `swiftedit-cli.exe`, runtime DLLs, fonts
-and documentation. Use `-NativeTests` to run the authorized self-closing native
-smoke. It never sends global desktop input. Use `-BuildDirectory` and
-`-StageDirectory` for separate checkpoints; running executables are protected.
+Install LLVM 22.1.x, CMake 3.25+, Ninja, ccache, Python 3.12+, Git and GitHub CLI.
+Windows uses MSYS2 **CLANG64**; put its `bin` directory on PATH. macOS uses
+Homebrew `llvm@22`, with the provider's verified LLVM runtime for macOS 14.
+Linux uses LLVM 22 and the X11/ATK dependencies listed in the native workflow.
+
+```sh
+python -B tools/prepare_dependencies.py --platform windows-x64 --restore-cache
+cmake --preset windows-x64
+cmake --build --preset windows-x64
+ctest --preset windows-x64
+```
+
+Use `linux-x64` or `macos-arm64` for the other hosts. Preparation checks out the
+pinned providers, authenticates the published GUI.Forms cache, and builds the
+public installed GUI.Forms and picker packages with the same toolchain.
+Cache misses compile from pinned source. Integrity failures stop the import.
+The source directory layout matches the provider's cache contract. Provider
+sources stay in ignored directories; SwiftEdit links their exported CMake targets.
+
+`cmake --build --preset windows-x64 --target swiftedit-app` builds the GUI,
+terminal and CLI. `swiftedit-check` builds the test executables and runs CTest.
+Native window tests are opt-in locally (`-DNOTEPAD_NATIVE_TESTS=ON`) and enabled
+on dedicated CI runners. Defaults use two local compiler jobs.
+
+`tools/Build-Windows.ps1` is the Windows build/test/stage convenience command.
+It discovers Clang on PATH (or accepts `-Toolchain` / `SWIFTEDIT_TOOLCHAIN`),
+prepares dependencies, incrementally builds, tests, and stages `dist/SwiftEdit`.
+It checks SDK fingerprints around validation without deleting usable objects.
+Use `-NativeTests` for coordinated self-closing native tests; `-BuildDirectory`
+and `-StageDirectory` remain available. Running copies are protected.
+
+CI saves compiler objects immediately after a successful build, before testing
+and packaging. Renderer output is cached separately. All three platforms must
+pass before tag-triggered release publication. The packaging tools retain their
+runtime-closure checks, native launch checks, checksums and source manifests.
 
 Launch `dist/SwiftEdit/SwiftEdit.exe`, optionally with one quoted Unicode path.
 Run `dist/SwiftEdit/swiftedit-cli.exe` with stdin/stdout pipes for command sessions.
-No installer, association, OS-default change or remote publication is performed.
-The old `dist/Notepad` and `dist/Notepad-dpi` dogfood copies are preserved.
 
 ## Ownership and boundaries
 

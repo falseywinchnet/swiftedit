@@ -1,8 +1,7 @@
 name: Cross-platform core and file readers
 on:
-  push:
-    branches: [master]
-  pull_request:
+  # Optional alternate-compiler diagnostic. Native CI already runs these core
+  # tests; do not compile the same production sources in a second push matrix.
   workflow_dispatch:
 permissions:
   contents: read

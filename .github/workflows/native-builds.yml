@@ -8,7 +8,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: native-${{ github.ref }}
+  group: native-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 jobs:
   native:
@@ -16,48 +16,115 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-26
-            platform: macos-arm64
           - runner: windows-2022
             platform: windows-x64
+            shell: 'msys2 {0}'
+          - runner: macos-15
+            platform: macos-arm64
+            shell: bash
           - runner: ubuntu-24.04
             platform: linux-x64
+            shell: bash
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 25
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
     env:
-      GH_TOKEN: ${{ github.token }}
+      CC: clang
+      CXX: clang++
+      OBJCXX: clang++
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
+      CMAKE_OBJCXX_COMPILER_LAUNCHER: ccache
     steps:
       - uses: actions/checkout@v4
-      - name: Install macOS build tools
-        if: runner.os == 'macOS'
-        run: brew install cmake ninja
-      - name: Install Linux build and native runtime dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libatk1.0-dev libatk-bridge2.0-dev xvfb xauth patchelf
       - uses: msys2/setup-msys2@v2
         if: runner.os == 'Windows'
         with:
-          msystem: MINGW64
+          msystem: CLANG64
           update: true
           path-type: inherit
-          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja mingw-w64-x86_64-python git
-      - name: Build and test Windows
-        if: runner.os == 'Windows'
-        shell: msys2 {0}
-        run: python -B tools/Build-Native.py --platform windows-x64
-      - name: Build, test and package macOS
+          install: >-
+            mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-lld
+            mingw-w64-clang-x86_64-llvm-tools mingw-w64-clang-x86_64-cmake
+            mingw-w64-clang-x86_64-ninja mingw-w64-clang-x86_64-python
+            mingw-w64-clang-x86_64-ccache mingw-w64-clang-x86_64-winpthreads git
+      - name: Install macOS LLVM 22
         if: runner.os == 'macOS'
-        run: python3 -B tools/Build-Native.py --platform macos-arm64
-      - name: Build and test Linux with owned virtual display
+        run: |
+          brew install cmake ninja ccache llvm@22
+          echo "$(brew --prefix llvm@22)/bin" >> "$GITHUB_PATH"
+          echo "GUI_FORMS_LLVM_RUNTIME=$PWD/.build/toolchain/llvm-22.1.8-macos14" >> "$GITHUB_ENV"
+      - name: Install Linux LLVM 22 and native libraries
         if: runner.os == 'Linux'
-        run: xvfb-run -a python3 -B tools/Build-Native.py --platform linux-x64
+        run: |
+          curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key -o "$RUNNER_TEMP/llvm-key.asc"
+          sudo install -m 0644 "$RUNNER_TEMP/llvm-key.asc" /usr/share/keyrings/apt-llvm.asc
+          echo 'deb [signed-by=/usr/share/keyrings/apt-llvm.asc] https://apt.llvm.org/noble/ llvm-toolchain-noble-22 main' | sudo tee /etc/apt/sources.list.d/llvm-22.list
+          sudo apt-get update
+          sudo apt-get install -y clang-22 cmake ninja-build generate-ninja ccache pkg-config libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libatk1.0-dev libatk-bridge2.0-dev xvfb xauth patchelf
+          echo /usr/lib/llvm-22/bin >> "$GITHUB_PATH"
+      - name: Test dependency cache admission
+        run: python -B -m unittest discover -s tests -p test_dependency_cache.py
+      - name: Fetch pinned providers and import verified GUI.Forms cache
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -B tools/prepare_dependencies.py --platform ${{ matrix.platform }} --restore-cache --fetch-only
+      - name: Identify the shared compiler and SDK contract
+        id: compiler
+        run: python -B gui_forms/tools/compiler_identity.py
+      - uses: actions/cache/restore@v4
+        id: objects
+        with:
+          path: .ccache
+          key: swiftedit-llvm22-v1-${{ matrix.platform }}-${{ steps.compiler.outputs.identity }}-${{ hashFiles('ci/dependencies.json', 'CMakeLists.txt', 'cmake/**', 'src/**', 'tests/**', 'tools/**') }}
+          restore-keys: swiftedit-llvm22-v1-${{ matrix.platform }}-${{ steps.compiler.outputs.identity }}-
+      - uses: actions/cache@v4
+        if: runner.os != 'Windows'
+        with:
+          path: |
+            gui_forms/third_party/skia
+            .build/native-${{ matrix.platform }}/skia
+          key: swiftedit-skia-llvm22-v1-${{ matrix.platform }}-${{ steps.compiler.outputs.identity }}-${{ hashFiles('ci/dependencies.json') }}
+      - name: Configure compiler cache
+        run: |
+          cache_dir="$PWD/.ccache"
+          cache_base="$PWD"
+          if command -v cygpath >/dev/null; then
+            cache_dir="$(cygpath -m "$cache_dir")"
+            cache_base="$(cygpath -m "$cache_base")"
+          fi
+          echo "CCACHE_DIR=$cache_dir" >> "$GITHUB_ENV"
+          echo "CCACHE_BASEDIR=$cache_base" >> "$GITHUB_ENV"
+          echo "CCACHE_COMPILERCHECK=content" >> "$GITHUB_ENV"
+          export CCACHE_DIR="$cache_dir"
+          ccache --max-size=900M
+          ccache --zero-stats
+      - name: Build public installed dependencies and SwiftEdit
+        id: compile
+        run: |
+          python -B tools/prepare_dependencies.py --platform ${{ matrix.platform }} --jobs 4
+          python -B tools/Build-Native.py --platform ${{ matrix.platform }} --build-only --jobs 4
+      - name: Report compiler cache statistics
+        if: always()
+        run: ccache --show-stats --verbose
+      - uses: actions/cache/save@v4
+        if: always() && steps.compile.outcome == 'success' && steps.objects.outputs.cache-hit != 'true'
+        with:
+          path: .ccache
+          key: ${{ steps.objects.outputs.cache-primary-key }}
+      - name: Test and package Windows or macOS
+        if: runner.os != 'Linux'
+        run: python -B tools/Build-Native.py --platform ${{ matrix.platform }} --test-package-only
+      - name: Test and package Linux with an owned virtual display
+        if: runner.os == 'Linux'
+        run: xvfb-run -a python -B tools/Build-Native.py --platform ${{ matrix.platform }} --test-package-only
       - name: Upload platform dogfood download
         uses: actions/upload-artifact@v4
         with:
           name: SwiftEdit-${{ matrix.platform }}
-          path: .build/native-${{ matrix.platform }}/dist/*
+          path: .build/native-${{ matrix.platform }}/app/dist/*
           if-no-files-found: error
       - name: Preserve native test and package diagnostics
         if: always()
@@ -65,22 +132,22 @@ jobs:
         with:
           name: native-evidence-${{ matrix.platform }}
           path: |
-            .build/native-${{ matrix.platform }}/Testing/Temporary/
-            .build/native-${{ matrix.platform }}/mac-package-*/startup.log
-            .build/native-${{ matrix.platform }}/mac-package-*/idle-stack*.txt
-            .build/native-${{ matrix.platform }}/native-visual-*/*.png
-            .build/native-${{ matrix.platform }}/terminal-end-evidence/summary.txt
-            .build/native-${{ matrix.platform }}/terminal-end-evidence/receipt.json
-            .build/native-${{ matrix.platform }}/terminal-end-evidence/fixtures/samples.csv
-            .build/native-${{ matrix.platform }}/search-evidence/summary.txt
-            .build/native-${{ matrix.platform }}/search-evidence/receipt.json
-            .build/native-${{ matrix.platform }}/search-evidence/fixtures/samples.csv
-            .build/native-${{ matrix.platform }}/text-copy-evidence/summary.txt
-            .build/native-${{ matrix.platform }}/text-copy-evidence/receipt.json
-            .build/native-${{ matrix.platform }}/text-copy-evidence/fixtures/samples.csv
-            .build/native-${{ matrix.platform }}/navigation-evidence/summary.txt
-            .build/native-${{ matrix.platform }}/navigation-evidence/receipt.json
-            .build/native-${{ matrix.platform }}/navigation-evidence/fixtures/samples.csv
+            .build/native-${{ matrix.platform }}/app/Testing/Temporary/
+            .build/native-${{ matrix.platform }}/app/mac-package-*/startup.log
+            .build/native-${{ matrix.platform }}/app/mac-package-*/idle-stack*.txt
+            .build/native-${{ matrix.platform }}/app/native-visual-*/*.png
+            .build/native-${{ matrix.platform }}/app/terminal-end-evidence/summary.txt
+            .build/native-${{ matrix.platform }}/app/terminal-end-evidence/receipt.json
+            .build/native-${{ matrix.platform }}/app/terminal-end-evidence/fixtures/samples.csv
+            .build/native-${{ matrix.platform }}/app/search-evidence/summary.txt
+            .build/native-${{ matrix.platform }}/app/search-evidence/receipt.json
+            .build/native-${{ matrix.platform }}/app/search-evidence/fixtures/samples.csv
+            .build/native-${{ matrix.platform }}/app/text-copy-evidence/summary.txt
+            .build/native-${{ matrix.platform }}/app/text-copy-evidence/receipt.json
+            .build/native-${{ matrix.platform }}/app/text-copy-evidence/fixtures/samples.csv
+            .build/native-${{ matrix.platform }}/app/navigation-evidence/summary.txt
+            .build/native-${{ matrix.platform }}/app/navigation-evidence/receipt.json
+            .build/native-${{ matrix.platform }}/app/navigation-evidence/fixtures/samples.csv
           if-no-files-found: ignore
 
   release:

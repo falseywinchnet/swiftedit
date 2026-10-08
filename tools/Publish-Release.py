@@ -15,6 +15,7 @@ def main() -> None:
     parser.add_argument('--tag', required=True)
     arguments: argparse.Namespace = parser.parse_args()
     revision: str = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+    dependencies: dict = json.loads(Path('ci/dependencies.json').read_text(encoding='utf-8'))
     tag: str = arguments.tag
     project: str = Path('CMakeLists.txt').read_text(encoding='utf-8')
     version: re.Match[str] | None = re.search(r'project\(SwiftEdit VERSION ([0-9]+\.[0-9]+\.[0-9]+)', project)
@@ -41,6 +42,11 @@ def main() -> None:
         manifest: dict[str, object] = json.loads(manifest_path.read_text(encoding='utf-8'))
         if manifest['source_revision'] != revision:
             raise RuntimeError('Mixed source revisions in release: ' + platform)
+        sdk: dict = manifest['sdk']
+        if (sdk['provider_revision'] != dependencies['revision']
+                or sdk['picker_revision'] != dependencies['picker_revision']
+                or sdk['platform'] != platform):
+            raise RuntimeError('Release dependencies differ from the reviewed source lock: ' + platform)
         for item in [archive, sidecar, manifest_path]:
             target: Path = staging / (platform + '-manifest.json' if item == manifest_path else item.name)
             shutil.copy2(item, target)
@@ -53,7 +59,7 @@ def main() -> None:
         + changes +
         'All three native build/test jobs and packaged startup checks passed before publication. '
         'Download the archive for your platform and extract it completely.\n\n'
-        '- **macOS:** Apple silicon, macOS 26. Ad-hoc signed; not notarized.\n'
+        '- **macOS:** Apple silicon, built on macOS 15 with the GUI.Forms macOS 14 runtime contract. Ad-hoc signed; not notarized.\n'
         '- **Windows:** x64 portable ZIP, with runtime DLLs and fonts. Unsigned.\n'
         '- **Linux:** x64 portable tarball, Ubuntu 24.04-compatible runtime and X11 session. Run `SwiftEdit`.\n\n'
         'Each archive includes the GUI, terminal editor and command-session CLI. '

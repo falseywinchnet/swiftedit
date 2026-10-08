@@ -173,9 +173,11 @@ def main() -> None:
     shutil.copy2('third_party/md4c/LICENSE.md', notices / 'MD4C.md')
     shutil.copy2('third_party/unicode/LICENSE.txt', notices / 'Unicode.txt')
     fixup: Path = stage / 'fixup.cmake'
+    runtime: Path = Path(os.environ['GUI_FORMS_LLVM_RUNTIME']).resolve()
     fixup.write_text('include(BundleUtilities)\nfixup_bundle("' + app.as_posix() +
                      '" "' + terminal.as_posix() + ';' + cli.as_posix() + '" "' +
-                     (sdk / 'gui-forms-sdk/lib').as_posix() + '")\n', encoding='utf-8')
+                     (sdk / 'gui-forms-sdk/lib').as_posix() + ';' +
+                     (runtime / 'lib').as_posix() + '")\n', encoding='utf-8')
     run(['cmake', '-P', str(fixup)])
     executable: Path = app / 'Contents/MacOS/SwiftEdit'
     verify_load_paths(executable, executable, app)
@@ -220,7 +222,7 @@ def main() -> None:
         'SwiftEdit development build for Apple silicon\n\n'
         'Extract the ZIP, then open SwiftEdit.app. The app includes its required private '
         'libraries, fonts and license notices. This build is ad-hoc signed, not notarized.\n'
-        'Built and tested on macOS 26; Intel Macs and older macOS versions are not validated.\n\n'
+        'Built and tested on Apple-silicon macOS 15 with the GUI.Forms macOS 14 runtime contract. Intel Macs are not supported.\n\n'
         'Interactive terminal: run ./SwiftEdit.app/Contents/MacOS/SwiftEdit-terminal [file] '
         'from Terminal. Use --help for shortcuts. The terminal clipboard is private; '
         'ordinary terminal-emulator paste is supported through bracketed paste.\n\n'

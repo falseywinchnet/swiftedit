@@ -1,4 +1,4 @@
-"""Build native SwiftEdit against hash-pinned installed public SDK archives."""
+"""Build, test and package SwiftEdit with public packages from pinned source."""
 from __future__ import annotations
 
 import argparse
@@ -8,9 +8,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-import time
-from typing import BinaryIO, Protocol, TextIO, TypedDict
-import zipfile
+from typing import BinaryIO, Protocol, TextIO
 
 
 class Digest(Protocol):
@@ -18,37 +16,9 @@ class Digest(Protocol):
     def hexdigest(self) -> str: ...
 
 
-class PinnedArchive(TypedDict):
-    name: str
-    sha256: str
-
-
-class SdkLock(TypedDict):
-    repository: str
-    release: str
-    provider_revision: str
-    archives: dict[str, PinnedArchive]
-
-
 def run(arguments: list[str]) -> None:
     print('+ ' + ' '.join(arguments), flush=True)
     subprocess.run(arguments, check=True)
-
-
-def download_sdk(arguments: list[str]) -> None:
-    # Retry only the read-only download; compilation and checksum failures must
-    # remain failures. --clobber replaces any partial archive before validation.
-    attempt: int
-    for attempt in range(3):
-        try:
-            run(arguments)
-            return
-        except subprocess.CalledProcessError:
-            if attempt == 2:
-                raise
-            delay: int = 2 * (attempt + 1)
-            print(f'SDK download failed; retrying in {delay} seconds.', flush=True)
-            time.sleep(delay)
 
 
 def sha256(path: Path) -> str:
@@ -66,43 +36,45 @@ def sha256(path: Path) -> str:
 def main() -> None:
     parser: argparse.ArgumentParser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--platform', choices=['macos-arm64', 'windows-x64', 'linux-x64'], required=True)
+    parser.add_argument('--jobs', type=int, default=2)
+    phase: argparse._MutuallyExclusiveGroup = parser.add_mutually_exclusive_group()
+    phase.add_argument('--build-only', action='store_true')
+    phase.add_argument('--test-package-only', action='store_true')
     arguments: argparse.Namespace = parser.parse_args()
-    lock: SdkLock = json.loads(Path('ci/native-sdk-lock.json').read_text(encoding='utf-8'))
-    pinned: PinnedArchive = lock['archives'][arguments.platform]
-    build: Path = Path('.build/native-' + arguments.platform).resolve()
-    build.mkdir(parents=True, exist_ok=True)
-    download: Path = build / 'download'
-    download.mkdir(exist_ok=True)
-    download_sdk(['gh', 'release', 'download', str(lock['release']), '--repo', lock['repository'],
-         '--pattern', pinned['name'], '--dir', str(download), '--clobber'])
-    archive: Path = download / pinned['name']
-    if sha256(archive) != pinned['sha256']:
-        raise RuntimeError('SDK archive hash differs from reviewed dependency lock')
-    sdk: Path = build / 'sdk'
-    sdk.mkdir()  # Fail on stale SDK state; every CI run has a fresh checkout.
-    package: zipfile.ZipFile
-    with zipfile.ZipFile(archive) as package:
-        name: str
-        for name in package.namelist():
-            destination: Path = (sdk / name).resolve()
-            if not destination.is_relative_to(sdk):
-                raise RuntimeError('SDK archive path escapes destination')
-        package.extractall(sdk)
-    manifest: dict[str, object] = json.loads((sdk / 'manifest.json').read_text(encoding='utf-8'))
-    if manifest['provider_revision'] != lock['provider_revision'] or manifest['platform'] != arguments.platform:
-        raise RuntimeError('SDK platform or revision differs from dependency lock')
+    if arguments.jobs < 1:
+        parser.error('--jobs must be positive')
+    build: Path = Path('.build/native-' + arguments.platform + '/app').resolve()
+    sdk: Path = build.parent / 'sdk'
+    manifest: dict = json.loads((sdk / 'manifest.json').read_text(encoding='utf-8'))
+    dependencies: dict = json.loads(Path('ci/dependencies.json').read_text())
+    if (manifest['provider_revision'] != dependencies['revision']
+            or manifest['picker_revision'] != dependencies['picker_revision']
+            or manifest['platform'] != arguments.platform):
+        raise RuntimeError('Installed packages differ from the dependency lock')
+    lock: dict = {'provider_revision': dependencies['revision']}
     gui: Path = sdk / 'gui-forms-sdk'
     os.environ['GUI_FORMS_FONT_DIR'] = str(gui / 'share/GUIForms/fonts')
     os.environ['PATH'] = str(gui / 'bin') + os.pathsep + os.environ['PATH']
+    os.environ['CCACHE_DIR'] = str(Path('.ccache').resolve())
+    os.environ['CCACHE_BASEDIR'] = str(Path('.').resolve())
+    os.environ['CCACHE_COMPILERCHECK'] = 'content'
+    if arguments.platform == 'macos-arm64':
+        os.environ['GUI_FORMS_LLVM_RUNTIME'] = str(Path('.build/toolchain/llvm-22.1.8-macos14').resolve())
     prefix: str = str(gui) + ';' + str(sdk / 'picker-sdk')
-    run(['cmake', '-S', '.', '-B', str(build), '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
-         '-DCMAKE_PREFIX_PATH=' + prefix, '-DNOTEPAD_NATIVE_TESTS=ON'])
-    run(['cmake', '--build', str(build), '--parallel', '2'])
+    if not arguments.test_package_only:
+        run(['cmake', '-S', '.', '-B', str(build), '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
+             '-DCMAKE_PREFIX_PATH=' + prefix, '-DNOTEPAD_NATIVE_TESTS=ON',
+             '-DCMAKE_TOOLCHAIN_FILE=' + str(Path('gui_forms/cmake/llvm22.cmake').resolve()),
+             '-DCMAKE_C_COMPILER_LAUNCHER=ccache', '-DCMAKE_CXX_COMPILER_LAUNCHER=ccache',
+             '-DCMAKE_OBJCXX_COMPILER_LAUNCHER=ccache'])
+        run(['cmake', '--build', str(build), '--parallel', str(arguments.jobs)])
+    if arguments.build_only:
+        return
     run(['ctest', '--test-dir', str(build), '--output-on-failure', '--timeout', '60'])
     benchmark: Path = build / ('swiftedit-terminal-end-bench.exe' if os.name == 'nt'
                                else 'swiftedit-terminal-end-bench')
     evidence: Path = build / 'terminal-end-evidence'
-    evidence.mkdir()
+    evidence.mkdir(exist_ok=True)
     summary: TextIO
     with (evidence / 'summary.txt').open('w', encoding='utf-8') as summary:
         measured: subprocess.CompletedProcess[bytes] = subprocess.run(
@@ -128,7 +100,7 @@ def main() -> None:
     search_benchmark: Path = build / ('swiftedit-search-bench.exe' if os.name == 'nt'
                                       else 'swiftedit-search-bench')
     search_evidence: Path = build / 'search-evidence'
-    search_evidence.mkdir()
+    search_evidence.mkdir(exist_ok=True)
     with (search_evidence / 'summary.txt').open('w', encoding='utf-8') as summary:
         measured = subprocess.run(
             [str(search_benchmark), str(search_evidence / 'fixtures')], check=False,
@@ -152,7 +124,7 @@ def main() -> None:
     copy_benchmark: Path = build / ('swiftedit-text-copy-bench.exe' if os.name == 'nt'
                                     else 'swiftedit-text-copy-bench')
     copy_evidence: Path = build / 'text-copy-evidence'
-    copy_evidence.mkdir()
+    copy_evidence.mkdir(exist_ok=True)
     copy_receipt: dict[str, object] = {
         'source_revision': revision, 'provider_revision': lock['provider_revision'],
         'platform': arguments.platform, 'executable_sha256': sha256(copy_benchmark),
@@ -184,7 +156,7 @@ def main() -> None:
     navigation_benchmark: Path = build / ('swiftedit-terminal-navigation-bench.exe' if os.name == 'nt'
                                           else 'swiftedit-terminal-navigation-bench')
     navigation_evidence: Path = build / 'navigation-evidence'
-    navigation_evidence.mkdir()
+    navigation_evidence.mkdir(exist_ok=True)
     navigation_receipt: dict[str, object] = {
         'source_revision': revision, 'provider_revision': lock['provider_revision'],
         'platform': arguments.platform, 'executable_sha256': sha256(navigation_benchmark),

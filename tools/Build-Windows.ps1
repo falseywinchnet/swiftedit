@@ -1,15 +1,15 @@
 param(
-    [string]$Toolchain = 'C:/Users/Shadow/plan-paint/build-deps/msys64/mingw64/bin',
-    [string]$GuiSdk = (Join-Path $PSScriptRoot '../.build/provider-sdks/6f5c854/windows-x64/installed/gui-forms-sdk'),
-    [string]$PickerSdk = (Join-Path $PSScriptRoot '../.build/provider-sdks/6f5c854/windows-x64/installed/picker-sdk'),
+    [string]$Toolchain = $(if ($env:SWIFTEDIT_TOOLCHAIN) { $env:SWIFTEDIT_TOOLCHAIN } else { Split-Path (Get-Command clang -ErrorAction Stop).Source }),
+    [string]$GuiSdk = (Join-Path $PSScriptRoot '../.build/native-windows-x64/sdk/gui-forms-sdk'),
+    [string]$PickerSdk = (Join-Path $PSScriptRoot '../.build/native-windows-x64/sdk/picker-sdk'),
     [string]$BuildDirectory = '',
     [string]$StageDirectory = '',
     [switch]$NativeTests
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
-$build = if ($BuildDirectory) { [IO.Path]::GetFullPath($BuildDirectory) } else { Join-Path $repo '.build/swiftedit-house-style' }
-$stage = if ($StageDirectory) { [IO.Path]::GetFullPath($StageDirectory) } else { Join-Path $repo 'dist/SwiftEdit-house-style' }
+$build = if ($BuildDirectory) { [IO.Path]::GetFullPath($BuildDirectory) } else { Join-Path $repo '.build/native-windows-x64/app' }
+$stage = if ($StageDirectory) { [IO.Path]::GetFullPath($StageDirectory) } else { Join-Path $repo 'dist/SwiftEdit' }
 $env:PATH = "$Toolchain;$GuiSdk/bin;$PickerSdk/bin;$env:PATH"
 function Assert-NotRunning([string]$directory) {
     $prefix = [IO.Path]::GetFullPath($directory).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
@@ -43,17 +43,16 @@ Push-Location -LiteralPath $repo
 try {
     Assert-NotRunning $build
     Assert-NotRunning $stage
+    & "$Toolchain/python.exe" -B tools/prepare_dependencies.py --platform windows-x64
+    if ($LASTEXITCODE) { throw 'Dependency build failed' }
+    $env:CCACHE_DIR = Join-Path $repo '.ccache'
+    $env:CCACHE_BASEDIR = $repo
+    $env:CCACHE_COMPILERCHECK = 'content'
     $sdkFingerprint = Get-SdkFingerprint
     $stamp = Join-Path $build 'sdk-fingerprint.txt'
-    $previous = if (Test-Path -LiteralPath $stamp) { (Get-Content -LiteralPath $stamp -Raw).Trim() } else { '' }
     $nativeFlag = if ($NativeTests) { 'ON' } else { 'OFF' }
-    & "$Toolchain/cmake.exe" -S $repo -B $build -G Ninja -DCMAKE_BUILD_TYPE=Release '-DNOTEPAD_BUILD_UI=ON' "-DNOTEPAD_NATIVE_TESTS=$nativeFlag" "-DCMAKE_PREFIX_PATH=$GuiSdk;$PickerSdk"
+    & "$Toolchain/cmake.exe" -S $repo -B $build -G Ninja -DCMAKE_BUILD_TYPE=Release '-DNOTEPAD_BUILD_UI=ON' "-DNOTEPAD_NATIVE_TESTS=$nativeFlag" "-DCMAKE_PREFIX_PATH=$GuiSdk;$PickerSdk" "-DCMAKE_TOOLCHAIN_FILE=$repo/gui_forms/cmake/llvm22.cmake" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
     if ($LASTEXITCODE) { throw 'Configure failed' }
-    if ($previous -ne $sdkFingerprint) {
-        Write-Output 'SDK contents changed or have no verified receipt: rebuilding all consumer objects.'
-        & "$Toolchain/cmake.exe" --build $build --target clean
-        if ($LASTEXITCODE) { throw 'Clean failed' }
-    }
     & "$Toolchain/cmake.exe" --build $build --parallel 2
     if ($LASTEXITCODE) { throw 'Build failed' }
     & "$Toolchain/ctest.exe" --test-dir $build --output-on-failure
