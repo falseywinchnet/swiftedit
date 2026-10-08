@@ -225,6 +225,7 @@ void Editor::initialize_control_tree() {
     add_child(menu_);
     text_ = gf::make_control<gf::TextBox>(gf::StableId("notepad.document"));
     (*text_).set_multiline(true);
+    (*text_).set_auto_scroll(true);
     (*text_).set_word_wrap(false);
     (*text_).set_accepts_tab(true);
     (*text_).set_newline_sequence(native_newline());

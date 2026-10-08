@@ -35,7 +35,9 @@ target_sources(notepad_document PRIVATE src/terminal_horizontal.cpp)
 target_sources(notepad_document PRIVATE src/terminal_reveal.cpp)
 add_executable(swiftedit-terminal-reveal-bench tests/terminal_reveal_bench.cpp)
 target_link_libraries(swiftedit-terminal-reveal-bench PRIVATE notepad_document)
-target_link_libraries(notepad_document PUBLIC GUIForms::Core PRIVATE swiftedit_md4c Threads::Threads)
+# Application owns the shared Core used by the GUI and document model. Linking
+# static Core here would put two incompatible Core instances in the editor.
+target_link_libraries(notepad_document PUBLIC GUIForms::Application PRIVATE swiftedit_md4c Threads::Threads)
 target_compile_definitions(notepad_document PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
 enable_testing()
 if(WIN32)

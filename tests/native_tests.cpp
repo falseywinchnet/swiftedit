@@ -443,6 +443,46 @@ public:
                 (*editor).execute("undo");
                 require((*(*editor).text_control()).text().empty(), "New draft undo restores blank document");
                 verify_title(false, true);
+                std::string long_text{};
+                for (int row = 0; row < 100; ++row) {
+                    long_text.append(180, 'x');
+                    long_text.append("\n");
+                }
+                (*(*editor).text_control()).set_word_wrap(false);
+                (*(*editor).text_control()).set_text(long_text);
+                (*(*editor).text_control()).select(gf::Utf8Offset(0), gf::Utf8Offset(4));
+                break;
+            }
+            case 17: {
+                gf::TextBox &text = *(*editor).text_control();
+                require(text.vscroll() && text.hscroll(), "Native document exposes both overflow scrollbars");
+                static_cast<void>(text.scroll_to({120, 300}, gf::ScrollEventType::thumb_track, true));
+                break;
+            }
+            case 18: {
+                gf::TextBox &text = *(*editor).text_control();
+                require(text.scroll_offset().x == text.scroll_position().x &&
+                            text.scroll_offset().y == text.scroll_position().y &&
+                            text.scroll_offset().x > 0 && text.scroll_offset().y > 0,
+                        "Native painting retains the requested document viewport");
+                require(text.selected_text() == "xxxx", "Native scrolling preserves selection");
+#ifdef __APPLE__
+                const std::string title = expected_title(true, true);
+                capture_native_view(title.c_str(), "editor-document-scrollbars");
+#endif
+                (*editor).execute("wrap");
+                break;
+            }
+            case 19: {
+                gf::TextBox &text = *(*editor).text_control();
+                require(text.vscroll() && !text.hscroll() && text.scroll_offset().x == 0,
+                        "Native wrapped document only scrolls vertically");
+                text.set_text("");
+                break;
+            }
+            case 20: {
+                gf::TextBox &text = *(*editor).text_control();
+                require(!text.vscroll() && !text.hscroll(), "Native empty document clears overflow bars");
                 passed = true;
                 (*timer).stop();
                 static_cast<void>(main_handle.request_close());

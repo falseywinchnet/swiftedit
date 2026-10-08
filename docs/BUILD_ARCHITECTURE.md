@@ -23,9 +23,11 @@ archive-digest lock. The File Manager picker is separately pinned at `964261f`.
   verified by the provider's payload/compiler/SDK validator and minimum-platform
   audit, with source rebuild on mismatch.
 - GUI.Forms and the picker are built by their own CMake projects, installed
-  together and consumed through `GUIForms::Core`, `GUIForms::Application` and
+  together and consumed through `GUIForms::Application` and
   `FileManager::DocumentPickerView`. No provider-private implementation is
   copied into SwiftEdit. The picker-only target does not build backend services.
+  Application owns the shared Core used by the document model and GUI; the
+  consumer does not link a second static Core alongside it.
 - SwiftEdit's compiler cache is saved after successful compilation, before
   tests/package startup. A cached object is never treated as test evidence.
 - The duplicate core matrix is manual-only; its additional file-adapter test

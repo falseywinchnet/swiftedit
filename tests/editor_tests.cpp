@@ -71,6 +71,75 @@ void check(bool value, const char *message) {
     if (!value)
         throw std::runtime_error(message);
 }
+
+void verify_document_scrollbars() {
+    const std::shared_ptr<notepad::Editor> editor =
+        gf::make_control<notepad::Editor>(gf::StableId("scrollbars.editor"));
+    gf::Window window(editor, {360, 240});
+    window.perform_layout();
+    gf::TextBox &text = *(*editor).text_control();
+    text.set_text("short document");
+    static_cast<void>(text.visual_line_count());
+    check(!text.vscroll() && !text.hscroll(), "Fitting document needs no scrollbars");
+
+    std::string source{};
+    for (int row = 0; row < 80; ++row) {
+        source.append(140, 'x');
+        source.append("\n");
+    }
+    text.set_text(source);
+    text.select(gf::Utf8Offset(0), gf::Utf8Offset(4));
+    static_cast<void>(text.visual_line_count());
+    window.perform_layout();
+    check(text.vscroll(), "Tall document exposes its vertical scrollbar");
+    check(text.hscroll(), "Wide unwrapped document exposes its horizontal scrollbar");
+    const gf::TextSelection selection = text.selection();
+    const bool undo_before = text.can_undo();
+    static_cast<void>(text.scroll_to({120, 300}, gf::ScrollEventType::thumb_track, true));
+    check(text.scroll_offset().x == text.scroll_position().x &&
+              text.scroll_offset().y == text.scroll_position().y &&
+              text.scroll_offset().x > 0 && text.scroll_offset().y > 0,
+          "Scrollbar thumb position moves the text viewport on both axes");
+    check(text.text() == source && text.selection() == selection && text.can_undo() == undo_before,
+          "Scrolling preserves document, selection and undo history");
+    const double before_wheel = text.scroll_offset().y;
+    const gf::Rect bounds = text.absolute_bounds();
+    gf::PointerEvent wheel{};
+    wheel.action = gf::PointerAction::wheel;
+    wheel.position = {bounds.x + 40, bounds.y + 40};
+    wheel.wheel_delta = {0, -1};
+    text.on_pointer(wheel);
+    check(wheel.handled && text.scroll_offset().y > before_wheel &&
+              text.scroll_offset().y == text.vertical_scroll().value(),
+          "Wheel scrolling updates the same document scrollbar position");
+
+    (*editor).execute("wrap");
+    static_cast<void>(text.visual_line_count());
+    window.perform_layout();
+    check(text.vscroll() && !text.hscroll() && text.scroll_offset().x == 0,
+          "Word wrap retains vertical scrolling and removes horizontal scrolling");
+    (*editor).execute("wrap");
+    static_cast<void>(text.visual_line_count());
+    window.perform_layout();
+    check(text.hscroll(), "Turning wrap off restores horizontal overflow navigation");
+
+    window.resize({2400, 2400});
+    window.perform_layout();
+    static_cast<void>(text.visual_line_count());
+    check(!text.vscroll() && !text.hscroll() && text.scroll_offset().x == 0 &&
+              text.scroll_offset().y == 0,
+          "Expanding the viewport removes fitting scrollbars and clamps offsets");
+    window.resize({360, 240});
+    window.perform_layout();
+    static_cast<void>(text.visual_line_count());
+    check(text.vscroll() && text.hscroll(), "Shrinking the viewport restores overflow bars");
+    text.set_text("short again");
+    static_cast<void>(text.visual_line_count());
+    window.perform_layout();
+    check(!text.vscroll() && !text.hscroll() && text.scroll_offset().x == 0 &&
+              text.scroll_offset().y == 0,
+          "Replacing long content resets scrollbar ranges and offsets");
+}
 gf::Control::Ptr find_control(const gf::Control::Ptr &root, std::string_view id) {
     if ((*root).stable_id().value() == id)
         return root;
@@ -733,6 +802,7 @@ int main(const int argc, char **const argv) {
             return 0;
         }
         verify_view_menu_state();
+        verify_document_scrollbars();
         verify_query_occurrence_history();
         verify_callback_revocation();
         verify_file_shortcuts();
