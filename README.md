@@ -75,6 +75,8 @@ sources stay in ignored directories; SwiftEdit links their exported CMake target
 
 `cmake --build --preset windows-x64 --target swiftedit-app` builds the GUI,
 terminal and CLI. `swiftedit-check` builds the test executables and runs CTest.
+`swiftedit-package` creates the platform archive and performs packaged startup
+checks; run it on a dedicated runner or during coordinated desktop validation.
 Native window tests are opt-in locally (`-DNOTEPAD_NATIVE_TESTS=ON`) and enabled
 on dedicated CI runners. Defaults use two local compiler jobs.
 

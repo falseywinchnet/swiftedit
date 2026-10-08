@@ -141,7 +141,8 @@ def main() -> None:
     if arguments.platform == 'windows-x64':
         options.extend(['-DGUI_FORMS_ENABLE_SKIA=OFF', '-DGUI_FORMS_ENABLE_HARFBUZZ_TEXT=OFF'])
     else:
-        os.environ['GUI_FORMS_SYSTEM_BUILD_TOOLS'] = '1'
+        if arguments.platform == 'linux-x64':
+            os.environ['GUI_FORMS_SYSTEM_BUILD_TOOLS'] = '1'
         run(['sh', str(gui / 'third_party/fetch_skia_cpu.sh')])
         run(['sh', str(gui / 'third_party/fetch_text_stack.sh')])
         skia: Path = build / 'skia'

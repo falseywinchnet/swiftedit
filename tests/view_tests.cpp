@@ -338,8 +338,13 @@ void verify_csv_page_navigation() {
     key.modifiers = gf::Modifier::meta;
     (*grid).on_key(key);
     check((*grid).selected().row == 8 && (*grid).selected().column == 2, "Cmd End reaches final existing cell");
-    const std::shared_ptr<gf::VScrollBar> vertical =
-        std::dynamic_pointer_cast<gf::VScrollBar>(window.find("csv.vertical"));
+    // LLVM/PE leaf HScrollBar/VScrollBar RTTI is not canonical across the DLL.
+    // Inspect the exported behavioral interface and verify its orientation.
+    const std::shared_ptr<gf::ScrollBar> vertical =
+        std::dynamic_pointer_cast<gf::ScrollBar>(window.find("csv.vertical"));
+    check(static_cast<bool>(window.find("csv.vertical")), "CSV vertical scrollbar is registered");
+    check(vertical && (*vertical).orientation() == gf::Orientation::vertical,
+          "CSV scrollbar exposes the public vertical ScrollBar contract");
     const double before = (*vertical).value();
     gf::PointerEvent wheel{};
     wheel.action = gf::PointerAction::wheel;
@@ -422,9 +427,10 @@ void verify_tall_markdown_visibility() {
     for (const std::string &label : initial.labels)
         check(label.find_first_not_of(' ') != std::string::npos,
               "Space-only layout runs do not submit native text drawing");
-    const std::shared_ptr<gf::VScrollBar> scroll =
-        std::dynamic_pointer_cast<gf::VScrollBar>(window.find("markdown.vertical"));
-    check(static_cast<bool>(scroll), "Tall Markdown has a scrollbar");
+    const std::shared_ptr<gf::ScrollBar> scroll =
+        std::dynamic_pointer_cast<gf::ScrollBar>(window.find("markdown.vertical"));
+    check(scroll && (*scroll).orientation() == gf::Orientation::vertical,
+          "Tall Markdown has a vertical scrollbar");
     (*scroll).set_value(3000);
     ObservingPainter middle{};
     paint_markdown(*view, middle, {0, 0, 640, 140});
@@ -602,9 +608,10 @@ int main() {
         gf::Window grid_window(grid, {800, 600});
         (*grid).set_source("a,b,c,d,e,f,g,h");
         grid_window.perform_layout();
-        const std::shared_ptr<gf::HScrollBar> horizontal =
-            std::dynamic_pointer_cast<gf::HScrollBar>(grid_window.find("csv.horizontal"));
-        check(static_cast<bool>(horizontal), "CSV horizontal scrollbar exists");
+        const std::shared_ptr<gf::ScrollBar> horizontal =
+            std::dynamic_pointer_cast<gf::ScrollBar>(grid_window.find("csv.horizontal"));
+        check(horizontal && (*horizontal).orientation() == gf::Orientation::horizontal,
+              "CSV horizontal scrollbar exists");
         for (std::size_t column = 0; column < 5; ++column) {
             gf::KeyEvent right{};
             right.physical_key = gf::PhysicalKey::right;
@@ -623,13 +630,13 @@ int main() {
         (*grid).arrange({0, 0, 400, 600});
         (*grid).set_source("a,b");
         check((*horizontal).value() == 0, "A smaller source resets obsolete horizontal extent");
-        const std::shared_ptr<gf::VScrollBar> vertical =
-            std::dynamic_pointer_cast<gf::VScrollBar>(grid_window.find("csv.vertical"));
+        const std::shared_ptr<gf::ScrollBar> vertical =
+            std::dynamic_pointer_cast<gf::ScrollBar>(grid_window.find("csv.vertical"));
         gf::PointerEvent fitting_wheel{};
         fitting_wheel.action = gf::PointerAction::wheel;
         fitting_wheel.wheel_delta.y = -1;
         (*grid).on_pointer(fitting_wheel);
-        check(vertical && (*vertical).value() == 0,
+        check(vertical && (*vertical).orientation() == gf::Orientation::vertical && (*vertical).value() == 0,
               "Wheel input cannot scroll fitting rows into a disabled placeholder range");
         (*grid).set_source("a,b,c\r\nd\ne,f");
         for (const gf::Modifier modifier : {gf::Modifier::control, gf::Modifier::meta}) {
@@ -736,11 +743,11 @@ int main() {
         link_hover.position = {26, 54};
         (*view).on_pointer(link_hover);
         check((*view).hovered_url() == "file:///first", "Visible link exposes its inert URL");
-        std::shared_ptr<gf::VScrollBar> markdown_scroll{};
+        std::shared_ptr<gf::ScrollBar> markdown_scroll{};
         for (const gf::Control::Ptr &child : (*view).children()) {
-            const std::shared_ptr<gf::VScrollBar> candidate =
-                std::dynamic_pointer_cast<gf::VScrollBar>(child);
-            if (candidate)
+            const std::shared_ptr<gf::ScrollBar> candidate =
+                std::dynamic_pointer_cast<gf::ScrollBar>(child);
+            if (candidate && (*candidate).orientation() == gf::Orientation::vertical)
                 markdown_scroll = candidate;
         }
         check(static_cast<bool>(markdown_scroll), "Markdown scrollbar exists");
