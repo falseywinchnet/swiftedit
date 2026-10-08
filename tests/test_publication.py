@@ -8,7 +8,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 from publication_version import select, validate
 from release_contract import checked_files, digest
-from installers import windows_script, build_and_verify
+from installers import windows_script, build_and_verify, nsis_command
 from unittest.mock import patch
 
 
@@ -104,6 +104,14 @@ class PublicationTests(unittest.TestCase):
         script: str = windows_script(Path('D:/fixture/app'), Path('D:/fixture/setup.exe'), '0.3.50')
         self.assertIn('File /r "D:\\fixture\\app\\*"', script)
         self.assertIn('OutFile "D:\\fixture\\setup.exe"', script)
+
+    def test_nsis_directory_tail_is_unquoted_even_with_spaces(self) -> None:
+        directory: Path = Path('D:/fixture/user folder')
+        installer: str = nsis_command(Path('D:/tools with spaces/setup.exe'), directory, False)
+        uninstaller: str = nsis_command(Path('D:/tools/uninstall.exe'), directory, True)
+        self.assertTrue(installer.startswith('"D:/tools with spaces/setup.exe" /S '))
+        self.assertTrue(installer.endswith(' /D=D:\\fixture\\user folder'))
+        self.assertTrue(uninstaller.endswith(' _?=D:\\fixture\\user folder'))
 
 
 if __name__ == '__main__':

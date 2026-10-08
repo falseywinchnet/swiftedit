@@ -59,13 +59,32 @@ def verify_payload(source: Path, installed: Path) -> None:
     for path in source.rglob('*'):
         if path.is_file():
             target: Path = installed / path.relative_to(source)
-            if not target.is_file() or sha256(path) != sha256(target):
+            if not target.is_file():
+                raise RuntimeError('Installer did not create expected file: ' + str(target))
+            if sha256(path) != sha256(target):
                 raise RuntimeError('Installed payload mismatch: ' + str(target))
 
 
 def nsis_quote(value: str) -> str:
     result: str = value.replace('$', '$$').replace('"', '$\\"')
     return result
+
+
+def nsis_command(executable: Path, directory: Path, uninstall: bool) -> str:
+    # NSIS consumes the entire unquoted tail after /D= or _?=, including spaces.
+    # https://nsis.sourceforge.io/Docs/Chapter3.html#installerusage
+    option: str = ' _?=' if uninstall else ' /D='
+    native: str = str(directory).replace('/', '\\')
+    if '"' in native or '\n' in native or '\r' in native:
+        raise ValueError('Invalid native installation directory')
+    command: str = subprocess.list2cmdline([str(executable), '/S']) + option + native
+    return command
+
+
+def invoke_nsis(executable: Path, directory: Path, uninstall: bool = False) -> None:
+    command: str = nsis_command(executable, directory, uninstall)
+    # Pass a native command line directly to CreateProcess, never through a shell.
+    subprocess.run(command, shell=False, check=True, timeout=180)
 
 
 def windows_script(bundle: Path, installer: Path, version: str) -> str:
@@ -128,16 +147,15 @@ def windows(bundle: Path, output: Path, scratch: Path) -> tuple[Path, str]:
             break
     run([compiler, str(script)])
     installed: Path = scratch / 'installed with spaces'
-    native: str = str(installed).replace('/', '\\')
-    run([str(installer), '/S', '/D=' + native])
+    invoke_nsis(installer, installed)
     verify_payload(bundle, installed)
     smoke(installed / 'SwiftEdit.exe', installed / 'swiftedit-cli.exe', scratch)
     sentinel: Path = installed / 'user-document.txt'
     sentinel.write_text('preserve this document', encoding='utf-8')
     # Reinstall exercises upgrade-over-existing behavior before uninstall.
-    run([str(installer), '/S', '/D=' + native])
+    invoke_nsis(installer, installed)
     verify_payload(bundle, installed)
-    run([str(installed / 'Uninstall.exe'), '/S', '_?=' + native])
+    invoke_nsis(installed / 'Uninstall.exe', installed, True)
     if (installed / 'SwiftEdit.exe').exists() or (installed / 'fonts').exists():
         raise RuntimeError('Uninstaller left application payload behind')
     if sentinel.read_text(encoding='utf-8') != 'preserve this document':
