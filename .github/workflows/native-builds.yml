@@ -78,9 +78,12 @@ jobs:
         id: objects
         with:
           path: .ccache
-          key: swiftedit-llvm22-v1-${{ matrix.platform }}-${{ steps.compiler.outputs.identity }}-${{ hashFiles('ci/dependencies.json', 'CMakeLists.txt', 'cmake/**', 'src/**', 'tests/**', 'tools/**') }}
-          restore-keys: swiftedit-llvm22-v1-${{ matrix.platform }}-${{ steps.compiler.outputs.identity }}-
-      - uses: actions/cache@v4
+          key: swiftedit-llvm22-v1-${{ matrix.platform }}-${{ steps.compiler.outputs.identity }}-${{ hashFiles('ci/dependencies.json', 'CMakeLists.txt', 'CMakePresets.json', 'cmake/**', 'src/**', 'tests/**', 'tools/**', 'third_party/**', '.github/workflows/native-builds.yml') }}
+          restore-keys: |
+            swiftedit-llvm22-v1-${{ matrix.platform }}-${{ steps.compiler.outputs.identity }}-
+            swiftedit-llvm22-v1-${{ matrix.platform }}-
+      - uses: actions/cache/restore@v4
+        id: renderer
         if: runner.os != 'Windows'
         with:
           path: |
@@ -101,16 +104,27 @@ jobs:
           export CCACHE_DIR="$cache_dir"
           ccache --max-size=900M
           ccache --zero-stats
-      - name: Build public installed dependencies and SwiftEdit
+      - name: Build public installed dependencies
+        id: dependencies
+        run: python -B tools/prepare_dependencies.py --platform ${{ matrix.platform }} --jobs 4
+      - uses: actions/cache/save@v4
+        if: runner.os != 'Windows' && steps.renderer.outputs.cache-hit != 'true'
+        with:
+          path: |
+            gui_forms/third_party/skia
+            .build/native-${{ matrix.platform }}/skia
+          key: ${{ steps.renderer.outputs.cache-primary-key }}
+      - name: Compile SwiftEdit
         id: compile
-        run: |
-          python -B tools/prepare_dependencies.py --platform ${{ matrix.platform }} --jobs 4
-          python -B tools/Build-Native.py --platform ${{ matrix.platform }} --build-only --jobs 4
+        run: python -B tools/Build-Native.py --platform ${{ matrix.platform }} --build-only --jobs 4
       - name: Report compiler cache statistics
         if: always()
-        run: ccache --show-stats --verbose
+        run: |
+          ccache --show-stats --verbose
+          mkdir -p .build
+          ccache --print-stats > .build/compiler-cache.txt
       - uses: actions/cache/save@v4
-        if: always() && steps.compile.outcome == 'success' && steps.objects.outputs.cache-hit != 'true'
+        if: always() && steps.dependencies.outcome == 'success' && steps.objects.outputs.cache-hit != 'true'
         with:
           path: .ccache
           key: ${{ steps.objects.outputs.cache-primary-key }}
@@ -132,6 +146,7 @@ jobs:
         with:
           name: native-evidence-${{ matrix.platform }}
           path: |
+            .build/compiler-cache.txt
             .build/native-${{ matrix.platform }}/app/Testing/Temporary/
             .build/native-${{ matrix.platform }}/app/mac-package-*/startup.log
             .build/native-${{ matrix.platform }}/app/mac-package-*/idle-stack*.txt

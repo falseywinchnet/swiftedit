@@ -4,7 +4,7 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
 import sys
@@ -59,7 +59,8 @@ def import_cache(archive: Path, destination: Path, expected: str, revision: str,
                     or name == '.build/toolchain' or name.startswith('.build/toolchain/')):
                 continue
             target: Path = (destination / name).resolve()
-            if not target.is_relative_to(destination.resolve()) or '\\' in name:
+            if (not target.is_relative_to(destination.resolve()) or '\\' in name
+                    or '..' in PurePosixPath(name).parts):
                 raise ValueError('Unsafe provider cache path')
             if member.islnk() or not (member.isfile() or member.isdir() or member.issym()):
                 raise ValueError('Unsupported provider cache entry')
@@ -92,6 +93,8 @@ def prepare_runtime(gui: Path, jobs: str) -> None:
     check: subprocess.CompletedProcess = subprocess.run(validator, check=False)
     if check.returncode:
         # Only the owned generated prefix may be replaced after failed validation.
+        if not runtime.resolve().is_relative_to(ROOT.resolve()):
+            raise RuntimeError('Runtime prefix resolves outside the workspace')
         shutil.rmtree(runtime, ignore_errors=True)
         run([sys.executable, str(gui / 'tools/build_macos_runtimes.py'), '--work',
              str(ROOT / '.build/llvm-runtimes'), '--prefix', str(runtime), '--jobs', jobs])
@@ -131,6 +134,10 @@ def main() -> None:
     os.environ['CCACHE_BASEDIR'] = str(ROOT)
     os.environ['CCACHE_COMPILERCHECK'] = 'content'
     os.environ['BUILD_JOBS'] = jobs
+    # The provider's renderer scripts inspect the environment before CMake runs.
+    os.environ['CMAKE_C_COMPILER_LAUNCHER'] = 'ccache'
+    os.environ['CMAKE_CXX_COMPILER_LAUNCHER'] = 'ccache'
+    os.environ['CMAKE_OBJCXX_COMPILER_LAUNCHER'] = 'ccache'
     common: list[str] = ['-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
         '-DCMAKE_TOOLCHAIN_FILE=' + str(gui / 'cmake/llvm22.cmake'),
         '-DCMAKE_C_COMPILER_LAUNCHER=ccache', '-DCMAKE_CXX_COMPILER_LAUNCHER=ccache',

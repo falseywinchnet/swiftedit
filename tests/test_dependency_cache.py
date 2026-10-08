@@ -59,6 +59,14 @@ class CacheAdmission(unittest.TestCase):
             self.assertFalse((root / 'out').exists())
             self.assertFalse((root / 'escaped').exists())
 
+    def test_cache_cannot_overwrite_consumer_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root: Path = Path(temporary)
+            archive, digest = self.fixture(root, entry='.ccache/../src/consumer.cpp')
+            with self.assertRaises(ValueError):
+                import_cache(archive, root / 'out', digest, 'reviewed', 'windows-x64')
+            self.assertFalse((root / 'out').exists())
+
 
 if __name__ == '__main__':
     unittest.main()
