@@ -28,8 +28,17 @@ Provider tests separately exercise real thumb dragging and clipping.
 Local Windows LLVM 22 validation passed all 31 headless tests in 26.56 seconds.
 The native smoke executable rebuilt, the 152-file house-style spelling audit
 reported zero findings, and headless portable-package checks passed. No local
-desktop application was launched. Cross-platform native/installer evidence is
-recorded after the release run completes.
+desktop application was launched.
+
+Commit `d217ffd3b5c2e88a78cdb47e22b6070f375de154` passed native run
+[37757049631](https://github.com/falseywinchnet/swiftedit/actions/runs/37757049631):
+39/39 Windows, 39/39 Linux and 40/40 macOS tests. All three installer checks
+passed, and the repository automatically published
+[v0.3.204](https://github.com/falseywinchnet/swiftedit/releases/tag/v0.3.204).
+Downloaded archives, installer hashes, source/provider identities and manifests
+were independently checked; see [verification receipt](releases/v0.3.204-verification.json).
+The macOS native screenshot was inspected and shows both scrollbars. This is
+automated native evidence, not physical MacBook dogfooding.
 
 This fixes navigation in the current text widget. The existing GUI text-size
 limits and remaining paged-document migration are unchanged.
