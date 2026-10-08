@@ -77,7 +77,8 @@ def nsis_command(executable: Path, directory: Path, uninstall: bool) -> str:
     native: str = str(directory).replace('/', '\\')
     if '"' in native or '\n' in native or '\r' in native:
         raise ValueError('Invalid native installation directory')
-    command: str = subprocess.list2cmdline([str(executable), '/S']) + option + native
+    executable_path: str = str(executable).replace('/', '\\')
+    command: str = subprocess.list2cmdline([executable_path, '/S']) + option + native
     return command
 
 

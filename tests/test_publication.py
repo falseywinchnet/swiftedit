@@ -109,7 +109,7 @@ class PublicationTests(unittest.TestCase):
         directory: Path = Path('D:/fixture/user folder')
         installer: str = nsis_command(Path('D:/tools with spaces/setup.exe'), directory, False)
         uninstaller: str = nsis_command(Path('D:/tools/uninstall.exe'), directory, True)
-        self.assertTrue(installer.startswith('"D:/tools with spaces/setup.exe" /S '))
+        self.assertTrue(installer.startswith('"D:\\tools with spaces\\setup.exe" /S '))
         self.assertTrue(installer.endswith(' /D=D:\\fixture\\user folder'))
         self.assertTrue(uninstaller.endswith(' _?=D:\\fixture\\user folder'))
 
